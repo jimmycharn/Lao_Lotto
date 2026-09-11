@@ -8,7 +8,9 @@ import {
     calculateCrossRoundPaymentSummary,
     allocateSettlementPaymentsByMode,
     parsePaymentNotes,
-    buildPaymentNotes
+    buildPaymentNotes,
+    formatThaiDate,
+    formatThaiDateDDMMYYYY
 } from './crossRoundOffsetCalculator'
 
 describe('crossRoundOffsetCalculator', () => {
@@ -624,6 +626,35 @@ describe('crossRoundOffsetCalculator', () => {
             expect(parsePaymentNotes(null)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '' })
             expect(parsePaymentNotes(undefined)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '' })
             expect(buildPaymentNotes({})).toBe('ชำระหนี้งวดนี้')
+        })
+    })
+
+    describe('formatThaiDate and formatThaiDateDDMMYYYY', () => {
+        it('formats ISO date string YYYY-MM-DD into Thai Day-Month-Year format', () => {
+            expect(formatThaiDate('2026-09-10')).toBe('10 ก.ย. 2569')
+            expect(formatThaiDate('2026-08-07')).toBe('7 ส.ค. 2569')
+            expect(formatThaiDate('2026-01-01')).toBe('1 ม.ค. 2569')
+            expect(formatThaiDate('2026-12-31')).toBe('31 ธ.ค. 2569')
+        })
+
+        it('formats round object using close_time priority', () => {
+            const round = {
+                open_date: '2026-09-08',
+                close_time: '2026-09-09T17:00:00+07:00',
+                round_date: '2026-09-08'
+            }
+            expect(formatThaiDate(round)).toBe('9 ก.ย. 2569')
+        })
+
+        it('formats numeric Day-Month-Year via formatThaiDateDDMMYYYY', () => {
+            expect(formatThaiDateDDMMYYYY('2026-09-10')).toBe('10-09-2569')
+            expect(formatThaiDateDDMMYYYY('2026-08-07', '/')).toBe('07/08/2569')
+        })
+
+        it('handles null, undefined, and empty string gracefully', () => {
+            expect(formatThaiDate(null)).toBe('-')
+            expect(formatThaiDate('')).toBe('-')
+            expect(formatThaiDate(undefined)).toBe('-')
         })
     })
 })

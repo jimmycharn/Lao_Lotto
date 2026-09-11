@@ -4,7 +4,8 @@ import { FiZap, FiX, FiCheck, FiCalendar, FiDollarSign, FiFileText, FiClock, FiH
 import {
     calculateCrossRoundPaymentSummary,
     allocateSettlementPaymentsByMode,
-    getRoundCloseDate
+    getRoundCloseDate,
+    formatThaiDate
 } from '../../utils/crossRoundOffsetCalculator'
 import { supabase } from '../../lib/supabase'
 import {
@@ -513,7 +514,7 @@ export default function CrossRoundOffsetModal({
                                                         style={{ cursor: 'pointer' }}
                                                     />
                                                     <span>
-                                                        งวดวันที่ <strong>{r.roundDate || getRoundCloseDate(r) || r.round_date}</strong>
+                                                        งวดวันที่ <strong>{formatThaiDate(r.roundDate || getRoundCloseDate(r) || r.round_date)}</strong>
                                                         {r.lotteryType && (
                                                             <span style={{ fontSize: '0.75rem', opacity: 0.75, marginLeft: '0.35rem' }}>
                                                                 ({r.lotteryType === 'thai' ? 'หวยไทย' : r.lotteryType === 'lao' ? 'หวยลาว' : r.lotteryType})

@@ -1852,14 +1852,65 @@ export default function Dealer() {
         if (!user?.id) return
         setHistoryLoading(true)
         try {
-            // 1. Fetch archived rounds from round_history (without .limit(50))
-            const { data: dbHistoryList, error } = await supabase
-                .from('round_history')
-                .select('*')
-                .eq('dealer_id', user.id)
-                .order('created_at', { ascending: false })
+            // 1. Fetch all round history and settlement overview data in parallel with full pagination
+            const [
+                { data: dbHistoryList, error: rhErr },
+                { data: activeClosedRounds, error: acErr },
+                { data: dealerUserSettings, error: usErr },
+                { data: allUserHistories, error: uhErr },
+                { data: allMemberPayments, error: mpErr },
+                { data: allUpstreamPayments, error: upErr }
+            ] = await Promise.all([
+                fetchAllRows((from, to) =>
+                    supabase
+                        .from('round_history')
+                        .select('*')
+                        .eq('dealer_id', user.id)
+                        .order('created_at', { ascending: false })
+                        .range(from, to)
+                ),
+                supabase
+                    .from('lottery_rounds')
+                    .select('*')
+                    .eq('dealer_id', user.id)
+                    .in('status', ['closed', 'announced'])
+                    .order('close_time', { ascending: false }),
+                supabase
+                    .from('user_settings')
+                    .select('*')
+                    .eq('dealer_id', user.id),
+                fetchAllRows((from, to) =>
+                    supabase
+                        .from('user_round_history')
+                        .select('id, round_id, user_id, total_amount, total_commission, total_winnings, lottery_type, round_date, total_entries, open_time, close_time, lottery_name, winning_numbers')
+                        .eq('dealer_id', user.id)
+                        .order('created_at', { ascending: false })
+                        .range(from, to)
+                ),
+                fetchAllRows((from, to) =>
+                    supabase
+                        .from('member_round_payments')
+                        .select('id, round_id, user_id, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
+                        .eq('dealer_id', user.id)
+                        .order('created_at', { ascending: false })
+                        .range(from, to)
+                ),
+                fetchAllRows((from, to) =>
+                    supabase
+                        .from('upstream_round_payments')
+                        .select('id, round_id, upstream_dealer_name, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
+                        .eq('dealer_id', user.id)
+                        .order('created_at', { ascending: false })
+                        .range(from, to)
+                )
+            ])
 
-            if (error) throw error
+            if (rhErr) console.error('Error fetching round_history:', rhErr)
+            if (acErr) console.error('Error fetching active lottery_rounds:', acErr)
+            if (usErr) console.error('Error fetching user_settings:', usErr)
+            if (uhErr) console.error('Error fetching user_round_history overview:', uhErr)
+            if (mpErr) console.error('Error fetching member_round_payments overview:', mpErr)
+            if (upErr) console.error('Error fetching upstream_round_payments overview:', upErr)
 
             const archivedRounds = dbHistoryList || []
             const existingRoundIds = new Set()
@@ -1867,20 +1918,7 @@ export default function Dealer() {
                 if (h.round_id) existingRoundIds.add(h.round_id)
                 if (h.id) existingRoundIds.add(h.id)
             })
-
-            // 2. Fetch active closed or announced rounds from lottery_rounds
-            const { data: activeClosedRounds } = await supabase
-                .from('lottery_rounds')
-                .select('*')
-                .eq('dealer_id', user.id)
-                .in('status', ['closed', 'announced'])
-                .order('close_time', { ascending: false })
-
-            // Fetch dealer user_settings for accurate payout calculation matching RoundAccordionItem
-            const { data: dealerUserSettings } = await supabase
-                .from('user_settings')
-                .select('*')
-                .eq('dealer_id', user.id)
+            const existingUrhRoundIds = new Set((allUserHistories || []).map(uh => uh.round_id).filter(Boolean))
 
             const userSettingsMap = {}
             if (dealerUserSettings) {
@@ -1915,7 +1953,7 @@ export default function Dealer() {
 
             if (activeClosedRounds && activeClosedRounds.length > 0) {
                 for (const round of activeClosedRounds) {
-                    if (existingRoundIds.has(round.id)) continue
+                    if (existingRoundIds.has(round.id) && existingUrhRoundIds.has(round.id)) continue
 
                     // Fetch submissions for this active closed round
                     const { data: submissions } = await fetchAllRows(
@@ -2024,32 +2062,7 @@ export default function Dealer() {
                 return h
             })
 
-            // 3. Fetch settlement overview data to calculate settled status and synthesize any orphan rounds
-            const [
-                { data: allUserHistories, error: uhErr },
-                { data: allMemberPayments, error: mpErr },
-                { data: allUpstreamPayments, error: upErr }
-            ] = await Promise.all([
-                supabase
-                    .from('user_round_history')
-                    .select('id, round_id, user_id, total_amount, total_commission, total_winnings, lottery_type, round_date, total_entries, open_time, close_time, lottery_name, winning_numbers')
-                    .eq('dealer_id', user.id)
-                    .limit(5000),
-                supabase
-                    .from('member_round_payments')
-                    .select('id, round_id, user_id, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
-                    .eq('dealer_id', user.id)
-                    .limit(5000),
-                supabase
-                    .from('upstream_round_payments')
-                    .select('id, round_id, upstream_dealer_name, amount, direction, payment_type, paid_at, notes, lottery_type, round_date')
-                    .eq('dealer_id', user.id)
-                    .limit(5000)
-            ])
-
-            if (uhErr) console.error('Error fetching user_round_history overview:', uhErr)
-            if (mpErr) console.error('Error fetching member_round_payments overview:', mpErr)
-            if (upErr) console.error('Error fetching upstream_round_payments overview:', upErr)
+            // 3. Process normalized user histories and synthesize any orphan rounds
 
             // Enrich user_round_history with getMemberCommission to ensure commission is never 0 for past rounds
             const normalizedUserHistories = (allUserHistories || []).map(uh => ({

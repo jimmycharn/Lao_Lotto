@@ -20,7 +20,7 @@ import {
     getMemberSettlementStatus,
     getPaymentPresetAmount
 } from '../../utils/memberSettlementCalculator'
-import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes } from '../../utils/crossRoundOffsetCalculator'
+import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes, formatThaiDate } from '../../utils/crossRoundOffsetCalculator'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
 import PaymentNoticeModal from './PaymentNoticeModal'
 import './MemberSettlementInline.css'
@@ -896,7 +896,7 @@ export default function MemberSettlementInline({
                                     <div>
                                         <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>งวดวันที่: </span>
                                         <strong style={{ color: 'var(--color-primary, #facc15)' }}>
-                                            {roundDateIso || getRoundCloseDate(round) || '-'}
+                                            {formatThaiDate(roundDateIso || getRoundCloseDate(round))}
                                         </strong>
                                     </div>
                                 </div>

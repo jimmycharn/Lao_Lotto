@@ -43,6 +43,68 @@ export function getRoundCloseDate(roundOrVal) {
 }
 
 /**
+ * Formats a round or date string to Thai Day-Month-Year format ("วันที่-เดือน-ปี", e.g. "10 ก.ย. 2569").
+ * Uses direct component parsing on the resolved Bangkok round date to avoid UTC/local timezone shifts.
+ *
+ * @param {Object|string|Date} roundOrVal - Round object, ISO date string, or Date
+ * @returns {string} Formatted Thai date string, e.g. "10 ก.ย. 2569"
+ */
+export function formatThaiDate(roundOrVal) {
+    const isoDate = getRoundCloseDate(roundOrVal)
+    if (!isoDate) return '-'
+
+    const parts = isoDate.split('-')
+    if (parts.length === 3) {
+        const [y, m, d] = parts.map(Number)
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+            const thaiYear = y > 2500 ? y : y + 543
+            const thaiMonthsShort = [
+                'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+                'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+            ]
+            const monthText = thaiMonthsShort[m - 1] || `${m}`
+            return `${d} ${monthText} ${thaiYear}`
+        }
+    }
+
+    try {
+        const d = new Date(isoDate)
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short', year: 'numeric' })
+        }
+    } catch {
+        // Fallback
+    }
+
+    return isoDate
+}
+
+/**
+ * Formats a round or date string to numeric Thai Day-Month-Year format ("วันที่-เดือน-ปี", e.g. "10-09-2569" or "10/09/2569").
+ *
+ * @param {Object|string|Date} roundOrVal - Round object, ISO date string, or Date
+ * @param {string} [separator='-'] - Separator character, default '-'
+ * @returns {string} Formatted Thai numeric date string
+ */
+export function formatThaiDateDDMMYYYY(roundOrVal, separator = '-') {
+    const isoDate = getRoundCloseDate(roundOrVal)
+    if (!isoDate) return '-'
+
+    const parts = isoDate.split('-')
+    if (parts.length === 3) {
+        const [y, m, d] = parts.map(Number)
+        if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+            const thaiYear = y > 2500 ? y : y + 543
+            const dd = String(d).padStart(2, '0')
+            const mm = String(m).padStart(2, '0')
+            return `${dd}${separator}${mm}${separator}${thaiYear}`
+        }
+    }
+
+    return isoDate
+}
+
+/**
  * Calculates net difference and direction between past debt total and current prize amount.
  * 
  * @param {Object} params

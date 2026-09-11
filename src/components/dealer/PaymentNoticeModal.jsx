@@ -16,7 +16,7 @@ import {
     resolvePaymentNoticeBankAccount,
     formatPaymentNoticeMessage
 } from '../../utils/paymentNoticeHelper'
-import { getRoundCloseDate } from '../../utils/crossRoundOffsetCalculator'
+import { getRoundCloseDate, formatThaiDate } from '../../utils/crossRoundOffsetCalculator'
 import { useToast } from '../../contexts/ToastContext'
 import './PaymentNoticeModal.css'
 
@@ -243,7 +243,7 @@ export default function PaymentNoticeModal({
     const formattedMessage = useMemo(() => {
         return formatPaymentNoticeMessage({
             memberName: targetDisplayName,
-            roundDate: roundDateIso,
+            roundDate: formatThaiDate(roundDateIso) || roundDateIso,
             lotteryTypeName: lotteryName,
             mode,
             summary,
@@ -511,7 +511,7 @@ export default function PaymentNoticeModal({
                                                         style={{ cursor: 'pointer' }}
                                                     />
                                                     <span>
-                                                        งวดวันที่ <strong>{r.roundDate || getRoundCloseDate(r) || r.round_date}</strong>
+                                                        งวดวันที่ <strong>{formatThaiDate(r.roundDate || getRoundCloseDate(r) || r.round_date)}</strong>
                                                         {r.lotteryType && (
                                                             <span style={{ fontSize: '0.75rem', opacity: 0.75, marginLeft: '0.35rem' }}>
                                                                 ({r.lotteryType === 'thai' ? 'หวยไทย' : r.lotteryType === 'lao' ? 'หวยลาว' : r.lotteryType})

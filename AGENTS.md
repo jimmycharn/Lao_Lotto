@@ -47,3 +47,11 @@ Fall back to Grep/Glob/Read **only** when the graph doesn't cover what you need.
 - **การสร้าง/แก้ไขงวด (`Dealer.jsx`)**: ฟิลด์ `round_date` ที่บันทึกในฐานข้อมูล `lottery_rounds` ต้องใช้ `roundForm.close_date` เสมอ (ห้ามใช้ `open_date`)
 - **การแสดงผลและการอ้างอิงงวด**: ในการดึงวันที่งวดมาแสดงผล (`CrossRoundOffsetModal`, `MemberSettlementInline`, `UpstreamSettlementInline`, การลบประวัติ ฯลฯ) ต้องจัดลำดับความสำคัญโดยใช้ `close_time` / `close_date` ก่อน `round_date` เสมอ เพื่อป้องกันปัญหากรณีข้อมูลงวดเก่ายังเก็บ `open_date` ไว้
 - **การแปลงวันเวลา**: การดึง `close_time` ออกมาเป็นวันที่ `YYYY-MM-DD` ต้องคำนึงถึงไทม์โซนประเทศไทย (`Asia/Bangkok` / UTC+7) เสมอ ผ่านฟังก์ชัน `getRoundCloseDate`
+
+### 2. ข้อจำกัดการดึงข้อมูล 1,000 แถวของ Supabase / PostgREST (ห้ามใช้ .limit เกิน 1,000 โดยไม่มี Pagination)
+- **กฎเหล็กด้านสถาปัตยกรรมข้อมูล (Data Fetching & Pagination Rule)**:
+  - Supabase PostgREST กำหนดเพดานคืนข้อมูลสูงสุดไว้ที่ **1,000 แถวต่อครั้ง (Hard Cap: `max-rows = 1000`)** การระบุโค้ดฝั่ง Client เช่น `.limit(5000)` **ไม่มีผลใดๆ** ระบบจะคืนค่าได้ไม่เกิน 1,000 แถวเสมอ
+  - **ตารางที่มีข้อมูลสะสมต่อเนื่อง**: เช่น `submissions`, `user_round_history`, `member_round_payments`, `upstream_round_payments`, `round_history` **ต้องใช้ `fetchAllRows` จาก `src/lib/supabase.js` เสมอ** เพื่อดึงข้อมูลแบบวนรอบ (Pagination ผ่าน `.range(from, to)`) จนได้ข้อมูลครบทุกหน้า
+  - **ต้องระบุ `.order(...)` ควบคู่เสมอ**: ทุกครั้งที่คิวรี่ข้อมูลประวัติศาสตร์หรือใช้ `fetchAllRows` **ต้องระบุ `.order('created_at', { ascending: false })` (หรือคอลัมน์ลำดับที่ชัดเจน) เสมอ** ห้ามคิวรี่โดยไม่ใส่ `.order()` เด็ดขาด เพราะหากไม่ระบุ Postgres จะส่งแถวที่เก่าสุดขึ้นมาก่อน และเมื่อครบ 1,000 แถว ข้อมูลงวดล่าสุด (เช่น เดือนปัจจุบัน) จะถูกตัดทิ้งและหายไปจากหน้าจอทั้งหมด
+  - **อัตราการสะสมของ `user_round_history`**: ในตาราง `user_round_history` มีจำนวน 1 แถวต่อ 1 สมาชิกต่อ 1 งวด หากมีสมาชิก 30 คน คิวรี่เพียง 33 งวด (ประมาณ 1 เดือน) ก็จะทะลุเพดาน 1,000 แถวทันที จึงห้ามลืมใช้ `fetchAllRows` เด็ดขาด
+
