@@ -361,22 +361,20 @@ export default function MemberSettlementInline({
                     จัดการการชำระเงินสำหรับ: <strong>{memberName}</strong>
                 </span>
                 <div className="settlement-btn-group">
-                    {pastUnpaidRounds.length > 0 && (
-                        <button
-                            type="button"
-                            className="btn-settle-action btn-cross-offset-action"
-                            onClick={() => setShowOffsetModal(true)}
-                            title="บันทึกชำระเงิน"
-                            style={{
-                                background: 'rgba(250, 204, 21, 0.12)',
-                                color: '#facc15',
-                                border: '1px solid rgba(250, 204, 21, 0.35)',
-                                fontWeight: 600
-                            }}
-                        >
-                            <FiZap size={14} /> บันทึกชำระเงิน ({pastUnpaidRounds.length})
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        className="btn-settle-action btn-cross-offset-action"
+                        onClick={() => setShowOffsetModal(true)}
+                        title="บันทึกชำระเงิน"
+                        style={{
+                            background: 'rgba(250, 204, 21, 0.12)',
+                            color: '#facc15',
+                            border: '1px solid rgba(250, 204, 21, 0.35)',
+                            fontWeight: 600
+                        }}
+                    >
+                        <FiZap size={14} /> บันทึกชำระเงิน{pastUnpaidRounds.length > 0 ? ` (${pastUnpaidRounds.length})` : ''}
+                    </button>
                     {hasDebt && pastUnpaidRounds.length === 0 && (
                         <button
                             type="button"
@@ -387,31 +385,6 @@ export default function MemberSettlementInline({
                             <FiSend size={14} /> แจ้งชำระเงิน
                         </button>
                     )}
-                    {!status.isSettled && (
-                        <button
-                            type="button"
-                            className="btn-settle-action btn-settle-quick"
-                            onClick={handleOpenQuickSettle}
-                            disabled={saving}
-                            title="ระบุวันที่/หมายเหตุ และบันทึกชำระยอดคงค้างครบจำนวน"
-                        >
-                            <FiZap size={14} /> เคลียร์ครบ ({status.formattedText})
-                        </button>
-                    )}
-                    <button
-                        type="button"
-                        className={`btn-settle-action btn-settle-add ${showForm ? 'active' : ''}`}
-                        onClick={() => {
-                            if (showForm) {
-                                setShowForm(false)
-                            } else {
-                                handleOpenForm()
-                            }
-                        }}
-                    >
-                        {showForm ? <FiX size={14} /> : <FiPlus size={14} />}
-                        {showForm ? 'ปิดฟอร์ม' : 'บันทึกการจ่าย/รับเงิน'}
-                    </button>
                 </div>
             </div>
 

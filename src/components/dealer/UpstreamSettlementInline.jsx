@@ -349,46 +349,19 @@ export default function UpstreamSettlementInline({
                     จัดการการชำระเงินสำหรับ: <strong>{upstreamName}</strong>
                 </span>
                 <div className="upstream-settlement-btn-group">
-                    {pastUnpaidRounds.length > 0 && (
-                        <button
-                            type="button"
-                            className="btn-upstream-settle-action btn-cross-offset-action"
-                            onClick={() => setShowOffsetModal(true)}
-                            title="บันทึกชำระเงิน"
-                            style={{
-                                background: 'rgba(250, 204, 21, 0.12)',
-                                color: '#facc15',
-                                border: '1px solid rgba(250, 204, 21, 0.35)',
-                                fontWeight: 600
-                            }}
-                        >
-                            <FiZap size={14} /> บันทึกชำระเงิน ({pastUnpaidRounds.length})
-                        </button>
-                    )}
-                    {!status.isSettled && (
-                        <button
-                            type="button"
-                            className="btn-upstream-settle-action btn-upstream-settle-quick"
-                            onClick={handleOpenQuickSettle}
-                            disabled={saving}
-                            title="ระบุวันที่/หมายเหตุ และบันทึกชำระยอดคงค้างครบจำนวน"
-                        >
-                            <FiZap size={14} /> เคลียร์ครบ ({status.formattedText})
-                        </button>
-                    )}
                     <button
                         type="button"
-                        className={`btn-upstream-settle-action btn-upstream-settle-add ${showForm ? 'active' : ''}`}
-                        onClick={() => {
-                            if (showForm) {
-                                setShowForm(false)
-                            } else {
-                                handleOpenForm()
-                            }
+                        className="btn-upstream-settle-action btn-cross-offset-action"
+                        onClick={() => setShowOffsetModal(true)}
+                        title="บันทึกชำระเงิน"
+                        style={{
+                            background: 'rgba(250, 204, 21, 0.12)',
+                            color: '#facc15',
+                            border: '1px solid rgba(250, 204, 21, 0.35)',
+                            fontWeight: 600
                         }}
                     >
-                        {showForm ? <FiX size={14} /> : <FiPlus size={14} />}
-                        {showForm ? 'ปิดฟอร์ม' : 'บันทึกการจ่าย/รับเงิน'}
+                        <FiZap size={14} /> บันทึกชำระเงิน{pastUnpaidRounds.length > 0 ? ` (${pastUnpaidRounds.length})` : ''}
                     </button>
                 </div>
             </div>
