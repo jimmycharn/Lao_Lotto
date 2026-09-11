@@ -1,0 +1,275 @@
+/* src/components/dealer/PaymentNoticeModal.css */
+.payment-notice-modal {
+    background: #0f172a;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 12px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    color: #f8fafc;
+    width: 95%;
+    max-width: 530px;
+    max-height: min(90vh, 620px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin: auto;
+    animation: paymentModalFadeIn 0.2s ease-out;
+}
+
+@keyframes paymentModalFadeIn {
+    from { opacity: 0; transform: scale(0.96) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.payment-notice-modal .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.15rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+    background: rgba(15, 23, 42, 0.95);
+}
+
+.payment-notice-modal .modal-header h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    color: #f8fafc;
+}
+
+.payment-notice-modal .modal-close {
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 0.3rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.payment-notice-modal .modal-close:hover {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.payment-notice-modal .modal-body {
+    padding: 0.8rem 1.15rem;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+}
+
+.payment-notice-modal .modal-body::-webkit-scrollbar {
+    width: 6px;
+}
+.payment-notice-modal .modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+.payment-notice-modal .modal-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+.payment-notice-modal .modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.notice-box {
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 0.65rem 0.85rem;
+}
+
+/* Mode Switcher Checkboxes */
+.notice-modes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.45rem;
+    margin-top: 0.25rem;
+}
+
+.notice-mode-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.5rem 0.35rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 600;
+    transition: all 0.15s ease;
+    user-select: none;
+    text-align: center;
+}
+
+.notice-mode-card:hover {
+    background: rgba(56, 189, 248, 0.08);
+    border-color: rgba(56, 189, 248, 0.4);
+}
+
+.notice-mode-card.active {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: #38bdf8;
+    color: #38bdf8;
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+}
+
+.notice-mode-checkbox {
+    width: 15px;
+    height: 15px;
+    accent-color: #38bdf8;
+    cursor: pointer;
+}
+
+/* Past rounds list */
+.notice-past-rounds-list {
+    max-height: 130px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.45rem;
+}
+
+.notice-past-rounds-list::-webkit-scrollbar {
+    width: 5px;
+}
+.notice-past-rounds-list::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+}
+
+.notice-round-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.4rem 0.55rem;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    cursor: pointer;
+    font-size: 0.82rem;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.notice-round-row:hover {
+    background: rgba(255, 255, 255, 0.07);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.notice-round-row.selected {
+    border-color: rgba(250, 204, 21, 0.45);
+    background: rgba(250, 204, 21, 0.08);
+}
+
+/* Bank Account Input */
+.notice-bank-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+
+.notice-bank-input {
+    width: 100%;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    color: #f8fafc;
+    letter-spacing: 0.02em;
+}
+
+.notice-bank-input:focus {
+    outline: none;
+    border-color: #38bdf8;
+    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+/* Footer & Buttons */
+.payment-notice-modal .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 1.15rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(0, 0, 0, 0.3);
+    flex-shrink: 0;
+}
+
+.btn-notice-cancel {
+    background: rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 0.45rem 1rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-notice-cancel:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #f8fafc;
+}
+
+.btn-notice-send {
+    background: #eab308;
+    color: #0f172a;
+    border: none;
+    padding: 0.45rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    transition: all 0.15s ease;
+    box-shadow: 0 2px 10px rgba(234, 179, 8, 0.3);
+}
+
+.btn-notice-send:hover:not(:disabled) {
+    background: #facc15;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(234, 179, 8, 0.4);
+}
+
+.btn-notice-send:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+@media (max-width: 480px) {
+    .payment-notice-modal {
+        width: 100%;
+        max-height: 95vh;
+        border-radius: 10px;
+    }
+    .notice-modes-grid {
+        grid-template-columns: 1fr;
+    }
+    .payment-notice-modal .modal-header,
+    .payment-notice-modal .modal-body,
+    .payment-notice-modal .modal-footer {
+        padding-left: 0.85rem;
+        padding-right: 0.85rem;
+    }
+}
