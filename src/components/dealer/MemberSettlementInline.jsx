@@ -9,7 +9,8 @@ import {
     FiCalendar,
     FiDollarSign,
     FiFileText,
-    FiEdit2
+    FiEdit2,
+    FiSend
 } from 'react-icons/fi'
 import {
     calculateMemberInitialBalance,
@@ -19,6 +20,7 @@ import {
 } from '../../utils/memberSettlementCalculator'
 import { findMemberPastUnpaidRounds, getRoundCloseDate } from '../../utils/crossRoundOffsetCalculator'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
+import PaymentNoticeModal from './PaymentNoticeModal'
 import './MemberSettlementInline.css'
 
 export default function MemberSettlementInline({
@@ -89,6 +91,7 @@ export default function MemberSettlementInline({
 
     // Cross-round offset detection
     const [showOffsetModal, setShowOffsetModal] = useState(false)
+    const [showPaymentNoticeModal, setShowPaymentNoticeModal] = useState(false)
 
     const pastUnpaidRounds = useMemo(() => {
         return findMemberPastUnpaidRounds({
@@ -297,8 +300,8 @@ export default function MemberSettlementInline({
                 </div>
             </div>
 
-            {/* Smart Detection Banner for Cross-Round Offset */}
-            {pastUnpaidRounds.length > 0 && (availableWinnings > 0 || pastPrizesTotal > 0 || pastDebtsTotal > 0) && (
+            {/* Smart Detection Banner for Payment Notice: strictly requires both past debt and current round debt/outstanding */}
+            {pastUnpaidRounds.length > 0 && currentBalance !== 0 && (
                 <div className="cross-round-smart-banner">
                     <div className="banner-left">
                         <span className="banner-icon"><FiZap color="#facc15" size={18} /></span>
@@ -326,10 +329,25 @@ export default function MemberSettlementInline({
                     </div>
                     <button
                         type="button"
-                        className="btn-cross-offset"
-                        onClick={() => setShowOffsetModal(true)}
+                        className="btn-payment-notice"
+                        onClick={() => setShowPaymentNoticeModal(true)}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.45rem',
+                            background: '#10b981',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '0.45rem 1rem',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+                            transition: 'all 0.15s ease'
+                        }}
                     >
-                        ⚡ หักล้างยอดข้ามงวด
+                        <FiSend size={14} /> แจ้งชำระเงิน
                     </button>
                 </div>
             )}
@@ -1107,6 +1125,21 @@ export default function MemberSettlementInline({
                     pastUnpaidRounds={pastUnpaidRounds}
                     currentWinnings={availableWinnings}
                     isUpstream={false}
+                />
+            )}
+
+            {showPaymentNoticeModal && (
+                <PaymentNoticeModal
+                    isOpen={showPaymentNoticeModal}
+                    onClose={() => setShowPaymentNoticeModal(false)}
+                    member={{ ...member, name: memberName }}
+                    round={round}
+                    dealerId={dealerId}
+                    pastUnpaidRounds={pastUnpaidRounds}
+                    currentBalance={currentBalance}
+                    currentWinnings={totalWinnings}
+                    availableWinnings={availableWinnings}
+                    roundHistory={roundHistory}
                 />
             )}
         </div>
