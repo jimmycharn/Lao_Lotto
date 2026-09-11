@@ -356,36 +356,47 @@ export function formatPaymentNoticeMessage({
     lines.push(`📌 รูปแบบ: ${summary?.modeLabel || 'แจ้งชำระ'}`)
     lines.push('----------------------------')
 
+    const currentRoundDateText = roundDate ? `งวด ${roundDate.trim()}` : 'งวดปัจจุบัน'
+
     if (mode === 'current_debt') {
-        lines.push(`- ยอดค้างงวดปัจจุบัน: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
+        lines.push(`- ยอดค้าง${currentRoundDateText}: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
     } else if (mode === 'offset_prize_past_debt') {
-        lines.push(`- รวมหนี้งวดเก่าที่เลือก: ฿${Number(summary?.selectedPastDebt || 0).toLocaleString()}`)
+        lines.push(`- รวมหนี้งวดค้างเก่า: ฿${Number(summary?.selectedPastDebt || 0).toLocaleString()}`)
         lines.push(`- รางวัลงวดนี้ที่นำมาหักล้าง: ฿${Number(summary?.currentRoundPrize || 0).toLocaleString()}`)
     } else if (mode === 'combine_all') {
-        lines.push(`- ยอดค้างงวดปัจจุบัน: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
-        lines.push(`- รวมหนี้งวดเก่าที่เลือก: ฿${Number(summary?.selectedPastDebt || 0).toLocaleString()}`)
+        lines.push(`- ยอดค้าง${currentRoundDateText}: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
+        lines.push(`- รวมหนี้งวดค้างเก่า: ฿${Number(summary?.selectedPastDebt || 0).toLocaleString()}`)
     }
 
     lines.push('----------------------------')
 
     const netAmt = Number(summary?.netAmount || 0).toLocaleString()
     if (summary?.direction === 'member_to_dealer') {
-        lines.push(`💰 ยอดที่ต้องโอนชำระ: ฿${netAmt}`)
-        lines.push('(🟢 สมาชิกโอนชำระให้เจ้ามือ)')
+        const title = (mode === 'combine_all' || mode === 'offset_prize_past_debt') ? '💰 รวมยอดที่ต้องโอน/ชำระ' : '💰 ยอดที่ต้องโอน/ชำระ'
+        lines.push(`${title}: ฿${netAmt}`)
+        lines.push('🟢 สมาชิกโอนชำระให้เจ้ามือ')
     } else if (summary?.direction === 'dealer_to_member') {
-        lines.push(`💰 ยอดที่เจ้ามือต้องโอน: ฿${netAmt}`)
-        lines.push('(🔴 เจ้ามือโอนคืนให้สมาชิก)')
+        const title = (mode === 'combine_all' || mode === 'offset_prize_past_debt') ? '💰 รวมยอดที่เจ้ามือต้องโอน' : '💰 ยอดที่เจ้ามือต้องโอน'
+        lines.push(`${title}: ฿${netAmt}`)
+        lines.push('🔴 เจ้ามือโอนคืนให้สมาชิก')
     } else {
         lines.push(`💰 ยอดหักล้างพอดี: ฿0`)
-        lines.push('(⚪ ไม่มียอดต้องโอน)')
+        lines.push('⚪ ไม่มียอดต้องโอน')
     }
 
     if (bankAccount && (bankAccount.bank_account || bankAccount.bank_name)) {
         lines.push('')
         lines.push('💳 บัญชีโอนเงิน:')
-        if (bankAccount.bank_name) lines.push(bankAccount.bank_name)
-        if (bankAccount.bank_account) lines.push(`เลขบัญชี: ${bankAccount.bank_account}`)
-        if (bankAccount.account_name) lines.push(`ชื่อบัญชี: ${bankAccount.account_name}`)
+        if (bankAccount.bank_account) {
+            const parts = [
+                bankAccount.bank_name,
+                bankAccount.bank_account,
+                bankAccount.account_name ? `(${bankAccount.account_name})` : ''
+            ].filter(Boolean)
+            lines.push(parts.join(' '))
+        } else if (bankAccount.bank_name) {
+            lines.push(bankAccount.bank_name)
+        }
     }
 
     if (customNotes && customNotes.trim()) {

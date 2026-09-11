@@ -141,7 +141,68 @@ describe('paymentNoticeHelper', () => {
 
             expect(msg).toContain('ยอดที่เจ้ามือต้องโอน: ฿3,000')
             expect(msg).toContain('เจ้ามือโอนคืนให้สมาชิก')
-            expect(msg).toContain('กสิกรไทย')
+            expect(msg).toContain('กสิกรไทย 1234567890 (พี่ชัช)')
+        })
+
+        it('formats payment notice matching user example template for combine_all mode', () => {
+            const msg = formatPaymentNoticeMessage({
+                memberName: 'พี่แตง',
+                roundDate: '8 ก.ย. 2569',
+                lotteryTypeName: 'หวยลาว',
+                mode: 'combine_all',
+                summary: {
+                    modeLabel: 'หักลบทั้งหมด',
+                    netAmount: 869,
+                    direction: 'member_to_dealer',
+                    currentRoundDebt: 214,
+                    currentRoundPrize: 0,
+                    selectedPastDebt: 655
+                },
+                bankAccount: {
+                    bank_name: 'ธนาคารออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)',
+                    bank_account: '',
+                    account_name: ''
+                }
+            })
+
+            const expected = [
+                '📋 ใบแจ้งชำระเงิน',
+                '👤 สมาชิก: พี่แตง',
+                '🎲 งวดวันที่: 8 ก.ย. 2569 (หวยลาว)',
+                '📌 รูปแบบ: หักลบทั้งหมด',
+                '----------------------------',
+                '- ยอดค้างงวด 8 ก.ย. 2569: ฿214',
+                '- รวมหนี้งวดค้างเก่า: ฿655',
+                '----------------------------',
+                '💰 รวมยอดที่ต้องโอน/ชำระ: ฿869',
+                '🟢 สมาชิกโอนชำระให้เจ้ามือ',
+                '',
+                '💳 บัญชีโอนเงิน:',
+                'ธนาคารออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)'
+            ].join('\n')
+
+            expect(msg).toBe(expected)
+        })
+
+        it('formats single round debt with round date when provided', () => {
+            const msg = formatPaymentNoticeMessage({
+                memberName: 'พี่แตง',
+                roundDate: '8 ก.ย. 2569',
+                lotteryTypeName: 'หวยลาว',
+                mode: 'current_debt',
+                summary: {
+                    modeLabel: 'หนี้งวดนี้',
+                    netAmount: 214,
+                    direction: 'member_to_dealer',
+                    currentRoundDebt: 214,
+                    currentRoundPrize: 0,
+                    selectedPastDebt: 0
+                }
+            })
+
+            expect(msg).toContain('- ยอดค้างงวด 8 ก.ย. 2569: ฿214')
+            expect(msg).toContain('💰 ยอดที่ต้องโอน/ชำระ: ฿214')
+            expect(msg).toContain('🟢 สมาชิกโอนชำระให้เจ้ามือ')
         })
     })
 
