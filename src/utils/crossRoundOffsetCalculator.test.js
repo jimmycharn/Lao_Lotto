@@ -6,7 +6,9 @@ import {
     findUpstreamPastUnpaidRounds,
     getRoundCloseDate,
     calculateCrossRoundPaymentSummary,
-    allocateSettlementPaymentsByMode
+    allocateSettlementPaymentsByMode,
+    parsePaymentNotes,
+    buildPaymentNotes
 } from './crossRoundOffsetCalculator'
 
 describe('crossRoundOffsetCalculator', () => {
@@ -569,4 +571,60 @@ describe('crossRoundOffsetCalculator', () => {
             expect(alloc.currentRoundPayment.notes).toBe('ชำระหนี้งวดนี้ (ไทยพาณิชย์ 9972081291 (ยุทธศักดิ์) เวลา 14:20 #SLIP-9988)')
         })
     })
+
+    describe('parsePaymentNotes & buildPaymentNotes', () => {
+        it('parses user screenshot note correctly with bank name, nested parentheses, time and ref', () => {
+            const note = 'ชำระหนี้งวดนี้ (ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว) เวลา 18:09 #Aa7bf7ec966354829)'
+            const parsed = parsePaymentNotes(note)
+            expect(parsed.prefix).toBe('ชำระหนี้งวดนี้')
+            expect(parsed.customNotes).toBe('ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)')
+            expect(parsed.paidTime).toBe('18:09')
+            expect(parsed.referenceDoc).toBe('Aa7bf7ec966354829')
+
+            // Rebuilding should match exactly
+            const rebuilt = buildPaymentNotes({
+                originalPrefix: parsed.prefix,
+                customNotes: parsed.customNotes,
+                paidTime: parsed.paidTime,
+                referenceDoc: parsed.referenceDoc
+            })
+            expect(rebuilt).toBe(note)
+        })
+
+        it('parses note without custom bank info but with time and ref', () => {
+            const note = 'จ่ายเงินถูกรางวัลงวดนี้ (เวลา 14:00 #TX-12345)'
+            const parsed = parsePaymentNotes(note)
+            expect(parsed.prefix).toBe('จ่ายเงินถูกรางวัลงวดนี้')
+            expect(parsed.customNotes).toBe('')
+            expect(parsed.paidTime).toBe('14:00')
+            expect(parsed.referenceDoc).toBe('TX-12345')
+        })
+
+        it('parses simple text note without prefix or parens', () => {
+            const note = 'โอนแล้ว'
+            const parsed = parsePaymentNotes(note)
+            expect(parsed.prefix).toBe('')
+            expect(parsed.customNotes).toBe('โอนแล้ว')
+            expect(parsed.paidTime).toBe('')
+            expect(parsed.referenceDoc).toBe('')
+        })
+
+        it('builds default prefix based on paymentType and direction if originalPrefix is missing', () => {
+            const rebuilt = buildPaymentNotes({
+                paymentType: 'net_settlement',
+                direction: 'member_to_dealer',
+                customNotes: 'กสิกรไทย 111-222 (สมชาย)',
+                paidTime: '15:30',
+                referenceDoc: 'REF99'
+            })
+            expect(rebuilt).toBe('ชำระหนี้งวดนี้ (กสิกรไทย 111-222 (สมชาย) เวลา 15:30 #REF99)')
+        })
+
+        it('handles null and undefined gracefully', () => {
+            expect(parsePaymentNotes(null)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '' })
+            expect(parsePaymentNotes(undefined)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '' })
+            expect(buildPaymentNotes({})).toBe('ชำระหนี้งวดนี้')
+        })
+    })
 })
+

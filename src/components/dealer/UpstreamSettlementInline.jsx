@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
     FiZap,
@@ -7,7 +7,9 @@ import {
     FiCheck,
     FiTrash2,
     FiCalendar,
+    FiClock,
     FiFileText,
+    FiHash,
     FiEdit2,
     FiDollarSign
 } from 'react-icons/fi'
@@ -17,9 +19,18 @@ import {
     getUpstreamSettlementStatus,
     getUpstreamPaymentPresetAmount
 } from '../../utils/memberSettlementCalculator'
-import { findUpstreamPastUnpaidRounds, getRoundCloseDate } from '../../utils/crossRoundOffsetCalculator'
+import {
+    findUpstreamPastUnpaidRounds,
+    getRoundCloseDate,
+    parsePaymentNotes,
+    buildPaymentNotes
+} from '../../utils/crossRoundOffsetCalculator'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
 import './UpstreamSettlementInline.css'
+import './CrossRoundOffsetModal.css'
+
+const getTodayBangkok = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+const getCurrentTimeBangkok = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false })
 
 export default function UpstreamSettlementInline({
     transfer,
@@ -44,8 +55,13 @@ export default function UpstreamSettlementInline({
     const [editDirection, setEditDirection] = useState('dealer_to_upstream')
     const [editAmount, setEditAmount] = useState('')
     const [editPaidAt, setEditPaidAt] = useState('')
-    const [editNotes, setEditNotes] = useState('')
+    const [editPaidTime, setEditPaidTime] = useState('')
+    const [editReferenceDoc, setEditReferenceDoc] = useState('')
+    const [editCustomNotes, setEditCustomNotes] = useState('')
+    const [editOriginalPrefix, setEditOriginalPrefix] = useState('')
     const [editSaving, setEditSaving] = useState(false)
+    const editDateInputRef = useRef(null)
+    const editTimeInputRef = useRef(null)
 
     // Form states
     const [paymentType, setPaymentType] = useState('net_settlement') // 'net_settlement' | 'prize_collection'
@@ -236,8 +252,13 @@ export default function UpstreamSettlementInline({
         setEditPaymentType(p.payment_type || 'net_settlement')
         setEditDirection(p.direction || 'dealer_to_upstream')
         setEditAmount(p.amount ? String(p.amount) : '')
-        setEditPaidAt(p.paid_at || todayStr)
-        setEditNotes(p.notes || '')
+        setEditPaidAt(p.paid_at || roundDateIso || getTodayBangkok())
+
+        const parsed = parsePaymentNotes(p.notes)
+        setEditPaidTime(parsed.paidTime || '')
+        setEditReferenceDoc(parsed.referenceDoc || '')
+        setEditCustomNotes(parsed.customNotes || '')
+        setEditOriginalPrefix(parsed.prefix || '')
     }
 
     const handleConfirmEditPayment = async (e) => {
@@ -245,6 +266,16 @@ export default function UpstreamSettlementInline({
         if (!editingPayment) return
         const numAmount = Number(editAmount)
         if (!numAmount || numAmount <= 0) return
+
+        const fullNotes = buildPaymentNotes({
+            paymentType: editPaymentType,
+            direction: editDirection,
+            isUpstream: true,
+            customNotes: editCustomNotes,
+            paidTime: editPaidTime,
+            referenceDoc: editReferenceDoc,
+            originalPrefix: editOriginalPrefix
+        })
 
         setEditSaving(true)
         try {
@@ -254,7 +285,7 @@ export default function UpstreamSettlementInline({
                     direction: editDirection,
                     amount: numAmount,
                     paid_at: editPaidAt || todayStr,
-                    notes: editNotes.trim()
+                    notes: fullNotes
                 })
                 if (ok !== false) {
                     setEditingPayment(null)
@@ -786,233 +817,310 @@ export default function UpstreamSettlementInline({
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        padding: '0.75rem'
+                        padding: '0.75rem',
+                        position: 'fixed',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                        backdropFilter: 'blur(4px)'
                     }}
-                    onClick={() => setEditingPayment(null)}
+                    onClick={() => !editSaving && setEditingPayment(null)}
                 >
-                    <div className="upstream-quick-settle-modal" onClick={e => e.stopPropagation()}>
+                    <div className="cross-round-modal" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <h3>
-                                <FiEdit2 style={{ color: 'var(--color-primary, #facc15)' }} /> แก้ไขรายการชำระเงิน
+                                <FiEdit2 color="#facc15" /> แก้ไขรายการชำระเงิน
                             </h3>
-                            <button type="button" className="modal-close" onClick={() => setEditingPayment(null)}>
-                                <FiX />
+                            <button
+                                type="button"
+                                className="modal-close"
+                                onClick={() => !editSaving && setEditingPayment(null)}
+                                title="ปิด"
+                            >
+                                <FiX size={18} />
                             </button>
                         </div>
                         <form onSubmit={handleConfirmEditPayment} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-                            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '0.75rem 1.15rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                                {/* Summary info */}
-                                <div style={{
-                                    background: 'rgba(0, 0, 0, 0.35)',
-                                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                                    borderRadius: '6px',
-                                    padding: '0.45rem 0.75rem',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    fontSize: '0.82rem'
-                                }}>
-                                    <div><span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>เจ้ามือรับตีออก: </span><strong>{transfer?.dealerName || upstreamName || 'เจ้ามือรับตีออก'}</strong></div>
-                                    <div style={{ fontWeight: 600, color: editPaymentType === 'prize_collection' ? 'var(--color-success)' : 'var(--color-primary)' }}>
-                                        {editPaymentType === 'prize_collection' ? '🏆 รับคืนรางวัล' : 'เคลียร์ยอดสุทธิ'}
+                            <div className="modal-body">
+                                {/* 1. Dealer Info Bar */}
+                                <div className="cross-round-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
+                                    <div>
+                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>เจ้ามือรับตีออก: </span>
+                                        <strong>{transfer?.dealerName || upstreamName || 'เจ้ามือรับตีออก'}</strong>
+                                    </div>
+                                    <div>
+                                        <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>งวดวันที่: </span>
+                                        <strong style={{ color: 'var(--color-primary, #facc15)' }}>
+                                            {roundDateIso || getRoundCloseDate(round) || '-'}
+                                        </strong>
                                     </div>
                                 </div>
 
-                                {/* Payment type & Direction (2-column compact grid if totalWinnings > 0) */}
-                                {totalWinnings > 0 ? (
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
-                                        <div className="upstream-settlement-form-field">
-                                            <label style={{ fontSize: '0.78rem' }}>ประเภทรายการ</label>
-                                            <div style={{ display: 'flex', gap: '0.35rem' }}>
-                                                <button
-                                                    type="button"
-                                                    className="preset-pill-btn"
-                                                    style={{
-                                                        background: editPaymentType === 'net_settlement' ? 'var(--color-primary)' : undefined,
-                                                        color: editPaymentType === 'net_settlement' ? '#000' : undefined,
-                                                        fontWeight: editPaymentType === 'net_settlement' ? 700 : 400
-                                                    }}
-                                                    onClick={() => {
-                                                        setEditPaymentType('net_settlement')
-                                                        const defDir = currentBalance >= 0 ? 'dealer_to_upstream' : 'upstream_to_dealer'
-                                                        setEditDirection(defDir)
-                                                    }}
-                                                >
-                                                    เคลียร์ยอดสุทธิ
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="preset-pill-btn"
-                                                    style={{
-                                                        background: editPaymentType === 'prize_collection' ? 'var(--color-success)' : undefined,
-                                                        color: editPaymentType === 'prize_collection' ? '#fff' : undefined,
-                                                        fontWeight: editPaymentType === 'prize_collection' ? 700 : 400
-                                                    }}
-                                                    onClick={() => {
-                                                        setEditPaymentType('prize_collection')
-                                                        setEditDirection('upstream_to_dealer')
-                                                    }}
-                                                >
-                                                    รับคืนเงินรางวัล
-                                                </button>
+                                {/* 2. Payment Type (รูปแบบการชำระเงิน) */}
+                                <div className="cross-round-box">
+                                    <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: '0.35rem' }}>
+                                        รูปแบบการชำระเงิน
+                                    </label>
+                                    <div className="cross-round-modes-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+                                        <div
+                                            className={`cross-round-mode-card ${editPaymentType === 'net_settlement' ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setEditPaymentType('net_settlement')
+                                                if (editDirection === 'upstream_to_dealer' && currentBalance >= 0) {
+                                                    setEditDirection('dealer_to_upstream')
+                                                }
+                                            }}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="cross-round-mode-checkbox"
+                                                checked={editPaymentType === 'net_settlement'}
+                                                onChange={() => {
+                                                    setEditPaymentType('net_settlement')
+                                                    if (editDirection === 'upstream_to_dealer' && currentBalance >= 0) {
+                                                        setEditDirection('dealer_to_upstream')
+                                                    }
+                                                }}
+                                            />
+                                            <span>จ่ายหนี้งวดนี้</span>
+                                        </div>
+                                        <div
+                                            className={`cross-round-mode-card ${editPaymentType === 'prize_collection' ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setEditPaymentType('prize_collection')
+                                                setEditDirection('upstream_to_dealer')
+                                            }}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="cross-round-mode-checkbox"
+                                                checked={editPaymentType === 'prize_collection'}
+                                                onChange={() => {
+                                                    setEditPaymentType('prize_collection')
+                                                    setEditDirection('upstream_to_dealer')
+                                                }}
+                                            />
+                                            <span>รับคืนรางวัลงวดนี้</span>
+                                        </div>
+                                    </div>
+                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.4rem', fontStyle: 'italic' }}>
+                                        {editPaymentType === 'net_settlement' && 'ℹ️ รายการชำระหนี้/เคลียร์ยอดคงค้างของงวดปัจจุบัน'}
+                                        {editPaymentType === 'prize_collection' && 'ℹ️ รายการรับคืนเงินรางวัลจากการตีออกของงวดปัจจุบัน'}
+                                    </div>
+                                </div>
+
+                                {/* 3. Direction (ทิศทางการเงิน) - Only for net_settlement */}
+                                {editPaymentType === 'net_settlement' && (
+                                    <div className="cross-round-box">
+                                        <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: '0.35rem' }}>
+                                            ทิศทางการเงิน
+                                        </label>
+                                        <div className="cross-round-modes-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+                                            <div
+                                                className={`cross-round-mode-card ${editDirection === 'dealer_to_upstream' ? 'active' : ''}`}
+                                                onClick={() => setEditDirection('dealer_to_upstream')}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    className="cross-round-mode-checkbox"
+                                                    checked={editDirection === 'dealer_to_upstream'}
+                                                    onChange={() => setEditDirection('dealer_to_upstream')}
+                                                />
+                                                <span>🔴 เราจ่ายให้เจ้ามือ</span>
+                                            </div>
+                                            <div
+                                                className={`cross-round-mode-card ${editDirection === 'upstream_to_dealer' ? 'active' : ''}`}
+                                                onClick={() => setEditDirection('upstream_to_dealer')}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    className="cross-round-mode-checkbox"
+                                                    checked={editDirection === 'upstream_to_dealer'}
+                                                    onChange={() => setEditDirection('upstream_to_dealer')}
+                                                />
+                                                <span>🟢 เจ้ามือจ่ายคืนเรา</span>
                                             </div>
                                         </div>
-
-                                        {editPaymentType === 'net_settlement' ? (
-                                            <div className="upstream-settlement-form-field">
-                                                <label style={{ fontSize: '0.78rem' }}>ทิศทางการเงิน</label>
-                                                <select
-                                                    value={editDirection}
-                                                    onChange={(e) => setEditDirection(e.target.value)}
-                                                    style={{ padding: '0.38rem 0.55rem', fontSize: '0.82rem' }}
-                                                >
-                                                    <option value="dealer_to_upstream">🔴 เราจ่ายให้เจ้ามือรับตีออก</option>
-                                                    <option value="upstream_to_dealer">🟢 เจ้ามือรับตีออกจ่ายคืนเรา</option>
-                                                </select>
-                                            </div>
-                                        ) : (
-                                            <div className="upstream-settlement-form-field">
-                                                <label style={{ fontSize: '0.78rem' }}>ทิศทางการเงิน</label>
-                                                <div style={{ fontSize: '0.82rem', color: 'var(--color-success)', fontWeight: 600, paddingTop: '0.3rem' }}>
-                                                    🟢 เจ้ามือรับตีออกจ่ายคืนเรา (รับคืนรางวัล)
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="upstream-settlement-form-field">
-                                        <label style={{ fontSize: '0.78rem' }}>ทิศทางการเงิน</label>
-                                        <select
-                                            value={editDirection}
-                                            onChange={(e) => setEditDirection(e.target.value)}
-                                            style={{ padding: '0.38rem 0.55rem', fontSize: '0.82rem' }}
-                                        >
-                                            <option value="dealer_to_upstream">🔴 เราจ่ายให้เจ้ามือรับตีออก</option>
-                                            <option value="upstream_to_dealer">🟢 เจ้ามือรับตีออกจ่ายคืนเรา</option>
-                                        </select>
                                     </div>
                                 )}
 
-                                {/* Amount & Date (2-column compact grid) */}
-                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
-                                    {/* Amount */}
-                                    <div className="upstream-settlement-form-field">
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
-                                            <FiDollarSign /> จำนวนเงิน (บาท) *
+                                {/* 4. Direction & Amount Summary Box */}
+                                <div className="cross-round-box" style={{ background: 'rgba(250, 204, 21, 0.05)', borderColor: 'rgba(250, 204, 21, 0.2)' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                                            {editDirection === 'dealer_to_upstream'
+                                                ? '🔴 เราโอนชำระให้เจ้ามือรับตีออก:'
+                                                : (editPaymentType === 'prize_collection' ? '🟢 เจ้ามือโอนจ่ายคืนรางวัลให้เรา:' : '🟢 เจ้ามือโอนชำระให้เรา:')}
+                                        </span>
+                                        <span style={{
+                                            fontSize: '1.1rem',
+                                            fontWeight: 800,
+                                            color: editDirection === 'dealer_to_upstream' ? 'var(--color-danger, #ef4444)' : 'var(--color-success, #10b981)'
+                                        }}>
+                                            ฿{Number(editAmount || 0).toLocaleString()}
+                                        </span>
+                                    </div>
+                                </div>
+
+                                {/* 5. 3 Columns: Amount, Date, Time */}
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem', alignItems: 'start' }}>
+                                    <div className="settlement-form-field">
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                            <FiDollarSign /> จำนวนเงิน
                                         </label>
                                         <input
                                             type="number"
                                             min="0.01"
                                             step="any"
-                                            required
-                                            placeholder="0.00"
                                             value={editAmount}
-                                            onChange={(e) => setEditAmount(e.target.value)}
-                                            style={{ padding: '0.38rem 0.55rem', fontSize: '0.85rem' }}
+                                            onChange={e => setEditAmount(e.target.value)}
+                                            required
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.38rem 0.55rem',
+                                                fontSize: '0.85rem',
+                                                background: 'rgba(0, 0, 0, 0.3)',
+                                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                borderRadius: '6px',
+                                                color: '#f8fafc'
+                                            }}
                                         />
-                                        <div className="upstream-settlement-presets">
-                                            {Math.abs(currentBalance) > 0 && (
-                                                <button
-                                                    type="button"
-                                                    className={`preset-pill-btn ${Number(editAmount) === Math.abs(currentBalance) ? 'active' : ''}`}
-                                                    onClick={() => setEditAmount(String(Math.abs(currentBalance)))}
-                                                >
-                                                    ยอดคงค้าง ฿{Math.abs(currentBalance).toLocaleString()}
-                                                </button>
-                                            )}
-                                            {totalWinnings > 0 && (
-                                                <button
-                                                    type="button"
-                                                    className={`preset-pill-btn ${Number(editAmount) === totalWinnings ? 'active' : ''}`}
-                                                    onClick={() => setEditAmount(String(totalWinnings))}
-                                                >
-                                                    รับคืนรางวัล ฿{totalWinnings.toLocaleString()}
-                                                </button>
-                                            )}
-                                        </div>
                                     </div>
-
-                                    {/* Date */}
-                                    <div className="upstream-settlement-form-field">
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
+                                    <div className="settlement-form-field">
+                                        <label
+                                            onClick={() => {
+                                                try { editDateInputRef.current?.showPicker?.() } catch {}
+                                            }}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.35rem',
+                                                fontSize: '0.78rem',
+                                                color: 'var(--color-text-muted, #94a3b8)',
+                                                marginBottom: '0.2rem',
+                                                cursor: 'pointer'
+                                            }}
+                                            title="คลิกเพื่อเปิดปฏิทินเลือกวันที่"
+                                        >
                                             <FiCalendar /> วันที่ชำระ
                                         </label>
-                                        <input
-                                            type="date"
-                                            value={editPaidAt}
-                                            onChange={(e) => setEditPaidAt(e.target.value)}
-                                            required
-                                            style={{ padding: '0.38rem 0.55rem', fontSize: '0.85rem' }}
-                                        />
-                                        <div className="upstream-settlement-presets">
+                                        <div className="settlement-input-icon-wrapper">
+                                            <input
+                                                ref={editDateInputRef}
+                                                type="date"
+                                                className="settlement-input-with-action"
+                                                value={editPaidAt}
+                                                onChange={e => setEditPaidAt(e.target.value)}
+                                                onDoubleClick={() => {
+                                                    try { editDateInputRef.current?.showPicker?.() } catch {}
+                                                }}
+                                                required
+                                            />
                                             <button
                                                 type="button"
-                                                className={`preset-pill-btn ${editPaidAt === todayStr ? 'active' : ''}`}
-                                                onClick={() => setEditPaidAt(todayStr)}
+                                                className={`btn-input-trailing-action ${editPaidAt === getTodayBangkok() ? 'active' : ''}`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setEditPaidAt(getTodayBangkok())
+                                                }}
+                                                title="คลิกเพื่อตั้งเป็นวันที่ปัจจุบัน (วันนี้)"
                                             >
-                                                วันนี้
+                                                <FiCalendar size={14} />
                                             </button>
-                                            {roundDateIso && (
-                                                <button
-                                                    type="button"
-                                                    className={`preset-pill-btn ${editPaidAt === roundDateIso ? 'active' : ''}`}
-                                                    onClick={() => setEditPaidAt(roundDateIso)}
-                                                    title={`วันที่งวดหวย (${roundDateIso})`}
-                                                >
-                                                    วันที่งวดหวย
-                                                </button>
-                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="settlement-form-field">
+                                        <label
+                                            onClick={() => {
+                                                try { editTimeInputRef.current?.showPicker?.() } catch {}
+                                            }}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.35rem',
+                                                fontSize: '0.78rem',
+                                                color: 'var(--color-text-muted, #94a3b8)',
+                                                marginBottom: '0.2rem',
+                                                cursor: 'pointer'
+                                            }}
+                                            title="คลิกเพื่อเปิดตัวเลือกเวลา"
+                                        >
+                                            <FiClock /> เวลาโอน
+                                        </label>
+                                        <div className="settlement-input-icon-wrapper">
+                                            <input
+                                                ref={editTimeInputRef}
+                                                type="time"
+                                                className="settlement-input-with-action"
+                                                value={editPaidTime}
+                                                onChange={e => setEditPaidTime(e.target.value)}
+                                                onDoubleClick={() => {
+                                                    try { editTimeInputRef.current?.showPicker?.() } catch {}
+                                                }}
+                                            />
+                                            <button
+                                                type="button"
+                                                className={`btn-input-trailing-action ${editPaidTime ? 'active' : ''}`}
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setEditPaidTime(getCurrentTimeBangkok())
+                                                }}
+                                                title="คลิกเพื่อตั้งเป็นเวลาปัจจุบัน"
+                                            >
+                                                <FiClock size={14} />
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Notes */}
-                                <div className="upstream-settlement-form-field">
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem' }}>
-                                        <FiFileText /> หมายเหตุ
+                                {/* 6. Reference Document */}
+                                <div className="settlement-form-field">
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                        <FiHash /> เอกสารอ้างอิง (ระบุหรือไม่ก็ได้)
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder="เช่น โอนแล้ว, เงินสด"
-                                        value={editNotes}
-                                        onChange={(e) => setEditNotes(e.target.value)}
-                                        style={{ padding: '0.38rem 0.55rem', fontSize: '0.85rem' }}
+                                        placeholder="เช่น เลขที่สลิป หรือ รหัสอ้างอิงการโอน"
+                                        value={editReferenceDoc}
+                                        onChange={e => setEditReferenceDoc(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.38rem 0.55rem',
+                                            fontSize: '0.85rem',
+                                            background: 'rgba(0, 0, 0, 0.3)',
+                                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                                            borderRadius: '6px',
+                                            color: '#f8fafc'
+                                        }}
                                     />
-                                    <div className="upstream-settlement-presets">
-                                        <button
-                                            type="button"
-                                            className={`preset-pill-btn ${editNotes === 'โอนแล้ว' ? 'active' : ''}`}
-                                            onClick={() => setEditNotes('โอนแล้ว')}
-                                        >
-                                            โอนแล้ว
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`preset-pill-btn ${editNotes === 'เงินสด' ? 'active' : ''}`}
-                                            onClick={() => setEditNotes('เงินสด')}
-                                        >
-                                            เงินสด
-                                        </button>
-                                        <button
-                                            type="button"
-                                            className={`preset-pill-btn ${editNotes === 'เคลียร์ยอดครบจำนวน' ? 'active' : ''}`}
-                                            onClick={() => setEditNotes('เคลียร์ยอดครบจำนวน')}
-                                        >
-                                            เคลียร์ยอดครบจำนวน
-                                        </button>
-                                    </div>
+                                </div>
+
+                                {/* 7. Notes */}
+                                <div className="settlement-form-field">
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                        <FiFileText /> หมายเหตุเพิ่มเติม (ระบุหรือไม่ก็ได้)
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="เช่น บัญชีธนาคาร หรือ หมายเหตุการโอน"
+                                        value={editCustomNotes}
+                                        onChange={e => setEditCustomNotes(e.target.value)}
+                                        style={{
+                                            width: '100%',
+                                            padding: '0.38rem 0.55rem',
+                                            fontSize: '0.85rem',
+                                            background: 'rgba(0, 0, 0, 0.3)',
+                                            border: '1px solid rgba(255, 255, 255, 0.15)',
+                                            borderRadius: '6px',
+                                            color: '#f8fafc'
+                                        }}
+                                    />
                                 </div>
                             </div>
 
-                            <div className="modal-footer" style={{ 
-                                display: 'flex', 
-                                justifyContent: 'flex-end', 
-                                gap: '0.5rem', 
-                                padding: '0.65rem 1.15rem', 
-                                borderTop: '1px solid rgba(255,255,255,0.08)',
-                                background: 'rgba(0,0,0,0.25)',
-                                flexShrink: 0
-                            }}>
+                            <div className="modal-footer">
                                 <button
                                     type="button"
                                     className="btn btn-outline btn-sm"
@@ -1036,7 +1144,7 @@ export default function UpstreamSettlementInline({
                                         <>กำลังบันทึก...</>
                                     ) : (
                                         <>
-                                            <FiCheck /> บันทึกการแก้ไข
+                                            <FiCheck size={14} /> บันทึกการแก้ไข
                                         </>
                                     )}
                                 </button>

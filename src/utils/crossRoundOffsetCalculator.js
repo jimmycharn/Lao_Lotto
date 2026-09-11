@@ -769,3 +769,106 @@ export function allocateSettlementPaymentsByMode({
     }
 }
 
+/**
+ * Parses a payment record note string into its constituent parts:
+ * customNotes, paidTime (HH:mm), referenceDoc (without '#'), and prefix.
+ *
+ * @param {string} notes - Full payment notes string
+ * @returns {{ customNotes: string, paidTime: string, referenceDoc: string, prefix: string }}
+ */
+export function parsePaymentNotes(notes) {
+    if (!notes || typeof notes !== 'string') {
+        return { customNotes: '', paidTime: '', referenceDoc: '', prefix: '' }
+    }
+    const raw = notes.trim()
+    if (!raw) {
+        return { customNotes: '', paidTime: '', referenceDoc: '', prefix: '' }
+    }
+
+    let prefix = ''
+    let detailsPart = raw
+
+    // Look for outermost/last parentheses: e.g. "Prefix (...)"
+    const matchSuffix = raw.match(/^(.*?)\s*\((.*)\)$/)
+    if (matchSuffix) {
+        prefix = matchSuffix[1].trim()
+        detailsPart = matchSuffix[2].trim()
+    }
+
+    let ref = ''
+    let time = ''
+
+    // Extract reference: #[something]
+    const refMatch = detailsPart.match(/#([^\s\)]+)/)
+    if (refMatch) {
+        ref = refMatch[1].trim()
+        detailsPart = detailsPart.replace(/#([^\s\)]+)/, '').trim()
+    }
+
+    // Extract time: เวลา [HH:mm]
+    const timeMatch = detailsPart.match(/เวลา\s*(\d{1,2}:\d{2})/)
+    if (timeMatch) {
+        time = timeMatch[1].padStart(5, '0')
+        detailsPart = detailsPart.replace(/เวลา\s*\d{1,2}:\d{2}/, '').trim()
+    }
+
+    let customNotes = detailsPart.replace(/\s+/g, ' ').trim()
+
+    // If there was no parenthesized suffix and no extracted tokens, the entire string is customNotes
+    if (!matchSuffix && !ref && !time) {
+        customNotes = raw
+        prefix = ''
+    }
+
+    return { customNotes, paidTime: time, referenceDoc: ref, prefix }
+}
+
+/**
+ * Reconstructs the full note string from constituent parts in the standard system format:
+ * [prefix] ([customNotes] เวลา [paidTime] #[referenceDoc])
+ *
+ * @param {Object} params
+ * @param {string} [params.paymentType]
+ * @param {string} [params.direction]
+ * @param {boolean} [params.isUpstream=false]
+ * @param {string} [params.customNotes='']
+ * @param {string} [params.paidTime='']
+ * @param {string} [params.referenceDoc='']
+ * @param {string} [params.originalPrefix='']
+ * @returns {string} Formatted full note string
+ */
+export function buildPaymentNotes({
+    paymentType,
+    direction = 'member_to_dealer',
+    isUpstream = false,
+    customNotes = '',
+    paidTime = '',
+    referenceDoc = '',
+    originalPrefix = ''
+}) {
+    let basePrefix = originalPrefix ? originalPrefix.trim() : ''
+    if (!basePrefix) {
+        if (paymentType === 'prize_payout' || paymentType === 'prize_collection') {
+            basePrefix = isUpstream ? 'รับคืนเงินถูกรางวัลงวดนี้' : 'จ่ายเงินถูกรางวัลงวดนี้'
+        } else {
+            if (!isUpstream) {
+                basePrefix = direction === 'member_to_dealer' ? 'ชำระหนี้งวดนี้' : 'เคลียร์ยอดคงค้าง'
+            } else {
+                basePrefix = direction === 'dealer_to_upstream' ? 'ชำระหนี้งวดนี้' : 'เคลียร์ยอดคงค้าง'
+            }
+        }
+    }
+
+    const noteDetails = [
+        customNotes && customNotes.trim() ? customNotes.trim() : '',
+        paidTime && paidTime.trim() ? `เวลา ${paidTime.trim()}` : '',
+        referenceDoc && referenceDoc.trim() ? `#${referenceDoc.trim()}` : ''
+    ].filter(Boolean).join(' ')
+
+    if (noteDetails) {
+        return `${basePrefix} (${noteDetails})`
+    }
+    return basePrefix
+}
+
+
