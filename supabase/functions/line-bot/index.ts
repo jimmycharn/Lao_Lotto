@@ -4818,6 +4818,39 @@ serve(async (req) => {
       })
     }
 
+    if (apiPayload && apiPayload.action === 'send_payment_notice') {
+      const targetLineUserId = (apiPayload.line_user_id || '').trim();
+      const messageText = (apiPayload.message_text || '').trim();
+
+      if (!targetLineUserId) {
+        return new Response(JSON.stringify({ success: false, error: 'Missing line_user_id' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400
+        });
+      }
+
+      if (!messageText) {
+        return new Response(JSON.stringify({ success: false, error: 'Missing message_text' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400
+        });
+      }
+
+      try {
+        await sendLinePush(targetLineUserId, messageText);
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200
+        });
+      } catch (pushErr: any) {
+        console.error('Error sending payment notice push:', pushErr);
+        return new Response(JSON.stringify({ success: false, error: pushErr.message || String(pushErr) }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 500
+        });
+      }
+    }
+
     if (apiPayload && apiPayload.action === 'dump_round_excess') {
       try {
         const roundId = apiPayload.round_id || '0c8ef6d1-e763-49d8-b15a-6160e847842e';
