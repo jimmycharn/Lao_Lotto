@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
     calculatePaymentNoticeSummary,
-    formatPaymentNoticeMessage
+    formatPaymentNoticeMessage,
+    buildSettlementDefaultNote,
+    resolvePaymentNoticeBankAccount
 } from './paymentNoticeHelper'
 
 describe('paymentNoticeHelper', () => {
@@ -140,6 +142,191 @@ describe('paymentNoticeHelper', () => {
             expect(msg).toContain('ยอดที่เจ้ามือต้องโอน: ฿3,000')
             expect(msg).toContain('เจ้ามือโอนคืนให้สมาชิก')
             expect(msg).toContain('กสิกรไทย')
+        })
+    })
+
+    describe('buildSettlementDefaultNote', () => {
+        it('returns "โอนผ่าน เวลา: # " when bank is null or empty', () => {
+            expect(buildSettlementDefaultNote(null)).toBe('โอนผ่าน เวลา: # ')
+            expect(buildSettlementDefaultNote({})).toBe('โอนผ่าน เวลา: # ')
+        })
+
+        it('formats note with bank name, account number, and account name', () => {
+            const note = buildSettlementDefaultNote({
+                bank_name: 'ธนาคารไทยพาณิชย์',
+                bank_account: '9972081291',
+                account_name: 'ยุทธศักดิ์ ทองมั่นคง'
+            })
+            expect(note).toBe('โอนผ่าน ธนาคารไทยพาณิชย์ 9972081291 (ยุทธศักดิ์ ทองมั่นคง) เวลา: # ')
+        })
+
+        it('formats note without account name if account_name is missing', () => {
+            const note = buildSettlementDefaultNote({
+                bank_name: 'ธนาคารกสิกรไทย',
+                bank_account: '123-4-56789-0'
+            })
+            expect(note).toBe('โอนผ่าน ธนาคารกสิกรไทย 123-4-56789-0 เวลา: # ')
+        })
+    })
+
+    describe('resolvePaymentNoticeBankAccount', () => {
+        it('returns null if direction is "even" or supabase is not provided', async () => {
+            const res = await resolvePaymentNoticeBankAccount({ direction: 'even', supabase: {} })
+            expect(res).toBeNull()
+
+            const resNoSupa = await resolvePaymentNoticeBankAccount({ direction: 'member_to_dealer', supabase: null })
+            expect(resNoSupa).toBeNull()
+        })
+
+        it('resolves member-assigned bank account when dealer pays member', async () => {
+            const mockSupabase = {
+                from: (table) => {
+                    if (table === 'user_dealer_memberships') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    eq: () => ({
+                                        maybeSingle: async () => ({
+                                            data: { member_bank_account_id: 'm-bank-123' }
+                                        })
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    if (table === 'user_bank_accounts') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    maybeSingle: async () => ({
+                                        data: {
+                                            bank_name: 'ธนาคารไทยพาณิชย์',
+                                            bank_account: '9972081291',
+                                            account_name: 'ยุทธศักดิ์'
+                                        }
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    return {}
+                }
+            }
+
+            const bank = await resolvePaymentNoticeBankAccount({
+                direction: 'dealer_to_member',
+                dealerId: 'dealer-1',
+                memberUserId: 'member-1',
+                supabase: mockSupabase
+            })
+
+            expect(bank).not.toBeNull()
+            expect(bank.bank_name).toBe('ธนาคารไทยพาณิชย์')
+            expect(bank.bank_account).toBe('9972081291')
+            expect(bank.account_name).toBe('ยุทธศักดิ์')
+            expect(bank.source).toBe('member_assigned')
+        })
+
+        it('falls back to default user_bank_accounts when no specific bank assigned', async () => {
+            const mockSupabase = {
+                from: (table) => {
+                    if (table === 'user_dealer_memberships') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    eq: () => ({
+                                        maybeSingle: async () => ({
+                                            data: { member_bank_account_id: null }
+                                        })
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    if (table === 'user_bank_accounts') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    order: () => ({
+                                        order: async () => ({
+                                            data: [
+                                                {
+                                                    bank_name: 'ธนาคารกรุงเทพ',
+                                                    bank_account: '456789',
+                                                    account_name: 'สมชาย',
+                                                    is_default: true
+                                                }
+                                            ]
+                                        })
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    return {}
+                }
+            }
+
+            const bank = await resolvePaymentNoticeBankAccount({
+                direction: 'dealer_to_member',
+                dealerId: 'dealer-1',
+                memberUserId: 'member-1',
+                supabase: mockSupabase
+            })
+
+            expect(bank).not.toBeNull()
+            expect(bank.bank_name).toBe('ธนาคารกรุงเทพ')
+            expect(bank.bank_account).toBe('456789')
+            expect(bank.source).toBe('member_bank_accounts')
+        })
+
+        it('resolves dealer assigned bank account when member pays dealer', async () => {
+            const mockSupabase = {
+                from: (table) => {
+                    if (table === 'user_dealer_memberships') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    eq: () => ({
+                                        maybeSingle: async () => ({
+                                            data: { assigned_bank_account_id: 'd-bank-789' }
+                                        })
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    if (table === 'dealer_bank_accounts') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    maybeSingle: async () => ({
+                                        data: {
+                                            bank_name: 'ธนาคารกสิกรไทย',
+                                            bank_account: '789123456',
+                                            account_name: 'เฮียเบิ้ม'
+                                        }
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    return {}
+                }
+            }
+
+            const bank = await resolvePaymentNoticeBankAccount({
+                direction: 'member_to_dealer',
+                dealerId: 'dealer-1',
+                memberUserId: 'member-1',
+                supabase: mockSupabase
+            })
+
+            expect(bank).not.toBeNull()
+            expect(bank.bank_name).toBe('ธนาคารกสิกรไทย')
+            expect(bank.bank_account).toBe('789123456')
+            expect(bank.account_name).toBe('เฮียเบิ้ม')
+            expect(bank.source).toBe('dealer_assigned')
         })
     })
 })

@@ -82,7 +82,28 @@ export function calculatePaymentNoticeSummary({
 }
 
 /**
- * Resolves bank account for the payment notice
+ * Builds the default note string for settlement payments based on resolved bank account
+ * @param {Object|null} bank
+ * @returns {string}
+ */
+export function buildSettlementDefaultNote(bank) {
+    if (!bank) return 'โอนผ่าน เวลา: # '
+    const parts = [
+        bank.bank_name,
+        bank.bank_account,
+        bank.account_name ? `(${bank.account_name})` : ''
+    ].filter(Boolean).map(s => String(s).trim()).filter(Boolean)
+
+    if (parts.length === 0) return 'โอนผ่าน เวลา: # '
+    return `โอนผ่าน ${parts.join(' ')} เวลา: # `
+}
+
+/**
+ * Resolves bank account for the payment notice or settlement payment modal.
+ * - Dealer pays member/upstream: Resolves the member's assigned bank account for this dealer,
+ *   or member's default bank account, or member profile.
+ * - Member/upstream pays dealer: Resolves the dealer's assigned bank account for this member,
+ *   or dealer's default bank account, or dealer profile.
  */
 export async function resolvePaymentNoticeBankAccount({
     direction = 'member_to_dealer',
@@ -90,13 +111,95 @@ export async function resolvePaymentNoticeBankAccount({
     memberUserId,
     supabase,
     cachedDealerBanks = [],
-    assignedBankAccountId = null
+    assignedBankAccountId = null,
+    memberBankAccountId = null,
+    isUpstream = false,
+    upstreamDealerId = null
 }) {
     if (!supabase) return null
 
-    if (direction === 'dealer_to_member') {
+    const isDealerPaying = direction === 'dealer_to_member' || direction === 'dealer_to_upstream'
+    const isTargetPaying = direction === 'member_to_dealer' || direction === 'upstream_to_dealer'
+
+    if (direction === 'even' || (!isDealerPaying && !isTargetPaying)) {
+        return null
+    }
+
+    if (isDealerPaying) {
+        // Upstream layoff: Dealer pays upstream dealer
+        if (isUpstream) {
+            const targetUpstreamId = upstreamDealerId || memberUserId
+            if (targetUpstreamId) {
+                try {
+                    const { data: dealerBanks } = await supabase
+                        .from('dealer_bank_accounts')
+                        .select('*')
+                        .eq('dealer_id', targetUpstreamId)
+                        .order('is_default', { ascending: false })
+
+                    if (dealerBanks && dealerBanks.length > 0) {
+                        const b = dealerBanks[0]
+                        return {
+                            bank_name: b.bank_name || '',
+                            bank_account: b.bank_account || '',
+                            account_name: b.account_name || '',
+                            source: 'upstream_dealer_bank'
+                        }
+                    }
+
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('bank_name, bank_account, bank_account_number, bank_account_name')
+                        .eq('id', targetUpstreamId)
+                        .maybeSingle()
+
+                    if (profile?.bank_account || profile?.bank_account_number) {
+                        return {
+                            bank_name: profile.bank_name || '',
+                            bank_account: profile.bank_account || profile.bank_account_number || '',
+                            account_name: profile.bank_account_name || '',
+                            source: 'upstream_profile'
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error resolving upstream bank account:', err)
+                }
+            }
+            return null
+        }
+
         // Dealer pays member -> fetch member's bank account
         try {
+            let targetMemberBankId = memberBankAccountId
+            if (!targetMemberBankId && dealerId && memberUserId) {
+                const { data: membership } = await supabase
+                    .from('user_dealer_memberships')
+                    .select('member_bank_account_id')
+                    .eq('dealer_id', dealerId)
+                    .eq('user_id', memberUserId)
+                    .maybeSingle()
+                if (membership?.member_bank_account_id) {
+                    targetMemberBankId = membership.member_bank_account_id
+                }
+            }
+
+            if (targetMemberBankId) {
+                const { data: specificBank } = await supabase
+                    .from('user_bank_accounts')
+                    .select('*')
+                    .eq('id', targetMemberBankId)
+                    .maybeSingle()
+
+                if (specificBank) {
+                    return {
+                        bank_name: specificBank.bank_name || 'ไม่ระบุธนาคาร',
+                        bank_account: specificBank.bank_account || '',
+                        account_name: specificBank.account_name || '',
+                        source: 'member_assigned'
+                    }
+                }
+            }
+
             const { data: userBanks } = await supabase
                 .from('user_bank_accounts')
                 .select('*')
@@ -134,10 +237,10 @@ export async function resolvePaymentNoticeBankAccount({
         return null
     }
 
-    // Member pays dealer -> fetch dealer's assigned or default bank account
+    // Member or upstream pays dealer -> fetch dealer's assigned or default bank account
     try {
         let assignedId = assignedBankAccountId
-        if (!assignedId && dealerId && memberUserId) {
+        if (!assignedId && dealerId && memberUserId && !isUpstream) {
             const { data: membership } = await supabase
                 .from('user_dealer_memberships')
                 .select('assigned_bank_account_id')
@@ -189,35 +292,37 @@ export async function resolvePaymentNoticeBankAccount({
             }
         }
 
-        const { data: dealerBanks } = await supabase
-            .from('dealer_bank_accounts')
-            .select('*')
-            .eq('dealer_id', dealerId)
-            .order('is_default', { ascending: false })
+        if (dealerId) {
+            const { data: dealerBanks } = await supabase
+                .from('dealer_bank_accounts')
+                .select('*')
+                .eq('dealer_id', dealerId)
+                .order('is_default', { ascending: false })
 
-        if (dealerBanks && dealerBanks.length > 0) {
-            const b = dealerBanks[0]
-            return {
-                bank_name: b.bank_name || '',
-                bank_account: b.bank_account || '',
-                account_name: b.account_name || '',
-                source: 'dealer_default'
+            if (dealerBanks && dealerBanks.length > 0) {
+                const b = dealerBanks[0]
+                return {
+                    bank_name: b.bank_name || '',
+                    bank_account: b.bank_account || '',
+                    account_name: b.account_name || '',
+                    source: 'dealer_default'
+                }
             }
-        }
 
-        // Fallback: Dealer profile
-        const { data: dealerProf } = await supabase
-            .from('profiles')
-            .select('bank_name, bank_account, bank_account_number, bank_account_name')
-            .eq('id', dealerId)
-            .maybeSingle()
+            // Fallback: Dealer profile
+            const { data: dealerProf } = await supabase
+                .from('profiles')
+                .select('bank_name, bank_account, bank_account_number, bank_account_name')
+                .eq('id', dealerId)
+                .maybeSingle()
 
-        if (dealerProf?.bank_account || dealerProf?.bank_account_number) {
-            return {
-                bank_name: dealerProf.bank_name || '',
-                bank_account: dealerProf.bank_account || dealerProf.bank_account_number || '',
-                account_name: dealerProf.bank_account_name || '',
-                source: 'dealer_profile'
+            if (dealerProf?.bank_account || dealerProf?.bank_account_number) {
+                return {
+                    bank_name: dealerProf.bank_name || '',
+                    bank_account: dealerProf.bank_account || dealerProf.bank_account_number || '',
+                    account_name: dealerProf.bank_account_name || '',
+                    source: 'dealer_profile'
+                }
             }
         }
     } catch (err) {
