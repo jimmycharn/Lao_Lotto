@@ -146,18 +146,18 @@ describe('paymentNoticeHelper', () => {
     })
 
     describe('buildSettlementDefaultNote', () => {
-        it('returns "โอนผ่าน เวลา: # " when bank is null or empty', () => {
-            expect(buildSettlementDefaultNote(null)).toBe('โอนผ่าน เวลา: # ')
-            expect(buildSettlementDefaultNote({})).toBe('โอนผ่าน เวลา: # ')
+        it('returns empty string when bank is null or empty', () => {
+            expect(buildSettlementDefaultNote(null)).toBe('')
+            expect(buildSettlementDefaultNote({})).toBe('')
         })
 
-        it('formats note with bank name, account number, and account name', () => {
+        it('formats note with stripped bank name (without "ธนาคาร"), account number, and account name', () => {
             const note = buildSettlementDefaultNote({
                 bank_name: 'ธนาคารไทยพาณิชย์',
                 bank_account: '9972081291',
                 account_name: 'ยุทธศักดิ์ ทองมั่นคง'
             })
-            expect(note).toBe('โอนผ่าน ธนาคารไทยพาณิชย์ 9972081291 (ยุทธศักดิ์ ทองมั่นคง) เวลา: # ')
+            expect(note).toBe('ไทยพาณิชย์ 9972081291 (ยุทธศักดิ์ ทองมั่นคง)')
         })
 
         it('formats note without account name if account_name is missing', () => {
@@ -165,7 +165,7 @@ describe('paymentNoticeHelper', () => {
                 bank_name: 'ธนาคารกสิกรไทย',
                 bank_account: '123-4-56789-0'
             })
-            expect(note).toBe('โอนผ่าน ธนาคารกสิกรไทย 123-4-56789-0 เวลา: # ')
+            expect(note).toBe('กสิกรไทย 123-4-56789-0')
         })
     })
 

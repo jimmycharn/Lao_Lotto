@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { FiZap, FiX, FiCheck, FiCalendar, FiDollarSign, FiFileText } from 'react-icons/fi'
+import { FiZap, FiX, FiCheck, FiCalendar, FiDollarSign, FiFileText, FiClock, FiHash } from 'react-icons/fi'
 import {
     calculateCrossRoundPaymentSummary,
     allocateSettlementPaymentsByMode,
@@ -67,6 +67,8 @@ export default function CrossRoundOffsetModal({
     )
     const [customSlipAmount, setCustomSlipAmount] = useState('')
     const [paidAt, setPaidAt] = useState(() => new Date().toISOString().split('T')[0])
+    const [paidTime, setPaidTime] = useState('')
+    const [referenceDoc, setReferenceDoc] = useState('')
     const [customNotes, setCustomNotes] = useState('')
     const [saving, setSaving] = useState(false)
     const [errorMsg, setErrorMsg] = useState(null)
@@ -275,6 +277,8 @@ export default function CrossRoundOffsetModal({
             availableWinnings,
             actualSlipAmount: activeSlipAmount,
             paidAt,
+            paidTime,
+            referenceDoc,
             currentRound,
             memberUserId: effectiveMemberUserId,
             dealerId: effectiveDealerId,
@@ -604,8 +608,8 @@ export default function CrossRoundOffsetModal({
                             </div>
                         </div>
 
-                        {/* Actual Slip Amount & Date (2 columns) */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
+                        {/* Actual Slip Amount, Date & Time (3 columns) */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.5rem' }}>
                             <div className="settlement-form-field">
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
                                     <FiDollarSign /> จำนวนเงินตามสลิปจริง (บาท)
@@ -647,6 +651,47 @@ export default function CrossRoundOffsetModal({
                                     }}
                                 />
                             </div>
+                            <div className="settlement-form-field">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                    <FiClock /> เวลาโอน
+                                </label>
+                                <input
+                                    type="time"
+                                    value={paidTime}
+                                    onChange={e => setPaidTime(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.38rem 0.55rem',
+                                        fontSize: '0.85rem',
+                                        background: 'rgba(0, 0, 0, 0.3)',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        borderRadius: '6px',
+                                        color: '#f8fafc'
+                                    }}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Reference Document */}
+                        <div className="settlement-form-field">
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                <FiHash /> เอกสารอ้างอิง (ระบุหรือไม่ก็ได้)
+                            </label>
+                            <input
+                                type="text"
+                                placeholder="เช่น เลขที่สลิป หรือ รหัสอ้างอิงการโอน"
+                                value={referenceDoc}
+                                onChange={e => setReferenceDoc(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.38rem 0.55rem',
+                                    fontSize: '0.85rem',
+                                    background: 'rgba(0, 0, 0, 0.3)',
+                                    border: '1px solid rgba(255, 255, 255, 0.15)',
+                                    borderRadius: '6px',
+                                    color: '#f8fafc'
+                                }}
+                            />
                         </div>
 
                         {/* Notes */}
@@ -656,7 +701,7 @@ export default function CrossRoundOffsetModal({
                             </label>
                             <input
                                 type="text"
-                                placeholder="เช่น โอนผ่าน KBank สลิปเวลา 14:20"
+                                placeholder="เช่น บัญชีธนาคาร หรือ หมายเหตุการโอน"
                                 value={customNotes}
                                 onChange={e => {
                                     isUserNotesEdited.current = true

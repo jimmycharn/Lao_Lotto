@@ -501,5 +501,21 @@ describe('crossRoundOffsetCalculator', () => {
             expect(alloc.currentRoundPayment).toBeDefined()
             expect(alloc.currentRoundPayment.amount).toBe(1500)
         })
+
+        it('merges customNotes, paidTime, and referenceDoc into notes', () => {
+            const alloc = allocateSettlementPaymentsByMode({
+                mode: 'current_debt',
+                currentBalance: 1200,
+                actualSlipAmount: 1200,
+                paidAt: '2026-09-11',
+                paidTime: '14:20',
+                referenceDoc: 'SLIP-9988',
+                customNotes: 'ไทยพาณิชย์ 9972081291 (ยุทธศักดิ์)',
+                currentRound: curRound,
+                memberUserId: 'm-1',
+                dealerId: 'd-1'
+            })
+            expect(alloc.currentRoundPayment.notes).toBe('ชำระหนี้งวดนี้ (ไทยพาณิชย์ 9972081291 (ยุทธศักดิ์) เวลา 14:20 #SLIP-9988)')
+        })
     })
 })

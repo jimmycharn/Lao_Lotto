@@ -83,19 +83,22 @@ export function calculatePaymentNoticeSummary({
 
 /**
  * Builds the default note string for settlement payments based on resolved bank account
+ * Shows only [clean bank name (without 'ธนาคาร'), bank account, and account name].
  * @param {Object|null} bank
  * @returns {string}
  */
 export function buildSettlementDefaultNote(bank) {
-    if (!bank) return 'โอนผ่าน เวลา: # '
+    if (!bank) return ''
+    const cleanBankName = bank.bank_name
+        ? String(bank.bank_name).replace(/^ธนาคาร\s*/, '').trim()
+        : ''
     const parts = [
-        bank.bank_name,
-        bank.bank_account,
-        bank.account_name ? `(${bank.account_name})` : ''
-    ].filter(Boolean).map(s => String(s).trim()).filter(Boolean)
+        cleanBankName,
+        bank.bank_account ? String(bank.bank_account).trim() : '',
+        bank.account_name ? `(${String(bank.account_name).trim()})` : ''
+    ].filter(Boolean)
 
-    if (parts.length === 0) return 'โอนผ่าน เวลา: # '
-    return `โอนผ่าน ${parts.join(' ')} เวลา: # `
+    return parts.join(' ')
 }
 
 /**

@@ -544,6 +544,8 @@ export function allocateSettlementPaymentsByMode({
     availableWinnings = 0,
     actualSlipAmount = 0,
     paidAt = new Date().toISOString().split('T')[0],
+    paidTime = '',
+    referenceDoc = '',
     currentRound = {},
     memberUserId = null,
     dealerId = null,
@@ -557,7 +559,14 @@ export function allocateSettlementPaymentsByMode({
     const slip = Math.max(0, Number(actualSlipAmount) || 0)
     const curRoundId = currentRound.round_id || currentRound.id
     const curRoundDateIso = getRoundCloseDate(currentRound) || (/^\d{4}-\d{2}-\d{2}$/.test(String(currentRound.round_date)) ? currentRound.round_date : null)
-    const noteSuffix = customNotes && customNotes.trim() ? ` (${customNotes.trim()})` : ''
+    
+    const noteDetails = [
+        customNotes && customNotes.trim() ? customNotes.trim() : '',
+        paidTime && paidTime.trim() ? `เวลา ${paidTime.trim()}` : '',
+        referenceDoc && referenceDoc.trim() ? `#${referenceDoc.trim()}` : ''
+    ].filter(Boolean).join(' ')
+
+    const noteSuffix = noteDetails ? ` (${noteDetails})` : ''
 
     if (mode === 'current_debt') {
         const curPayment = {
