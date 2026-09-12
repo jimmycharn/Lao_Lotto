@@ -39,6 +39,7 @@ export default function MemberSettlementInline({
     settlementOverview,
     roundHistory = [],
     dealerId,
+    lotteryTypeFilter = null,
     onSavePayment,
     onUpdatePayment,
     onDeletePayment,
@@ -158,9 +159,10 @@ export default function MemberSettlementInline({
             currentRoundDate: roundDateIso,
             userHistories: settlementOverview?.userHistories || [],
             memberPayments: settlementOverview?.memberPayments || [],
-            roundHistory: roundHistory || []
+            roundHistory: roundHistory || [],
+            lotteryType: (lotteryTypeFilter && lotteryTypeFilter !== 'all') ? lotteryTypeFilter : null
         })
-    }, [member?.user_id, round, roundDateIso, settlementOverview, roundHistory])
+    }, [member?.user_id, round, roundDateIso, settlementOverview, roundHistory, lotteryTypeFilter])
 
     const pastDebtsTotal = useMemo(() => {
         return pastUnpaidRounds

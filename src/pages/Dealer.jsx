@@ -4216,6 +4216,7 @@ export default function Dealer() {
                                                                                                                                         settlementOverview={settlementOverview}
                                                                                                                                         roundHistory={roundHistory}
                                                                                                                                         dealerId={user?.id}
+                                                                                                                                        lotteryTypeFilter={historyTypeFilter}
                                                                                                                                         onSavePayment={(paymentData) => handleSaveMemberPayment({
                                                                                                                                             historyItem: history,
                                                                                                                                             member: uh,
@@ -4376,6 +4377,7 @@ export default function Dealer() {
                                                                                                                                         settlementOverview={settlementOverview}
                                                                                                                                         roundHistory={roundHistory}
                                                                                                                                         dealerId={user?.id}
+                                                                                                                                        lotteryTypeFilter={historyTypeFilter}
                                                                                                                                         onSavePayment={(paymentData) => handleSaveUpstreamPayment({
                                                                                                                                             historyItem: history,
                                                                                                                                             transfer: t,

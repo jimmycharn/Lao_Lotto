@@ -369,6 +369,63 @@ describe('crossRoundOffsetCalculator', () => {
             expect(unpaid).toHaveLength(1)
             expect(unpaid[0].roundDate).toBe('2026-04-16')
         })
+
+        it('filters past unpaid rounds by specified lotteryType (e.g. only lao)', () => {
+            const userHistories = [
+                { round_id: 'r-lao-1', user_id: 'u-1', total_amount: 5000, total_commission: 1000, total_winnings: 0, round_date: '2026-08-01', lottery_type: 'lao' },
+                { round_id: 'r-thai-1', user_id: 'u-1', total_amount: 3000, total_commission: 600, total_winnings: 0, round_date: '2026-08-16', lottery_type: 'thai' },
+                { round_id: 'r-lao-2', user_id: 'u-1', total_amount: 2000, total_commission: 400, total_winnings: 0, round_date: '2026-08-20', lottery_type: 'lao' }
+            ]
+
+            const laoOnly = findMemberPastUnpaidRounds({
+                userId: 'u-1',
+                userHistories,
+                lotteryType: 'lao'
+            })
+
+            expect(laoOnly).toHaveLength(2)
+            expect(laoOnly.every(r => r.lotteryType === 'lao')).toBe(true)
+            expect(laoOnly.map(r => r.roundId)).toEqual(['r-lao-2', 'r-lao-1'])
+
+            const thaiOnly = findMemberPastUnpaidRounds({
+                userId: 'u-1',
+                userHistories,
+                lotteryType: 'thai'
+            })
+
+            expect(thaiOnly).toHaveLength(1)
+            expect(thaiOnly[0].roundId).toBe('r-thai-1')
+
+            const allRounds = findMemberPastUnpaidRounds({
+                userId: 'u-1',
+                userHistories,
+                lotteryType: 'all'
+            })
+
+            expect(allRounds).toHaveLength(3)
+        })
+
+        it('resolves lotteryType from roundHistory when filtering if userHistories item lacks lottery_type', () => {
+            const userHistories = [
+                { round_id: 'r-lao-1', user_id: 'u-1', total_amount: 1000, total_commission: 200, total_winnings: 0, round_date: '2026-08-01' },
+                { round_id: 'r-thai-1', user_id: 'u-1', total_amount: 2000, total_commission: 400, total_winnings: 0, round_date: '2026-08-16' }
+            ]
+            const roundHistory = [
+                { id: 'r-lao-1', lottery_type: 'lao' },
+                { id: 'r-thai-1', lottery_type: 'thai' }
+            ]
+
+            const filtered = findMemberPastUnpaidRounds({
+                userId: 'u-1',
+                userHistories,
+                roundHistory,
+                lotteryType: 'lao'
+            })
+
+            expect(filtered).toHaveLength(1)
+            expect(filtered[0].roundId).toBe('r-lao-1')
+            expect(filtered[0].lotteryType).toBe('lao')
+        })
     })
 
     describe('findUpstreamPastUnpaidRounds', () => {
@@ -413,6 +470,31 @@ describe('crossRoundOffsetCalculator', () => {
 
             expect(unpaid).toHaveLength(1)
             expect(unpaid[0].roundDate).toBe('2026-05-16')
+        })
+
+        it('filters past upstream unpaid rounds by specified lotteryType (e.g. only thai)', () => {
+            const transfers = [
+                { round_id: 'r-lao-1', target_dealer_name: 'เฮียเบิร์ด', amount: 5000, commission_earned: 500, winnings: 0, round_date: '2026-08-01', lottery_type: 'lao' },
+                { round_id: 'r-thai-1', target_dealer_name: 'เฮียเบิร์ด', amount: 4000, commission_earned: 400, winnings: 0, round_date: '2026-08-16', lottery_type: 'thai' }
+            ]
+
+            const thaiOnly = findUpstreamPastUnpaidRounds({
+                dealerName: 'เฮียเบิร์ด',
+                transfers,
+                lotteryType: 'thai'
+            })
+
+            expect(thaiOnly).toHaveLength(1)
+            expect(thaiOnly[0].roundId).toBe('r-thai-1')
+            expect(thaiOnly[0].lotteryType).toBe('thai')
+
+            const allRounds = findUpstreamPastUnpaidRounds({
+                dealerName: 'เฮียเบิร์ด',
+                transfers,
+                lotteryType: 'all'
+            })
+
+            expect(allRounds).toHaveLength(2)
         })
     })
 

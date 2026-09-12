@@ -306,6 +306,7 @@ export function allocateCrossRoundOffsetPayments({
  * @param {Array<Object>} [params.userHistories=[]]
  * @param {Array<Object>} [params.memberPayments=[]]
  * @param {Array<Object>} [params.roundHistory=[]]
+ * @param {string} [params.lotteryType] - Optional lottery type filter (e.g. 'lao', 'thai', or 'all')
  * @returns {Array<{ roundId: string, roundDate: string, lotteryType: string, debt: number }>}
  */
 export function findMemberPastUnpaidRounds({
@@ -314,20 +315,29 @@ export function findMemberPastUnpaidRounds({
     currentRoundDate,
     userHistories = [],
     memberPayments = [],
-    roundHistory = []
+    roundHistory = [],
+    lotteryType = null
 }) {
     if (!userId) return []
     const results = []
 
+    const normalizedLotteryFilter = (lotteryType && lotteryType !== 'all')
+        ? String(lotteryType).trim().toLowerCase()
+        : null
+
     const roundCloseDateMap = {}
+    const roundLotteryTypeMap = {}
     if (Array.isArray(roundHistory)) {
         for (const r of roundHistory) {
-            const rId = r.round_id || r.id
-            if (rId) {
-                const cDate = getRoundCloseDate(r)
-                if (cDate) {
-                    roundCloseDateMap[String(rId)] = cDate
-                }
+            const cDate = getRoundCloseDate(r)
+            const lType = r.lottery_type || r.lotteryType
+            if (r.round_id) {
+                if (cDate) roundCloseDateMap[String(r.round_id)] = cDate
+                if (lType) roundLotteryTypeMap[String(r.round_id)] = lType
+            }
+            if (r.id) {
+                if (cDate) roundCloseDateMap[String(r.id)] = cDate
+                if (lType) roundLotteryTypeMap[String(r.id)] = lType
             }
         }
     }
@@ -343,11 +353,18 @@ export function findMemberPastUnpaidRounds({
         const roundDate = roundCloseDateMap[String(roundId)] || getRoundCloseDate(h) || h.round_date || ''
         if (currentRoundDate && roundDate && roundDate > currentRoundDate) continue
 
+        const itemLotteryType = roundLotteryTypeMap[String(roundId)] || h.lottery_type || h.lotteryType || ''
+        if (normalizedLotteryFilter) {
+            if (String(itemLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
+                continue
+            }
+        }
+
         if (!roundMap[roundId]) {
             roundMap[roundId] = {
                 roundId,
                 roundDate,
-                lotteryType: h.lottery_type || '',
+                lotteryType: itemLotteryType,
                 total_amount: 0,
                 total_commission: 0,
                 total_winnings: 0
@@ -361,6 +378,9 @@ export function findMemberPastUnpaidRounds({
         roundMap[roundId].total_winnings += Number(h.total_winnings || 0)
         if (!roundMap[roundId].roundDate && roundDate) {
             roundMap[roundId].roundDate = roundDate
+        }
+        if (!roundMap[roundId].lotteryType && itemLotteryType) {
+            roundMap[roundId].lotteryType = itemLotteryType
         }
     }
 
@@ -396,6 +416,7 @@ export function findMemberPastUnpaidRounds({
  * @param {Array<Object>} [params.transfers=[]]
  * @param {Array<Object>} [params.upstreamPayments=[]]
  * @param {Array<Object>} [params.roundHistory=[]]
+ * @param {string} [params.lotteryType] - Optional lottery type filter (e.g. 'lao', 'thai', or 'all')
  * @returns {Array<{ roundId: string, roundDate: string, lotteryType: string, debt: number, upstreamDealerName: string }>}
  */
 export function findUpstreamPastUnpaidRounds({
@@ -404,21 +425,29 @@ export function findUpstreamPastUnpaidRounds({
     currentRoundDate,
     transfers = [],
     upstreamPayments = [],
-    roundHistory = []
+    roundHistory = [],
+    lotteryType = null
 }) {
     if (!dealerName) return []
     const results = []
     const normalizedTarget = dealerName.trim().toLowerCase()
+    const normalizedLotteryFilter = (lotteryType && lotteryType !== 'all')
+        ? String(lotteryType).trim().toLowerCase()
+        : null
 
     const roundCloseDateMap = {}
+    const roundLotteryTypeMap = {}
     if (Array.isArray(roundHistory)) {
         for (const r of roundHistory) {
-            const rId = r.round_id || r.id
-            if (rId) {
-                const cDate = getRoundCloseDate(r)
-                if (cDate) {
-                    roundCloseDateMap[String(rId)] = cDate
-                }
+            const cDate = getRoundCloseDate(r)
+            const lType = r.lottery_type || r.lotteryType
+            if (r.round_id) {
+                if (cDate) roundCloseDateMap[String(r.round_id)] = cDate
+                if (lType) roundLotteryTypeMap[String(r.round_id)] = lType
+            }
+            if (r.id) {
+                if (cDate) roundCloseDateMap[String(r.id)] = cDate
+                if (lType) roundLotteryTypeMap[String(r.id)] = lType
             }
         }
     }
@@ -435,11 +464,18 @@ export function findUpstreamPastUnpaidRounds({
         const resolvedDate = roundCloseDateMap[String(roundId)] || getRoundCloseDate(t) || t.round_date || ''
         if (currentRoundDate && resolvedDate && resolvedDate > currentRoundDate) continue
 
+        const roundLotteryType = roundLotteryTypeMap[String(roundId)] || t.lottery_type || t.lotteryType || ''
+        if (normalizedLotteryFilter) {
+            if (String(roundLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
+                continue
+            }
+        }
+
         if (!roundMap[roundId]) {
             roundMap[roundId] = {
                 roundId,
                 roundDate: resolvedDate,
-                lotteryType: t.lottery_type || '',
+                lotteryType: roundLotteryType,
                 upstreamDealerName: t.target_dealer_name || t.upstream_dealer_name || dealerName,
                 amount: 0,
                 commission_earned: 0,
@@ -452,6 +488,9 @@ export function findUpstreamPastUnpaidRounds({
         roundMap[roundId].winnings += Number(t.winnings || 0)
         if (!roundMap[roundId].roundDate && resolvedDate) {
             roundMap[roundId].roundDate = resolvedDate
+        }
+        if (!roundMap[roundId].lotteryType && roundLotteryType) {
+            roundMap[roundId].lotteryType = roundLotteryType
         }
     }
 
