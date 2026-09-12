@@ -12,7 +12,8 @@ import {
     FiEdit2,
     FiSend,
     FiClock,
-    FiHash
+    FiHash,
+    FiCreditCard
 } from 'react-icons/fi'
 import {
     calculateMemberInitialBalance,
@@ -21,6 +22,7 @@ import {
     getPaymentPresetAmount
 } from '../../utils/memberSettlementCalculator'
 import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes, formatThaiDate } from '../../utils/crossRoundOffsetCalculator'
+import { THAI_BANKS, matchBankOption } from '../../utils/paymentNoticeHelper'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
 import PaymentNoticeModal from './PaymentNoticeModal'
 import './MemberSettlementInline.css'
@@ -54,11 +56,19 @@ export default function MemberSettlementInline({
     const [editPaidAt, setEditPaidAt] = useState('')
     const [editPaidTime, setEditPaidTime] = useState('')
     const [editReferenceDoc, setEditReferenceDoc] = useState('')
+    const [editSenderBank, setEditSenderBank] = useState('')
     const [editCustomNotes, setEditCustomNotes] = useState('')
     const [editOriginalPrefix, setEditOriginalPrefix] = useState('')
     const [editSaving, setEditSaving] = useState(false)
     const editDateInputRef = useRef(null)
     const editTimeInputRef = useRef(null)
+
+    const availableEditBankOptions = useMemo(() => {
+        if (editSenderBank && !THAI_BANKS.includes(editSenderBank)) {
+            return [editSenderBank, ...THAI_BANKS]
+        }
+        return THAI_BANKS
+    }, [editSenderBank])
 
     // Form states
     const [paymentType, setPaymentType] = useState('net_settlement') // 'net_settlement' | 'prize_payout'
@@ -253,6 +263,15 @@ export default function MemberSettlementInline({
         setEditReferenceDoc(parsed.referenceDoc || '')
         setEditCustomNotes(parsed.customNotes || '')
         setEditOriginalPrefix(parsed.prefix || '')
+
+        let initialSenderBank = ''
+        if (parsed.senderBank) {
+            initialSenderBank = matchBankOption(parsed.senderBank, THAI_BANKS)
+        } else if ((p.direction || 'member_to_dealer') === 'member_to_dealer') {
+            const memberBankName = member?.bank_name || member?.profiles?.bank_name || ''
+            initialSenderBank = matchBankOption(memberBankName, THAI_BANKS)
+        }
+        setEditSenderBank(initialSenderBank)
     }
 
     const handleConfirmEditPayment = async (e) => {
@@ -268,7 +287,8 @@ export default function MemberSettlementInline({
             customNotes: editCustomNotes,
             paidTime: editPaidTime,
             referenceDoc: editReferenceDoc,
-            originalPrefix: editOriginalPrefix
+            originalPrefix: editOriginalPrefix,
+            senderBank: editSenderBank
         })
 
         setEditSaving(true)
@@ -976,13 +996,25 @@ export default function MemberSettlementInline({
                                         <div className="cross-round-modes-grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
                                             <div
                                                 className={`cross-round-mode-card ${editDirection === 'member_to_dealer' ? 'active' : ''}`}
-                                                onClick={() => setEditDirection('member_to_dealer')}
+                                                onClick={() => {
+                                                    setEditDirection('member_to_dealer')
+                                                    if (!editSenderBank) {
+                                                        const memberBankName = member?.bank_name || member?.profiles?.bank_name || ''
+                                                        setEditSenderBank(matchBankOption(memberBankName, THAI_BANKS))
+                                                    }
+                                                }}
                                             >
                                                 <input
                                                     type="checkbox"
                                                     className="cross-round-mode-checkbox"
                                                     checked={editDirection === 'member_to_dealer'}
-                                                    onChange={() => setEditDirection('member_to_dealer')}
+                                                    onChange={() => {
+                                                        setEditDirection('member_to_dealer')
+                                                        if (!editSenderBank) {
+                                                            const memberBankName = member?.bank_name || member?.profiles?.bank_name || ''
+                                                            setEditSenderBank(matchBankOption(memberBankName, THAI_BANKS))
+                                                        }
+                                                    }}
                                                 />
                                                 <span>🟢 คนส่งจ่ายเจ้ามือ</span>
                                             </div>
@@ -1129,26 +1161,43 @@ export default function MemberSettlementInline({
                                     </div>
                                 </div>
 
-                                {/* 6. Reference Document */}
-                                <div className="settlement-form-field">
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
-                                        <FiHash /> เอกสารอ้างอิง (ระบุหรือไม่ก็ได้)
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="เช่น เลขที่สลิป หรือ รหัสอ้างอิงการโอน"
-                                        value={editReferenceDoc}
-                                        onChange={e => setEditReferenceDoc(e.target.value)}
-                                        style={{
-                                            width: '100%',
-                                            padding: '0.38rem 0.55rem',
-                                            fontSize: '0.85rem',
-                                            background: 'rgba(0, 0, 0, 0.3)',
-                                            border: '1px solid rgba(255, 255, 255, 0.15)',
-                                            borderRadius: '6px',
-                                            color: '#f8fafc'
-                                        }}
-                                    />
+                                {/* 6. Sender Bank & Reference Document (2 columns) */}
+                                <div className="settlement-form-grid-2">
+                                    <div className="settlement-form-field">
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                            <FiCreditCard /> ธนาคารผู้โอน
+                                        </label>
+                                        <select
+                                            className="settlement-select"
+                                            value={editSenderBank}
+                                            onChange={e => setEditSenderBank(e.target.value)}
+                                        >
+                                            <option value="">-- เลือกธนาคาร --</option>
+                                            {availableEditBankOptions.map(bank => (
+                                                <option key={bank} value={bank}>{bank}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="settlement-form-field">
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                            <FiHash /> เอกสารอ้างอิง (ระบุหรือไม่ก็ได้)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="เช่น เลขที่สลิป หรือ รหัสอ้างอิงการโอน"
+                                            value={editReferenceDoc}
+                                            onChange={e => setEditReferenceDoc(e.target.value)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '0.38rem 0.55rem',
+                                                fontSize: '0.85rem',
+                                                background: 'rgba(0, 0, 0, 0.3)',
+                                                border: '1px solid rgba(255, 255, 255, 0.15)',
+                                                borderRadius: '6px',
+                                                color: '#f8fafc'
+                                            }}
+                                        />
+                                    </div>
                                 </div>
 
                                 {/* 7. Notes */}
