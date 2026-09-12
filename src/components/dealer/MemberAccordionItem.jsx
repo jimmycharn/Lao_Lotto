@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { supabase } from '../../lib/supabase'
 import {
     FiSend,
     FiUsers,
@@ -12,12 +13,14 @@ import {
     FiStar,
     FiCreditCard,
     FiRefreshCw,
-    FiClock
+    FiClock,
+    FiCheck
 } from 'react-icons/fi'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
 import MemberSettings from './MemberSettings'
 import BankAccountCard from '../BankAccountCard'
+import CopyButton from '../CopyButton'
 
 // Member Accordion Item Component
 export default function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials, isPerUserYearly = false, onRenew, onUpdateLineUserId }) {
@@ -32,10 +35,121 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'bank' | 'settings'
     const [lineUserId, setLineUserId] = useState(member.line_user_id || '')
     const [isSavingLineId, setIsSavingLineId] = useState(false)
+    const [memberPayoutBank, setMemberPayoutBank] = useState(member.member_bank || null)
+    const [loadingBank, setLoadingBank] = useState(false)
 
     useEffect(() => {
         setLineUserId(member.line_user_id || '')
     }, [member.line_user_id])
+
+    useEffect(() => {
+        if (member.member_bank) {
+            setMemberPayoutBank(member.member_bank)
+        }
+    }, [member.member_bank])
+
+    const fetchMemberBank = async (force = false) => {
+        if (!member?.id) return
+        if (!force && memberPayoutBank) return
+        setLoadingBank(true)
+        try {
+            // 1. Check user_dealer_memberships for member_bank_account_id
+            let targetBankId = member.member_bank_account_id || null
+            if (!targetBankId && user?.id) {
+                const { data: membership } = await supabase
+                    .from('user_dealer_memberships')
+                    .select('member_bank_account_id')
+                    .eq('dealer_id', user.id)
+                    .eq('user_id', member.id)
+                    .maybeSingle()
+                if (membership?.member_bank_account_id) {
+                    targetBankId = membership.member_bank_account_id
+                }
+            }
+
+            // 2. Fetch specific bank if assigned
+            if (targetBankId) {
+                const { data: specificBank } = await supabase
+                    .from('user_bank_accounts')
+                    .select('*')
+                    .eq('id', targetBankId)
+                    .maybeSingle()
+                if (specificBank) {
+                    setMemberPayoutBank({
+                        ...specificBank,
+                        is_assigned: true
+                    })
+                    setLoadingBank(false)
+                    return
+                }
+            }
+
+            // 3. Fallback to member's user_bank_accounts (default first)
+            const { data: userBanks } = await supabase
+                .from('user_bank_accounts')
+                .select('*')
+                .eq('user_id', member.id)
+                .order('is_default', { ascending: false })
+                .order('created_at', { ascending: true })
+
+            if (userBanks && userBanks.length > 0) {
+                const topBank = userBanks[0]
+                setMemberPayoutBank({
+                    ...topBank,
+                    is_assigned: false,
+                    is_default: topBank.is_default
+                })
+                setLoadingBank(false)
+                return
+            }
+
+            // 4. If isDealer, check dealer_bank_accounts
+            if (isDealer || member.is_dealer) {
+                const { data: dealerBanks } = await supabase
+                    .from('dealer_bank_accounts')
+                    .select('*')
+                    .eq('dealer_id', member.id)
+                    .order('is_default', { ascending: false })
+                    .order('created_at', { ascending: true })
+
+                if (dealerBanks && dealerBanks.length > 0) {
+                    const topDealerBank = dealerBanks[0]
+                    setMemberPayoutBank({
+                        ...topDealerBank,
+                        is_assigned: false,
+                        is_default: topDealerBank.is_default
+                    })
+                    setLoadingBank(false)
+                    return
+                }
+            }
+
+            // 5. Fallback to profile bank details if available
+            if (member.bank_name || member.bank_account) {
+                setMemberPayoutBank({
+                    bank_name: member.bank_name,
+                    bank_account: member.bank_account || member.bank_account_number,
+                    account_name: member.bank_account_name || member.full_name,
+                    is_assigned: false,
+                    is_default: false
+                })
+                setLoadingBank(false)
+                return
+            }
+
+            setMemberPayoutBank(null)
+        } catch (err) {
+            console.error('Error fetching member payout bank:', err)
+        } finally {
+            setLoadingBank(false)
+        }
+    }
+
+    useEffect(() => {
+        if (activeTab === 'bank' && !memberPayoutBank) {
+            fetchMemberBank()
+        }
+    }, [activeTab])
 
     return (
         <div className={`member-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
@@ -440,37 +554,242 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
 
                         {activeTab === 'bank' && (
                             <div className="member-bank-view" style={{ animation: 'fadeIn 0.3s ease' }}>
-                                {/* Member's bank account display */}
-                                {(member.member_bank || member.bank_name) ? (
-                                    <BankAccountCard
-                                        bank={member.member_bank || { bank_name: member.bank_name, bank_account: member.bank_account, account_name: member.account_name }}
-                                        title="บัญชีธนาคารสมาชิก"
-                                    />
-                                ) : (
-                                    <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--color-text-muted)', opacity: 0.7 }}>
-                                        สมาชิกยังไม่ได้ตั้งค่าบัญชีธนาคาร
-                                    </div>
-                                )}
+                                {/* Section 1: Member's Payout Bank Account (for dealer to transfer winnings to member) */}
+                                <div className="member-payout-bank-section" style={{
+                                    background: 'rgba(34, 197, 94, 0.05)',
+                                    border: '1px solid rgba(34, 197, 94, 0.25)',
+                                    borderRadius: 'var(--radius-md, 8px)',
+                                    padding: '1.25rem'
+                                }}>
+                                    {/* Section Header */}
+                                    <div style={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'flex-start',
+                                        marginBottom: '0.85rem',
+                                        gap: '0.5rem'
+                                    }}>
+                                        <div>
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                                color: '#22c55e',
+                                                fontWeight: 600,
+                                                fontSize: '1rem'
+                                            }}>
+                                                <FiCreditCard style={{ fontSize: '1.15rem' }} />
+                                                <span>บัญชีสำหรับรับเงินรางวัล (ของสมาชิก)</span>
+                                            </div>
+                                            <p style={{
+                                                fontSize: '0.82rem',
+                                                color: 'var(--color-text-muted)',
+                                                margin: '0.25rem 0 0 0',
+                                                opacity: 0.9
+                                            }}>
+                                                เมื่อสมาชิกถูกรางวัล เจ้ามือโอนเงินรางวัลไปยังบัญชีนี้
+                                            </p>
+                                        </div>
 
-                                {/* Bank Account Assignment for this member */}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                fetchMemberBank(true)
+                                            }}
+                                            disabled={loadingBank}
+                                            title="รีเฟรชข้อมูลบัญชีสมาชิก"
+                                            style={{
+                                                background: 'rgba(255, 255, 255, 0.05)',
+                                                border: '1px solid var(--color-border)',
+                                                color: 'var(--color-text-muted)',
+                                                cursor: loadingBank ? 'not-allowed' : 'pointer',
+                                                padding: '0.35rem 0.6rem',
+                                                borderRadius: '6px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.35rem',
+                                                fontSize: '0.78rem',
+                                                flexShrink: 0,
+                                                transition: 'all 0.2s ease'
+                                            }}
+                                            onMouseEnter={(e) => e.currentTarget.style.color = '#fff'}
+                                            onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                                        >
+                                            <FiRefreshCw style={{
+                                                fontSize: '0.85rem',
+                                                animation: loadingBank ? 'spin 1s linear infinite' : 'none'
+                                            }} />
+                                            <span>{loadingBank ? 'กำลังโหลด...' : 'รีเฟรช'}</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Bank Details or Empty State */}
+                                    {loadingBank ? (
+                                        <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                                            <FiRefreshCw style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom', animation: 'spin 1s linear infinite' }} />
+                                            กำลังตรวจสอบข้อมูลบัญชีสมาชิก...
+                                        </div>
+                                    ) : memberPayoutBank ? (
+                                        <div style={{
+                                            background: 'var(--color-surface)',
+                                            border: '1px solid rgba(34, 197, 94, 0.35)',
+                                            borderRadius: 'var(--radius-md, 8px)',
+                                            padding: '1rem 1.25rem',
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                                        }}>
+                                            {/* Bank Name + Badge */}
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                flexWrap: 'wrap',
+                                                gap: '0.5rem',
+                                                marginBottom: '0.5rem',
+                                                paddingBottom: '0.5rem',
+                                                borderBottom: '1px solid rgba(255,255,255,0.06)'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <FiStar style={{ color: '#22c55e', fontSize: '1.1rem' }} />
+                                                    <span style={{ fontWeight: 600, color: 'var(--color-text)', fontSize: '1.05rem' }}>
+                                                        {memberPayoutBank.bank_name || 'ไม่ระบุธนาคาร'}
+                                                    </span>
+                                                </div>
+
+                                                {/* Status Badge */}
+                                                {memberPayoutBank.is_assigned ? (
+                                                    <span style={{
+                                                        background: 'rgba(34, 197, 94, 0.15)',
+                                                        color: '#22c55e',
+                                                        border: '1px solid rgba(34, 197, 94, 0.35)',
+                                                        borderRadius: '4px',
+                                                        padding: '0.15rem 0.5rem',
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: 600,
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.25rem'
+                                                    }}>
+                                                        <FiCheck style={{ fontSize: '0.75rem' }} />
+                                                        บัญชีที่สมาชิกเลือกให้ร้านนี้
+                                                    </span>
+                                                ) : memberPayoutBank.is_default ? (
+                                                    <span style={{
+                                                        background: 'rgba(212, 175, 55, 0.15)',
+                                                        color: 'var(--color-primary)',
+                                                        border: '1px solid rgba(212, 175, 55, 0.35)',
+                                                        borderRadius: '4px',
+                                                        padding: '0.15rem 0.5rem',
+                                                        fontSize: '0.72rem',
+                                                        fontWeight: 600
+                                                    }}>
+                                                        บัญชีหลักของสมาชิก
+                                                    </span>
+                                                ) : (
+                                                    <span style={{
+                                                        background: 'rgba(255, 255, 255, 0.08)',
+                                                        color: 'var(--color-text-muted)',
+                                                        borderRadius: '4px',
+                                                        padding: '0.15rem 0.5rem',
+                                                        fontSize: '0.72rem'
+                                                    }}>
+                                                        บัญชีของสมาชิก
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Account Name */}
+                                            {memberPayoutBank.account_name && (
+                                                <div style={{
+                                                    fontSize: '0.88rem',
+                                                    color: 'var(--color-text-muted)',
+                                                    marginBottom: '0.4rem',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.4rem'
+                                                }}>
+                                                    <span style={{ opacity: 0.7 }}>ชื่อบัญชี:</span>
+                                                    <span style={{ color: 'var(--color-text)', fontWeight: 500 }}>{memberPayoutBank.account_name}</span>
+                                                </div>
+                                            )}
+
+                                            {/* Account Number & Copy */}
+                                            <div style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                flexWrap: 'wrap',
+                                                gap: '0.5rem',
+                                                marginTop: '0.35rem',
+                                                padding: '0.5rem 0.75rem',
+                                                background: 'rgba(0,0,0,0.25)',
+                                                borderRadius: '6px'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                    <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)', opacity: 0.7 }}>
+                                                        เลขบัญชี:
+                                                    </span>
+                                                    <span style={{
+                                                        fontSize: '1.15rem',
+                                                        fontFamily: 'monospace',
+                                                        letterSpacing: '0.06em',
+                                                        color: '#22c55e',
+                                                        fontWeight: 700
+                                                    }}>
+                                                        {memberPayoutBank.bank_account || memberPayoutBank.account_number || '-'}
+                                                    </span>
+                                                </div>
+                                                {(memberPayoutBank.bank_account || memberPayoutBank.account_number) && (
+                                                    <CopyButton text={memberPayoutBank.bank_account || memberPayoutBank.account_number} size={14} />
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div style={{
+                                            textAlign: 'center',
+                                            padding: '1.25rem 1rem',
+                                            background: 'rgba(255, 255, 255, 0.02)',
+                                            border: '1px dashed rgba(255, 255, 255, 0.15)',
+                                            borderRadius: 'var(--radius-md, 8px)'
+                                        }}>
+                                            <FiCreditCard style={{ fontSize: '1.75rem', color: 'var(--color-text-muted)', opacity: 0.5, marginBottom: '0.35rem' }} />
+                                            <p style={{ margin: 0, fontWeight: 500, color: 'var(--color-text)', fontSize: '0.92rem' }}>
+                                                สมาชิกยังไม่ได้ระบุบัญชีสำหรับรับเงินรางวัล
+                                            </p>
+                                            <p style={{ margin: '0.3rem 0 0 0', fontSize: '0.8rem', color: 'var(--color-text-muted)', opacity: 0.8 }}>
+                                                เมื่อสมาชิกเพิ่มบัญชีในหน้า "ข้อมูลเจ้ามือ" หรือ "โปรไฟล์" ข้อมูลจะแสดงที่นี่โดยอัตโนมัติ
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Section 2: Dealer's Bank Account Assigned to this Member (for member to pay in) */}
                                 {dealerBankAccounts.length > 0 && onUpdateBank && (
                                     <div className="bank-assignment-section" style={{
-                                        marginTop: '1.5rem',
-                                        padding: '1rem',
-                                        background: 'rgba(212, 175, 55, 0.1)',
+                                        marginTop: '1.25rem',
+                                        padding: '1.25rem',
+                                        background: 'rgba(212, 175, 55, 0.08)',
                                         borderRadius: 'var(--radius-md)',
                                         border: '1px solid rgba(212, 175, 55, 0.3)'
                                     }}>
                                         <label style={{
                                             display: 'block',
                                             color: 'var(--color-primary)',
-                                            fontSize: '0.9rem',
-                                            marginBottom: '0.5rem',
-                                            fontWeight: '500'
+                                            fontSize: '0.95rem',
+                                            marginBottom: '0.25rem',
+                                            fontWeight: '600'
                                         }}>
                                             <FiStar style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                                            บัญชีธนาคารสำหรับโอนเงิน
+                                            บัญชีธนาคารของเจ้ามือ (สำหรับให้สมาชิกโอนชำระเงิน)
                                         </label>
+                                        <p style={{
+                                            fontSize: '0.82rem',
+                                            color: 'var(--color-text-muted)',
+                                            marginBottom: '0.75rem',
+                                            opacity: 0.9
+                                        }}>
+                                            เลือกว่าต้องการให้สมาชิกรายนี้เห็นบัญชีใดของร้านในหน้า "ข้อมูลเจ้ามือ" เพื่อโอนชำระยอด
+                                        </p>
                                         <select
                                             className="form-input"
                                             value={member.assigned_bank_account_id || ''}
@@ -483,10 +802,11 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                                 padding: '0.75rem 1rem',
                                                 color: 'var(--color-text)',
                                                 width: '100%',
-                                                cursor: 'pointer'
+                                                cursor: 'pointer',
+                                                fontSize: '0.92rem'
                                             }}
                                         >
-                                            <option value="">ใช้บัญชีหลัก (Default)</option>
+                                            <option value="">ใช้บัญชีหลักของร้าน (Default)</option>
                                             {dealerBankAccounts.map(bank => (
                                                 <option key={bank.id} value={bank.id}>
                                                     {bank.bank_name} - {bank.bank_account}
@@ -494,14 +814,6 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                                 </option>
                                             ))}
                                         </select>
-                                        <p style={{
-                                            fontSize: '0.8rem',
-                                            color: 'var(--color-text-muted)',
-                                            marginTop: '0.5rem',
-                                            opacity: 0.8
-                                        }}>
-                                            ลูกค้าจะเห็นบัญชีนี้ในหน้าข้อมูลเจ้ามือ
-                                        </p>
                                     </div>
                                 )}
                             </div>

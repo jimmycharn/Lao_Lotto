@@ -16,7 +16,7 @@ export default function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved
     const { toast } = useToast()
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [activeTab, setActiveTab] = useState('lao')
+    const [activeTab, setActiveTab] = useState('thai')
 
     const getDefaultSettings = () => ({
         thai: {

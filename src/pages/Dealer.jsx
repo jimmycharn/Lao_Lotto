@@ -1811,7 +1811,10 @@ export default function Dealer() {
                         created_at,
                         role,
                         password_changed,
-                        line_user_id
+                        line_user_id,
+                        bank_name,
+                        bank_account,
+                        bank_account_name
                     )
                 `)
                 .eq('dealer_id', user.id)
@@ -1822,19 +1825,72 @@ export default function Dealer() {
                 console.error('Error fetching memberships:', membershipsError)
             }
 
+            // Batch fetch member bank accounts for payout display
+            const memberUserIds = (membershipsData || []).map(m => m.user_id).filter(Boolean)
+            let userBanksMap = {}
+            if (memberUserIds.length > 0) {
+                try {
+                    const { data: memberBanks } = await supabase
+                        .from('user_bank_accounts')
+                        .select('*')
+                        .in('user_id', memberUserIds)
+                        .order('is_default', { ascending: false })
+                        .order('created_at', { ascending: true })
+                    if (memberBanks) {
+                        memberBanks.forEach(b => {
+                            if (!userBanksMap[b.user_id]) userBanksMap[b.user_id] = []
+                            userBanksMap[b.user_id].push(b)
+                        })
+                    }
+                } catch (bankErr) {
+                    console.error('Error fetching member bank accounts:', bankErr)
+                }
+            }
+
             // Transform and categorize memberships
-            const allMemberships = (membershipsData || []).map(m => ({
-                ...m.profiles,
-                membership_id: m.id,
-                membership_status: m.status,
-                membership_created_at: m.created_at,
-                approved_at: m.approved_at,
-                blocked_at: m.blocked_at,
-                assigned_bank_account_id: m.assigned_bank_account_id,
-                is_dealer: m.profiles?.role === 'dealer', // Mark if member is also a dealer
-                password_changed: m.profiles?.password_changed || false, // Track if user has changed password
-                line_user_id: m.profiles?.line_user_id || ''
-            }))
+            const allMemberships = (membershipsData || []).map(m => {
+                const userBanks = userBanksMap[m.user_id] || []
+                let memberBank = null
+
+                if (m.member_bank_account_id) {
+                    const assignedBank = userBanks.find(b => b.id === m.member_bank_account_id)
+                    if (assignedBank) {
+                        memberBank = { ...assignedBank, is_assigned: true }
+                    }
+                }
+
+                if (!memberBank && userBanks.length > 0) {
+                    const defaultBank = userBanks.find(b => b.is_default) || userBanks[0]
+                    if (defaultBank) {
+                        memberBank = { ...defaultBank, is_assigned: false, is_default: defaultBank.is_default }
+                    }
+                }
+
+                if (!memberBank && m.profiles?.bank_name) {
+                    memberBank = {
+                        bank_name: m.profiles.bank_name,
+                        bank_account: m.profiles.bank_account,
+                        account_name: m.profiles.bank_account_name,
+                        is_assigned: false,
+                        is_default: false
+                    }
+                }
+
+                return {
+                    ...m.profiles,
+                    membership_id: m.id,
+                    membership_status: m.status,
+                    membership_created_at: m.created_at,
+                    approved_at: m.approved_at,
+                    blocked_at: m.blocked_at,
+                    assigned_bank_account_id: m.assigned_bank_account_id,
+                    member_bank_account_id: m.member_bank_account_id,
+                    member_bank: memberBank,
+                    is_dealer: m.profiles?.role === 'dealer', // Mark if member is also a dealer
+                    password_changed: m.profiles?.password_changed || false, // Track if user has changed password
+                    line_user_id: m.profiles?.line_user_id || ''
+                }
+            })
 
             // Separate regular members from dealer members (เจ้ามือตีเข้า)
             const regularMembers = allMemberships.filter(m => !m.is_dealer)
@@ -7781,7 +7837,7 @@ function SubmissionsModal({ round, onClose }) {
 function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [activeTab, setActiveTab] = useState('lao')
+    const [activeTab, setActiveTab] = useState('thai')
 
     const getDefaultSettings = () => ({
         thai: {
@@ -7901,9 +7957,9 @@ function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
     }
 
     const LOTTERY_TABS = [
+        { key: 'thai', label: 'หวยไทย' },
         { key: 'lao', label: 'หวยลาว' },
         { key: 'hanoi', label: 'หวยฮานอย' },
-        { key: 'thai', label: 'หวยไทย' },
         { key: 'stock', label: 'หวยหุ้น' }
     ]
 
