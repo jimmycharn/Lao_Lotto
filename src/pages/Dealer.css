@@ -5228,7 +5228,7 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 .history-breakdown-table tr.row-settled td:first-child {
-    border-left: 3px solid #10b981 !important;
+    border-left: 1px solid rgba(16, 185, 129, 0.4) !important;
 }
 
 .history-breakdown-table tr.row-settled td:last-child {
@@ -5248,7 +5248,7 @@ html.theme-light .icon-btn-sm:hover {
 .history-breakdown-table tr.expanded-row-settled td {
     border-top: none !important;
     border-bottom: 1px solid rgba(16, 185, 129, 0.4) !important;
-    border-left: 3px solid #10b981 !important;
+    border-left: 1px solid rgba(16, 185, 129, 0.4) !important;
     border-right: 1px solid rgba(16, 185, 129, 0.4) !important;
 }
 
@@ -5295,7 +5295,7 @@ html.theme-light .icon-btn-sm:hover {
 
 :root.theme-light .history-breakdown-table tr.row-settled td:first-child,
 [data-theme="light"] .history-breakdown-table tr.row-settled td:first-child {
-    border-left: 3px solid #059669 !important;
+    border-left: 1px solid rgba(16, 185, 129, 0.45) !important;
 }
 
 :root.theme-light .history-breakdown-table tr.row-settled td:last-child,
@@ -5311,7 +5311,7 @@ html.theme-light .icon-btn-sm:hover {
 :root.theme-light .history-breakdown-table tr.expanded-row-settled td,
 [data-theme="light"] .history-breakdown-table tr.expanded-row-settled td {
     border-bottom: 1px solid rgba(16, 185, 129, 0.45) !important;
-    border-left: 3px solid #059669 !important;
+    border-left: 1px solid rgba(16, 185, 129, 0.45) !important;
     border-right: 1px solid rgba(16, 185, 129, 0.45) !important;
 }
 
