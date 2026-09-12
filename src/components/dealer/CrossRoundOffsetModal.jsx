@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { FiZap, FiX, FiCheck, FiCalendar, FiDollarSign, FiFileText, FiClock, FiHash } from 'react-icons/fi'
+import { FiZap, FiX, FiCheck, FiCalendar, FiDollarSign, FiFileText, FiClock, FiHash, FiCreditCard } from 'react-icons/fi'
 import {
     calculateCrossRoundPaymentSummary,
     allocateSettlementPaymentsByMode,
@@ -13,6 +13,42 @@ import {
     buildSettlementDefaultNote
 } from '../../utils/paymentNoticeHelper'
 import './CrossRoundOffsetModal.css'
+
+const THAI_BANKS = [
+    'ธนาคารกสิกรไทย',
+    'ธนาคารไทยพาณิชย์',
+    'ธนาคารกรุงเทพ',
+    'ธนาคารกรุงไทย',
+    'ธนาคารกรุงศรีอยุธยา',
+    'ธนาคารทหารไทยธนชาต',
+    'ธนาคารออมสิน',
+    'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)',
+    'ธนาคารอาคารสงเคราะห์',
+    'ธนาคารยูโอบี',
+    'ธนาคารซีไอเอ็มบี',
+    'ธนาคารเกียรตินาคินภัทร',
+    'ธนาคารแลนด์ แอนด์ เฮ้าส์',
+    'พร้อมเพย์',
+    'อื่นๆ'
+]
+
+function matchBankOption(rawName, options = THAI_BANKS) {
+    if (!rawName || typeof rawName !== 'string') return ''
+    const trimmed = rawName.trim()
+    if (!trimmed) return ''
+    
+    const exact = options.find(opt => opt.toLowerCase() === trimmed.toLowerCase())
+    if (exact) return exact
+
+    const cleanRaw = trimmed.replace(/^ธนาคาร\s*/, '').toLowerCase()
+    const cleanMatch = options.find(opt => {
+        const cleanOpt = opt.replace(/^ธนาคาร\s*/, '').toLowerCase()
+        return cleanOpt === cleanRaw || opt.toLowerCase().includes(cleanRaw) || cleanRaw.includes(cleanOpt)
+    })
+    if (cleanMatch) return cleanMatch
+
+    return trimmed
+}
 
 export default function CrossRoundOffsetModal({
     isOpen,
@@ -84,6 +120,11 @@ export default function CrossRoundOffsetModal({
     const [paidAt, setPaidAt] = useState(() => roundCloseDate)
     const [paidTime, setPaidTime] = useState('')
     const [referenceDoc, setReferenceDoc] = useState('')
+    const [senderBank, setSenderBank] = useState(() => {
+        const initialName = member?.bank_name || member?.profiles?.bank_name || ''
+        return matchBankOption(initialName, THAI_BANKS)
+    })
+    const isUserBankSelected = useRef(false)
     const [customNotes, setCustomNotes] = useState('')
     const [saving, setSaving] = useState(false)
     const [errorMsg, setErrorMsg] = useState(null)
@@ -236,6 +277,23 @@ export default function CrossRoundOffsetModal({
         }
     }, [summary.direction, activeBank])
 
+    // Sync sender bank default from member's profile/assigned bank
+    useEffect(() => {
+        if (resolvedMemberBank?.bank_name && !isUserBankSelected.current) {
+            const matched = matchBankOption(resolvedMemberBank.bank_name, THAI_BANKS)
+            if (matched) {
+                setSenderBank(matched)
+            }
+        }
+    }, [resolvedMemberBank])
+
+    const availableBankOptions = useMemo(() => {
+        if (senderBank && !THAI_BANKS.includes(senderBank)) {
+            return [senderBank, ...THAI_BANKS]
+        }
+        return THAI_BANKS
+    }, [senderBank])
+
     const activeSlipAmount = customSlipAmount !== '' ? Number(customSlipAmount) : summary.suggestedSlipAmount
 
     const handleModeChange = (newMode) => {
@@ -309,7 +367,8 @@ export default function CrossRoundOffsetModal({
             isUpstream,
             upstreamDealerName: targetUpstreamName,
             upstreamDealerId: member?.upstream_dealer_id || null,
-            customNotes
+            customNotes,
+            senderBank
         })
 
         setSaving(true)
@@ -352,7 +411,7 @@ export default function CrossRoundOffsetModal({
             }}
             onClick={() => !saving && onClose()}
         >
-            <div className="cross-round-modal" onClick={e => e.stopPropagation()}>
+            <div className={`cross-round-modal mode-${mode}`} onClick={e => e.stopPropagation()}>
                 <div className="modal-header">
                     <h3>
                         <FiZap color="#facc15" /> บันทึกชำระเงิน
@@ -745,26 +804,46 @@ export default function CrossRoundOffsetModal({
                             </div>
                         </div>
 
-                        {/* Reference Document */}
-                        <div className="settlement-form-field">
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
-                                <FiHash /> เอกสารอ้างอิง (ระบุหรือไม่ก็ได้)
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="เช่น เลขที่สลิป หรือ รหัสอ้างอิงการโอน"
-                                value={referenceDoc}
-                                onChange={e => setReferenceDoc(e.target.value)}
-                                style={{
-                                    width: '100%',
-                                    padding: '0.38rem 0.55rem',
-                                    fontSize: '0.85rem',
-                                    background: 'rgba(0, 0, 0, 0.3)',
-                                    border: '1px solid rgba(255, 255, 255, 0.15)',
-                                    borderRadius: '6px',
-                                    color: '#f8fafc'
-                                }}
-                            />
+                        {/* Sender Bank and Reference Document (2 columns) */}
+                        <div className="settlement-form-grid-2">
+                            <div className="settlement-form-field">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                    <FiCreditCard /> ธนาคารผู้โอน
+                                </label>
+                                <select
+                                    className="settlement-select"
+                                    value={senderBank}
+                                    onChange={e => {
+                                        isUserBankSelected.current = true
+                                        setSenderBank(e.target.value)
+                                    }}
+                                >
+                                    <option value="">-- เลือกธนาคาร --</option>
+                                    {availableBankOptions.map(bank => (
+                                        <option key={bank} value={bank}>{bank}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="settlement-form-field">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                    <FiHash /> เอกสารอ้างอิง (ระบุหรือไม่ก็ได้)
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="เช่น เลขที่สลิป หรือ รหัสอ้างอิงการโอน"
+                                    value={referenceDoc}
+                                    onChange={e => setReferenceDoc(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.38rem 0.55rem',
+                                        fontSize: '0.85rem',
+                                        background: 'rgba(0, 0, 0, 0.3)',
+                                        border: '1px solid rgba(255, 255, 255, 0.15)',
+                                        borderRadius: '6px',
+                                        color: '#f8fafc'
+                                    }}
+                                />
+                            </div>
                         </div>
 
                         {/* Notes */}

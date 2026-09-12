@@ -572,6 +572,23 @@ describe('crossRoundOffsetCalculator', () => {
             })
             expect(alloc.currentRoundPayment.notes).toBe('ชำระหนี้งวดนี้ (ไทยพาณิชย์ 9972081291 (ยุทธศักดิ์) เวลา 14:20 #SLIP-9988)')
         })
+
+        it('merges senderBank, customNotes with "โอนไป", paidTime, and referenceDoc into notes', () => {
+            const alloc = allocateSettlementPaymentsByMode({
+                mode: 'current_debt',
+                currentBalance: 832,
+                actualSlipAmount: 832,
+                paidAt: '2026-09-11',
+                paidTime: '18:09',
+                referenceDoc: 'Aa7bf7ec966354829',
+                senderBank: 'ธนาคารกสิกรไทย',
+                customNotes: 'โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)',
+                currentRound: curRound,
+                memberUserId: 'm-1',
+                dealerId: 'd-1'
+            })
+            expect(alloc.currentRoundPayment.notes).toBe('ชำระหนี้งวดนี้ (กสิกรไทย โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว) เวลา 18:09 #Aa7bf7ec966354829)')
+        })
     })
 
     describe('parsePaymentNotes & buildPaymentNotes', () => {
@@ -622,9 +639,28 @@ describe('crossRoundOffsetCalculator', () => {
             expect(rebuilt).toBe('ชำระหนี้งวดนี้ (กสิกรไทย 111-222 (สมชาย) เวลา 15:30 #REF99)')
         })
 
+        it('parses note with senderBank and "โอนไป" destination bank correctly', () => {
+            const note = 'ชำระหนี้งวดนี้ (กสิกรไทย โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว) เวลา 18:09 #Aa7bf7ec966354829)'
+            const parsed = parsePaymentNotes(note)
+            expect(parsed.prefix).toBe('ชำระหนี้งวดนี้')
+            expect(parsed.senderBank).toBe('กสิกรไทย')
+            expect(parsed.customNotes).toBe('โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)')
+            expect(parsed.paidTime).toBe('18:09')
+            expect(parsed.referenceDoc).toBe('Aa7bf7ec966354829')
+
+            const rebuilt = buildPaymentNotes({
+                originalPrefix: parsed.prefix,
+                senderBank: parsed.senderBank,
+                customNotes: parsed.customNotes,
+                paidTime: parsed.paidTime,
+                referenceDoc: parsed.referenceDoc
+            })
+            expect(rebuilt).toBe(note)
+        })
+
         it('handles null and undefined gracefully', () => {
-            expect(parsePaymentNotes(null)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '' })
-            expect(parsePaymentNotes(undefined)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '' })
+            expect(parsePaymentNotes(null)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '', senderBank: '' })
+            expect(parsePaymentNotes(undefined)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '', senderBank: '' })
             expect(buildPaymentNotes({})).toBe('ชำระหนี้งวดนี้')
         })
     })

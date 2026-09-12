@@ -620,7 +620,8 @@ export function allocateSettlementPaymentsByMode({
     isUpstream = false,
     upstreamDealerName = null,
     upstreamDealerId = null,
-    customNotes = ''
+    customNotes = '',
+    senderBank = ''
 }) {
     const curBal = Number(currentBalance || 0)
     const effectiveWinnings = (availableWinnings !== undefined && availableWinnings !== null)
@@ -631,8 +632,14 @@ export function allocateSettlementPaymentsByMode({
     const curRoundId = currentRound.round_id || currentRound.id
     const curRoundDateIso = getRoundCloseDate(currentRound) || (/^\d{4}-\d{2}-\d{2}$/.test(String(currentRound.round_date)) ? currentRound.round_date : null)
     
+    const cleanSender = senderBank ? String(senderBank).replace(/^ธนาคาร\s*/, '').trim() : ''
+    let fullCustomNote = customNotes && customNotes.trim() ? customNotes.trim() : ''
+    if (cleanSender && !fullCustomNote.toLowerCase().includes(cleanSender.toLowerCase())) {
+        fullCustomNote = `${cleanSender} ${fullCustomNote}`.trim()
+    }
+
     const noteDetails = [
-        customNotes && customNotes.trim() ? customNotes.trim() : '',
+        fullCustomNote,
         paidTime && paidTime.trim() ? `เวลา ${paidTime.trim()}` : '',
         referenceDoc && referenceDoc.trim() ? `#${referenceDoc.trim()}` : ''
     ].filter(Boolean).join(' ')
@@ -840,11 +847,11 @@ export function allocateSettlementPaymentsByMode({
  */
 export function parsePaymentNotes(notes) {
     if (!notes || typeof notes !== 'string') {
-        return { customNotes: '', paidTime: '', referenceDoc: '', prefix: '' }
+        return { customNotes: '', paidTime: '', referenceDoc: '', prefix: '', senderBank: '' }
     }
     const raw = notes.trim()
     if (!raw) {
-        return { customNotes: '', paidTime: '', referenceDoc: '', prefix: '' }
+        return { customNotes: '', paidTime: '', referenceDoc: '', prefix: '', senderBank: '' }
     }
 
     let prefix = ''
@@ -875,14 +882,22 @@ export function parsePaymentNotes(notes) {
     }
 
     let customNotes = detailsPart.replace(/\s+/g, ' ').trim()
+    let senderBank = ''
 
     // If there was no parenthesized suffix and no extracted tokens, the entire string is customNotes
     if (!matchSuffix && !ref && !time) {
         customNotes = raw
         prefix = ''
+    } else {
+        // If detailsPart has "... โอนไป ..." pattern, extract senderBank
+        const transferMatch = customNotes.match(/^(.*?)\s+(โอนไป\s+.*)$/)
+        if (transferMatch) {
+            senderBank = transferMatch[1].trim()
+            customNotes = transferMatch[2].trim()
+        }
     }
 
-    return { customNotes, paidTime: time, referenceDoc: ref, prefix }
+    return { customNotes, paidTime: time, referenceDoc: ref, prefix, senderBank }
 }
 
 /**
@@ -897,6 +912,7 @@ export function parsePaymentNotes(notes) {
  * @param {string} [params.paidTime='']
  * @param {string} [params.referenceDoc='']
  * @param {string} [params.originalPrefix='']
+ * @param {string} [params.senderBank='']
  * @returns {string} Formatted full note string
  */
 export function buildPaymentNotes({
@@ -906,7 +922,8 @@ export function buildPaymentNotes({
     customNotes = '',
     paidTime = '',
     referenceDoc = '',
-    originalPrefix = ''
+    originalPrefix = '',
+    senderBank = ''
 }) {
     let basePrefix = originalPrefix ? originalPrefix.trim() : ''
     if (!basePrefix) {
@@ -921,8 +938,14 @@ export function buildPaymentNotes({
         }
     }
 
+    const cleanSender = senderBank ? String(senderBank).replace(/^ธนาคาร\s*/, '').trim() : ''
+    let fullCustomNote = customNotes && customNotes.trim() ? customNotes.trim() : ''
+    if (cleanSender && !fullCustomNote.toLowerCase().includes(cleanSender.toLowerCase())) {
+        fullCustomNote = `${cleanSender} ${fullCustomNote}`.trim()
+    }
+
     const noteDetails = [
-        customNotes && customNotes.trim() ? customNotes.trim() : '',
+        fullCustomNote,
         paidTime && paidTime.trim() ? `เวลา ${paidTime.trim()}` : '',
         referenceDoc && referenceDoc.trim() ? `#${referenceDoc.trim()}` : ''
     ].filter(Boolean).join(' ')

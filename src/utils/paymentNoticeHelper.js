@@ -100,7 +100,8 @@ export function buildSettlementDefaultNote(bank) {
         bank.account_name ? `(${String(bank.account_name).trim()})` : ''
     ].filter(Boolean)
 
-    return parts.join(' ')
+    if (parts.length === 0) return ''
+    return `โอนไป ${parts.join(' ')}`
 }
 
 /**

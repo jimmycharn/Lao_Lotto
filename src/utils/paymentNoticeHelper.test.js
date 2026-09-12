@@ -214,21 +214,21 @@ describe('paymentNoticeHelper', () => {
             expect(buildSettlementDefaultNote({})).toBe('')
         })
 
-        it('formats note with stripped bank name (without "ธนาคาร"), account number, and account name', () => {
+        it('formats note with stripped bank name (without "ธนาคาร"), account number, and account name prefixed with "โอนไป "', () => {
             const note = buildSettlementDefaultNote({
                 bank_name: 'ธนาคารไทยพาณิชย์',
                 bank_account: '9972081291',
                 account_name: 'ยุทธศักดิ์ ทองมั่นคง'
             })
-            expect(note).toBe('ไทยพาณิชย์ 9972081291 (ยุทธศักดิ์ ทองมั่นคง)')
+            expect(note).toBe('โอนไป ไทยพาณิชย์ 9972081291 (ยุทธศักดิ์ ทองมั่นคง)')
         })
 
-        it('formats note without account name if account_name is missing', () => {
+        it('formats note without account name if account_name is missing prefixed with "โอนไป "', () => {
             const note = buildSettlementDefaultNote({
                 bank_name: 'ธนาคารกสิกรไทย',
                 bank_account: '123-4-56789-0'
             })
-            expect(note).toBe('กสิกรไทย 123-4-56789-0')
+            expect(note).toBe('โอนไป กสิกรไทย 123-4-56789-0')
         })
     })
 
