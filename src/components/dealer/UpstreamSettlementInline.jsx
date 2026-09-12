@@ -43,15 +43,25 @@ export default function UpstreamSettlementInline({
     roundHistory = [],
     dealerId,
     lotteryTypeFilter = null,
+    autoFocusPaymentBtn = false,
     onSavePayment,
     onUpdatePayment,
     onDeletePayment,
     onCrossRoundOffset,
     onClose
 }) {
+    const paymentBtnRef = useRef(null)
     const [showForm, setShowForm] = useState(false)
     const [saving, setSaving] = useState(false)
     const [deletingId, setDeletingId] = useState(null)
+
+    useEffect(() => {
+        if (autoFocusPaymentBtn && paymentBtnRef.current) {
+            requestAnimationFrame(() => {
+                paymentBtnRef.current?.focus()
+            })
+        }
+    }, [autoFocusPaymentBtn])
 
     // Edit Modal states
     const [editingPayment, setEditingPayment] = useState(null)
@@ -401,6 +411,7 @@ export default function UpstreamSettlementInline({
                 </span>
                 <div className="upstream-settlement-btn-group">
                     <button
+                        ref={paymentBtnRef}
                         type="button"
                         className="btn-upstream-settle-action btn-cross-offset-action"
                         onClick={() => setShowOffsetModal(true)}

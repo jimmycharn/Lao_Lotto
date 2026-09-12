@@ -138,6 +138,12 @@
     cursor: not-allowed;
 }
 
+.cross-round-mode-card:focus-visible {
+    outline: none;
+    border-color: #facc15;
+    box-shadow: 0 0 0 2px #facc15, 0 0 14px rgba(250, 204, 21, 0.45);
+}
+
 .cross-round-mode-checkbox {
     accent-color: #facc15;
     width: 15px;

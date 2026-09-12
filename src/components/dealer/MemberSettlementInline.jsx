@@ -40,15 +40,25 @@ export default function MemberSettlementInline({
     roundHistory = [],
     dealerId,
     lotteryTypeFilter = null,
+    autoFocusPaymentBtn = false,
     onSavePayment,
     onUpdatePayment,
     onDeletePayment,
     onCrossRoundOffset,
     onClose
 }) {
+    const paymentBtnRef = useRef(null)
     const [showForm, setShowForm] = useState(false)
     const [saving, setSaving] = useState(false)
     const [deletingId, setDeletingId] = useState(null)
+
+    useEffect(() => {
+        if (autoFocusPaymentBtn && paymentBtnRef.current) {
+            requestAnimationFrame(() => {
+                paymentBtnRef.current?.focus()
+            })
+        }
+    }, [autoFocusPaymentBtn])
 
     // Edit Modal states
     const [editingPayment, setEditingPayment] = useState(null)
@@ -457,6 +467,7 @@ export default function MemberSettlementInline({
                         </button>
                     )}
                     <button
+                        ref={paymentBtnRef}
                         type="button"
                         className="btn-settle-action btn-cross-offset-action"
                         onClick={() => setShowOffsetModal(true)}

@@ -5796,3 +5796,37 @@ html.theme-light .icon-btn-sm:hover {
         line-height: 1.25;
     }
 }
+
+/* =============================================
+   HISTORY TAB KEYBOARD NAVIGATION STYLES
+   ============================================= */
+
+.round-accordion-item.keyboard-focused {
+    outline: none !important;
+    border-color: var(--color-primary, #facc15) !important;
+    box-shadow: 0 0 0 2px var(--color-primary, #facc15), 0 0 16px rgba(250, 204, 21, 0.4) !important;
+}
+
+.round-accordion-header.keyboard-focused {
+    outline: none !important;
+    background: rgba(250, 204, 21, 0.08) !important;
+    box-shadow: inset 0 0 0 2px var(--color-primary, #facc15), 0 0 14px rgba(250, 204, 21, 0.35) !important;
+    border-radius: 8px;
+}
+
+.history-row.keyboard-focused {
+    outline: none !important;
+    background: rgba(250, 204, 21, 0.14) !important;
+    box-shadow: inset 0 0 0 1.5px rgba(250, 204, 21, 0.75), 0 0 10px rgba(250, 204, 21, 0.25) !important;
+}
+
+.history-row.keyboard-focused td:first-child {
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+}
+
+.history-row.keyboard-focused td:last-child {
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+

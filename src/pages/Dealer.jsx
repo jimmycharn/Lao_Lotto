@@ -78,6 +78,10 @@ import MemberSettlementInline from '../components/dealer/MemberSettlementInline'
 import UpstreamSettlementInline from '../components/dealer/UpstreamSettlementInline'
 import { getRoundCloseDate } from '../utils/crossRoundOffsetCalculator'
 import {
+    getNextKeyboardFocusTarget,
+    getPrevKeyboardFocusTarget
+} from '../utils/historyKeyboardNavigation'
+import {
     calculateMemberInitialBalance,
     calculateMemberCurrentBalance,
     getMemberSettlementStatus,
@@ -280,6 +284,9 @@ export default function Dealer() {
     const [deletingHistory, setDeletingHistory] = useState(false)
     const [expandedMemberSettlementId, setExpandedMemberSettlementId] = useState(null)
     const [expandedUpstreamSettlementId, setExpandedUpstreamSettlementId] = useState(null)
+    const [keyboardNavTarget, setKeyboardNavTarget] = useState(null) // { cardIndex, section: 'header'|'member'|'upstream', rowIndex }
+    const [autoFocusPaymentMemberKey, setAutoFocusPaymentMemberKey] = useState(null)
+    const [autoFocusPaymentUpstreamKey, setAutoFocusPaymentUpstreamKey] = useState(null)
     const [settlementOverview, setSettlementOverview] = useState({
         userHistories: [],
         memberPayments: [],
@@ -1105,6 +1112,160 @@ export default function Dealer() {
             profit: 0
         })
     }, [filteredRoundHistory, settlementOverview, upstreamSettingsMap])
+
+    const getHistoryCardContent = useCallback((cardIndex) => {
+        const history = filteredRoundHistory[cardIndex]
+        if (!history) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
+        const isExpanded = expandedHistoryId === history.id
+        if (!isExpanded) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
+
+        const details = historyDetails[history.id]
+        const userHistories = (details?.userHistories && details.userHistories.length > 0)
+            ? details.userHistories
+            : settlementOverview.userHistories.filter(uh =>
+                (history.round_id && String(uh.round_id) === String(history.round_id)) ||
+                (history.id && String(uh.round_id) === String(history.id))
+            )
+        const rawTransfers = (details?.transfers && details.transfers.length > 0)
+            ? details.transfers
+            : settlementOverview.transfers.filter(t =>
+                (history.round_id && String(t.round_id) === String(history.round_id)) ||
+                (history.id && String(t.round_id) === String(history.id))
+            )
+        const groupedMap = {}
+        if (rawTransfers && rawTransfers.length > 0) {
+            rawTransfers.forEach(t => {
+                const dName = t.upstream_dealer?.full_name || t.target_dealer_name || "เจ้ามือ"
+                if (!groupedMap[dName]) {
+                    groupedMap[dName] = true
+                }
+            })
+        }
+        const outAmt = Number(history.transferred_amount || 0)
+        const upstreamCount = Object.keys(groupedMap).length > 0 ? Object.keys(groupedMap).length : (outAmt > 0 ? 1 : 0)
+
+        return {
+            isExpanded: true,
+            memberCount: userHistories ? userHistories.length : 0,
+            upstreamCount
+        }
+    }, [filteredRoundHistory, expandedHistoryId, historyDetails, settlementOverview])
+
+    // Smooth scroll focused keyboard target into view
+    useEffect(() => {
+        if (!keyboardNavTarget || roundsTab !== 'history') return
+        const { cardIndex, section, rowIndex } = keyboardNavTarget
+        let selector = ''
+        if (section === 'header') {
+            selector = `[data-keyboard-target="card-${cardIndex}-header"]`
+        } else if (section === 'member') {
+            selector = `[data-keyboard-target="card-${cardIndex}-member-${rowIndex}"]`
+        } else if (section === 'upstream') {
+            selector = `[data-keyboard-target="card-${cardIndex}-upstream-${rowIndex}"]`
+        }
+        if (selector) {
+            requestAnimationFrame(() => {
+                const el = document.querySelector(selector)
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+                }
+            })
+        }
+    }, [keyboardNavTarget, roundsTab])
+
+    // Global keyboard navigation for Dealer History Tab
+    useEffect(() => {
+        if (roundsTab !== 'history') return
+
+        const handleKeyDown = (e) => {
+            // Guard: active text editing element
+            const tag = document.activeElement?.tagName?.toLowerCase()
+            if (tag === 'input' || tag === 'textarea' || tag === 'select' || document.activeElement?.isContentEditable) {
+                return
+            }
+
+            // Guard: modal open
+            if (document.querySelector('.modal-overlay') || deleteHistoryItem) {
+                return
+            }
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                setKeyboardNavTarget(prev => {
+                    return getNextKeyboardFocusTarget({
+                        currentTarget: prev,
+                        totalCards: filteredRoundHistory.length,
+                        getCardContent: getHistoryCardContent
+                    })
+                })
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setKeyboardNavTarget(prev => {
+                    return getPrevKeyboardFocusTarget({
+                        currentTarget: prev,
+                        totalCards: filteredRoundHistory.length,
+                        getCardContent: getHistoryCardContent
+                    })
+                })
+            } else if (e.key === 'Enter') {
+                if (!keyboardNavTarget) return
+                const { cardIndex, section, rowIndex } = keyboardNavTarget
+                const history = filteredRoundHistory[cardIndex]
+                if (!history) return
+
+                if (section === 'header') {
+                    e.preventDefault()
+                    toggleExpandHistory(history)
+                } else if (section === 'member') {
+                    e.preventDefault()
+                    const details = historyDetails[history.id]
+                    const userHistories = (details?.userHistories && details.userHistories.length > 0)
+                        ? details.userHistories
+                        : settlementOverview.userHistories.filter(uh =>
+                            (history.round_id && String(uh.round_id) === String(history.round_id)) ||
+                            (history.id && String(uh.round_id) === String(history.id))
+                        )
+                    const uh = userHistories[rowIndex]
+                    if (uh) {
+                        const settlementKey = `${history.id}_${uh.user_id}`
+                        setExpandedMemberSettlementId(settlementKey)
+                        setAutoFocusPaymentMemberKey(settlementKey)
+                    }
+                } else if (section === 'upstream') {
+                    e.preventDefault()
+                    const details = historyDetails[history.id]
+                    const rawTransfers = (details?.transfers && details.transfers.length > 0)
+                        ? details.transfers
+                        : settlementOverview.transfers.filter(t =>
+                            (history.round_id && String(t.round_id) === String(history.round_id)) ||
+                            (history.id && String(t.round_id) === String(history.id))
+                        )
+                    const groupedMap = {}
+                    if (rawTransfers && rawTransfers.length > 0) {
+                        rawTransfers.forEach(t => {
+                            const dName = t.upstream_dealer?.full_name || t.target_dealer_name || "เจ้ามือ"
+                            if (!groupedMap[dName]) {
+                                groupedMap[dName] = dName
+                            }
+                        })
+                    }
+                    const outAmt = Number(history.transferred_amount || 0)
+                    const effectiveTransferNames = Object.keys(groupedMap).length > 0 
+                        ? Object.keys(groupedMap) 
+                        : (outAmt > 0 ? ["เจ้ามือ (สรุปในประวัติ)"] : [])
+                    const upstreamName = effectiveTransferNames[rowIndex]
+                    if (upstreamName) {
+                        const settlementRowKey = `${history.id}_${upstreamName}`
+                        setExpandedUpstreamSettlementId(settlementRowKey)
+                        setAutoFocusPaymentUpstreamKey(settlementRowKey)
+                    }
+                }
+            }
+        }
+
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [roundsTab, filteredRoundHistory, getHistoryCardContent, keyboardNavTarget, historyDetails, settlementOverview, deleteHistoryItem])
 
     const getRoundSettlementDetails = (history) => {
         if (!history) return {
@@ -3830,8 +3991,9 @@ export default function Dealer() {
                                                 </div>
                                             ) : (
                                                 <div className="history-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                                                    {filteredRoundHistory.map(history => {
+                                                    {filteredRoundHistory.map((history, cardIdx) => {
                                                         const isExpanded = expandedHistoryId === history.id
+                                                        const isHeaderFocused = keyboardNavTarget?.cardIndex === cardIdx && keyboardNavTarget?.section === 'header'
                                                         const details = historyDetails[history.id]
                                                         const userHistories = (details?.userHistories && details.userHistories.length > 0)
                                                             ? details.userHistories
@@ -3879,7 +4041,7 @@ export default function Dealer() {
                                                         return (
                                                             <div 
                                                                 key={history.id} 
-                                                                className={`round-accordion-item ${history.lottery_type} ${isSettled ? 'settled-round' : ''}`} 
+                                                                className={`round-accordion-item ${history.lottery_type} ${isSettled ? 'settled-round' : ''} ${isHeaderFocused ? 'keyboard-focused' : ''}`} 
                                                                 style={{ 
                                                                     borderRadius: '10px', 
                                                                     overflow: 'hidden', 
@@ -3892,7 +4054,8 @@ export default function Dealer() {
                                                             >
                                                                 {/* Accordion Header - Clickable */}
                                                                 <div 
-                                                                    className={`round-accordion-header ${isSettled ? 'settled-header' : ''}`} 
+                                                                    className={`round-accordion-header ${isSettled ? 'settled-header' : ''} ${isHeaderFocused ? 'keyboard-focused' : ''}`} 
+                                                                    data-keyboard-target={`card-${cardIdx}-header`}
                                                                     onClick={() => toggleExpandHistory(history)}
                                                                     style={{ 
                                                                         cursor: 'pointer', 
@@ -4106,7 +4269,7 @@ export default function Dealer() {
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
-                                                                                                            {userHistories.map(uh => {
+                                                                                                            {userHistories.map((uh, memberIdx) => {
                                                                                                                 const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || "ไม่ระบุ"
                                                                                                                 const dealerProfit = (uh.total_amount || 0) - (uh.total_commission || 0) - (uh.total_winnings || 0)
                                                                                                                 const targetRoundId = history.round_id || history.id
@@ -4130,11 +4293,13 @@ export default function Dealer() {
                                                                                                                 const settlementKey = `${history.id}_${uh.user_id}`
                                                                                                                 const isExpanded = expandedMemberSettlementId === settlementKey
                                                                                                                 const isSettled = Boolean(settlementStatus.isSettled)
+                                                                                                                const isRowFocused = keyboardNavTarget?.cardIndex === cardIdx && keyboardNavTarget?.section === 'member' && keyboardNavTarget?.rowIndex === memberIdx
 
                                                                                                                 return (
                                                                                                                     <Fragment key={uh.id || uh.user_id}>
                                                                                                                         <tr 
-                                                                                                                            className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""}`}
+                                                                                                                            className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""} ${isRowFocused ? "keyboard-focused" : ""}`}
+                                                                                                                            data-keyboard-target={`card-${cardIdx}-member-${memberIdx}`}
                                                                                                                             style={{ 
                                                                                                                                 cursor: "pointer",
                                                                                                                                 transition: "background 0.2s ease"
@@ -4216,6 +4381,7 @@ export default function Dealer() {
                                                                                                                                         settlementOverview={settlementOverview}
                                                                                                                                         roundHistory={roundHistory}
                                                                                                                                         dealerId={user?.id}
+                                                                                                                                        autoFocusPaymentBtn={autoFocusPaymentMemberKey === settlementKey}
                                                                                                                                         lotteryTypeFilter={historyTypeFilter}
                                                                                                                                         onSavePayment={(paymentData) => handleSaveMemberPayment({
                                                                                                                                             historyItem: history,
@@ -4232,7 +4398,10 @@ export default function Dealer() {
                                                                                                                                             paymentId
                                                                                                                                         })}
                                                                                                                                         onCrossRoundOffset={handleSaveMemberCrossRoundOffset}
-                                                                                                                                        onClose={() => setExpandedMemberSettlementId(null)}
+                                                                                                                                        onClose={() => {
+                                                                                                                                            setExpandedMemberSettlementId(null)
+                                                                                                                                            setAutoFocusPaymentMemberKey(null)
+                                                                                                                                        }}
                                                                                                                                     />
                                                                                                                                 </td>
                                                                                                                             </tr>
@@ -4266,7 +4435,7 @@ export default function Dealer() {
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
-                                                                                                            {effectiveTransfers.map(t => {
+                                                                                                            {effectiveTransfers.map((t, upIdx) => {
                                                                                                                 const upstreamName = t.dealerName || "เจ้ามือ"
                                                                                                                 const entriesCount = t.entriesCount !== undefined ? t.entriesCount : "-"
                                                                                                                 const tProfit = -(t.amount || 0) + (t.commission_earned || 0) + (t.winnings || 0)
@@ -4291,11 +4460,13 @@ export default function Dealer() {
                                                                                                                 const settlementRowKey = `${history.id}_${upstreamName}`
                                                                                                                 const isExpanded = expandedUpstreamSettlementId === settlementRowKey
                                                                                                                 const isSettled = Boolean(settlementStatus.isSettled)
+                                                                                                                const isRowFocused = keyboardNavTarget?.cardIndex === cardIdx && keyboardNavTarget?.section === 'upstream' && keyboardNavTarget?.rowIndex === upIdx
 
                                                                                                                 return (
                                                                                                                     <Fragment key={t.id || upstreamName}>
                                                                                                                         <tr 
-                                                                                                                            className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""}`}
+                                                                                                                            className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""} ${isRowFocused ? "keyboard-focused" : ""}`}
+                                                                                                                            data-keyboard-target={`card-${cardIdx}-upstream-${upIdx}`}
                                                                                                                             style={{ 
                                                                                                                                 cursor: "pointer",
                                                                                                                                 transition: "background 0.2s ease"
@@ -4393,7 +4564,11 @@ export default function Dealer() {
                                                                                                                                             paymentId
                                                                                                                                         })}
                                                                                                                                         onCrossRoundOffset={handleSaveUpstreamCrossRoundOffset}
-                                                                                                                                        onClose={() => setExpandedUpstreamSettlementId(null)}
+                                                                                                                                        autoFocusPaymentBtn={autoFocusPaymentUpstreamKey === settlementRowKey}
+                                                                                                                                        onClose={() => {
+                                                                                                                                            setExpandedUpstreamSettlementId(null)
+                                                                                                                                            setAutoFocusPaymentUpstreamKey(null)
+                                                                                                                                        }}
                                                                                                                                     />
                                                                                                                                 </td>
                                                                                                                             </tr>

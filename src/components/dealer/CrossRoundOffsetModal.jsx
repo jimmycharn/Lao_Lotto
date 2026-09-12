@@ -82,6 +82,50 @@ export default function CrossRoundOffsetModal({
 
     const dateInputRef = useRef(null)
     const timeInputRef = useRef(null)
+    const modeCardRefs = useRef({})
+
+    const enabledModes = useMemo(() => {
+        return ['current_debt', 'current_prize', 'offset_prize_past_debt', 'combine_all'].filter(m => {
+            if (m === 'current_debt') return true
+            if (m === 'current_prize') return hasPrizeToPay
+            if (m === 'offset_prize_past_debt') return hasPastRounds
+            if (m === 'combine_all') return hasPastRounds
+            return false
+        })
+    }, [hasPrizeToPay, hasPastRounds])
+
+    // Auto-focus active mode card when modal opens
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (modeCardRefs.current[mode]) {
+                modeCardRefs.current[mode]?.focus()
+            }
+        }, 60)
+        return () => clearTimeout(timer)
+    }, [])
+
+    const handleModeCardKeyDown = (e, cardMode) => {
+        if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+            e.preventDefault()
+            const currentIdx = enabledModes.indexOf(cardMode)
+            if (currentIdx !== -1 && enabledModes.length > 0) {
+                const nextMode = enabledModes[(currentIdx + 1) % enabledModes.length]
+                handleModeChange(nextMode)
+                modeCardRefs.current[nextMode]?.focus()
+            }
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+            e.preventDefault()
+            const currentIdx = enabledModes.indexOf(cardMode)
+            if (currentIdx !== -1 && enabledModes.length > 0) {
+                const prevMode = enabledModes[(currentIdx - 1 + enabledModes.length) % enabledModes.length]
+                handleModeChange(prevMode)
+                modeCardRefs.current[prevMode]?.focus()
+            }
+        } else if (e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault()
+            handleModeChange(cardMode)
+        }
+    }
 
     const [customSlipAmount, setCustomSlipAmount] = useState('')
     const [paidAt, setPaidAt] = useState(() => roundCloseDate)
@@ -309,6 +353,27 @@ export default function CrossRoundOffsetModal({
 
     const isSubmitDisabled = saving || (needsPastRounds && selectedPastRounds.length === 0) || isAmountZero
 
+    const handleFormKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            const active = document.activeElement
+            // Do not submit if user is currently focusing a cancel/close button
+            if (active && (
+                active.classList.contains('modal-close') ||
+                active.classList.contains('btn-secondary') ||
+                active.title === 'ปิด' ||
+                active.textContent?.trim() === 'ยกเลิก'
+            )) {
+                return
+            }
+            if (isSubmitDisabled) {
+                e.preventDefault()
+                return
+            }
+            e.preventDefault()
+            handleSubmit(e)
+        }
+    }
+
     const handleSubmit = async (e) => {
         e.preventDefault()
         if (isSubmitDisabled) return
@@ -393,7 +458,7 @@ export default function CrossRoundOffsetModal({
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
                     <div className="modal-body">
                         {/* Target Info & Prize Available */}
                         <div className="cross-round-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.82rem' }}>
@@ -412,22 +477,34 @@ export default function CrossRoundOffsetModal({
                             <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#94a3b8', display: 'block', marginBottom: '0.35rem' }}>
                                 รูปแบบการชำระเงิน
                             </label>
-                            <div className="cross-round-modes-grid">
+                            <div className="cross-round-modes-grid" role="radiogroup" aria-label="รูปแบบการชำระเงิน">
                                 <div
+                                    ref={el => modeCardRefs.current['current_debt'] = el}
+                                    role="radio"
+                                    aria-checked={mode === 'current_debt'}
+                                    tabIndex={0}
                                     className={`cross-round-mode-card ${mode === 'current_debt' ? 'active' : ''}`}
                                     onClick={() => handleModeChange('current_debt')}
+                                    onKeyDown={(e) => handleModeCardKeyDown(e, 'current_debt')}
                                 >
                                     <input
                                         type="checkbox"
                                         className="cross-round-mode-checkbox"
                                         checked={mode === 'current_debt'}
+                                        tabIndex={-1}
                                         onChange={() => handleModeChange('current_debt')}
                                     />
                                     <span>จ่ายหนี้งวดนี้</span>
                                 </div>
                                 <div
+                                    ref={el => modeCardRefs.current['current_prize'] = el}
+                                    role="radio"
+                                    aria-checked={mode === 'current_prize'}
+                                    aria-disabled={!hasPrizeToPay}
+                                    tabIndex={hasPrizeToPay ? 0 : -1}
                                     className={`cross-round-mode-card ${mode === 'current_prize' ? 'active' : ''} ${!hasPrizeToPay ? 'disabled' : ''}`}
                                     onClick={() => hasPrizeToPay && handleModeChange('current_prize')}
+                                    onKeyDown={(e) => hasPrizeToPay && handleModeCardKeyDown(e, 'current_prize')}
                                     style={!hasPrizeToPay ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
                                     title={!hasPrizeToPay ? (isUpstream ? 'ไม่มีเงินรางวัลค้างรับในงวดนี้' : 'ไม่มีเงินรางวัลค้างจ่ายในงวดนี้') : ''}
                                 >
@@ -436,13 +513,20 @@ export default function CrossRoundOffsetModal({
                                         className="cross-round-mode-checkbox"
                                         checked={mode === 'current_prize'}
                                         disabled={!hasPrizeToPay}
+                                        tabIndex={-1}
                                         onChange={() => hasPrizeToPay && handleModeChange('current_prize')}
                                     />
                                     <span>รางวัลงวดนี้</span>
                                 </div>
                                 <div
+                                    ref={el => modeCardRefs.current['offset_prize_past_debt'] = el}
+                                    role="radio"
+                                    aria-checked={mode === 'offset_prize_past_debt'}
+                                    aria-disabled={!hasPastRounds}
+                                    tabIndex={hasPastRounds ? 0 : -1}
                                     className={`cross-round-mode-card ${mode === 'offset_prize_past_debt' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}
                                     onClick={() => hasPastRounds && handleModeChange('offset_prize_past_debt')}
+                                    onKeyDown={(e) => hasPastRounds && handleModeCardKeyDown(e, 'offset_prize_past_debt')}
                                     style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
                                     title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
                                 >
@@ -451,13 +535,20 @@ export default function CrossRoundOffsetModal({
                                         className="cross-round-mode-checkbox"
                                         checked={mode === 'offset_prize_past_debt'}
                                         disabled={!hasPastRounds}
+                                        tabIndex={-1}
                                         onChange={() => hasPastRounds && handleModeChange('offset_prize_past_debt')}
                                     />
                                     <span>หักลบรางวัลกับหนี้เก่า</span>
                                 </div>
                                 <div
+                                    ref={el => modeCardRefs.current['combine_all'] = el}
+                                    role="radio"
+                                    aria-checked={mode === 'combine_all'}
+                                    aria-disabled={!hasPastRounds}
+                                    tabIndex={hasPastRounds ? 0 : -1}
                                     className={`cross-round-mode-card ${mode === 'combine_all' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}
                                     onClick={() => hasPastRounds && handleModeChange('combine_all')}
+                                    onKeyDown={(e) => hasPastRounds && handleModeCardKeyDown(e, 'combine_all')}
                                     style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
                                     title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
                                 >
@@ -466,6 +557,7 @@ export default function CrossRoundOffsetModal({
                                         className="cross-round-mode-checkbox"
                                         checked={mode === 'combine_all'}
                                         disabled={!hasPastRounds}
+                                        tabIndex={-1}
                                         onChange={() => hasPastRounds && handleModeChange('combine_all')}
                                     />
                                     <span>หักลบหนี้ทั้งหมด</span>
