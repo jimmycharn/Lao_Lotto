@@ -3912,9 +3912,6 @@ export default function Dealer() {
                                                                         <span style={{ color: 'var(--color-text-muted)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-flex' }}>
                                                                             <FiChevronRight size={18} />
                                                                         </span>
-                                                                        <span className={`lottery-badge ${history.lottery_type}`}>
-                                                                            {LOTTERY_TYPES[history.lottery_type] || history.lottery_type}
-                                                                        </span>
                                                                         <div className="round-details" style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                                                                             <div style={{ display: 'flex', alignItems: 'center' }}>
                                                                                 <span className="round-name" style={{ fontWeight: 600 }}>
