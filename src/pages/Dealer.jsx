@@ -3968,23 +3968,23 @@ export default function Dealer() {
                                                                             {renderHistoryWinningPills(history)}
                                                                         </div>
                                                                     </div>
-                                                                    <div className="history-stats-column" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.35rem' }}>
-                                                                        <div className="history-stats" style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.85rem' }}>
-                                                                            <div style={{ textAlign: 'center' }}>
-                                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ยอดรวม</div>
-                                                                                <div style={{ fontWeight: '600' }}>฿{history.total_amount?.toLocaleString()}</div>
+                                                                    <div className="history-stats-column">
+                                                                        <div className="history-stats">
+                                                                            <div className="history-stat-box">
+                                                                                <div className="stat-label">ยอดรวม</div>
+                                                                                <div className="stat-value">฿{history.total_amount?.toLocaleString()}</div>
                                                                             </div>
-                                                                            <div style={{ textAlign: 'center' }}>
-                                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>ค่าคอม</div>
-                                                                                <div style={{ fontWeight: '600' }}>฿{Math.round(hInComm || 0).toLocaleString()}</div>
+                                                                            <div className="history-stat-box">
+                                                                                <div className="stat-label">ค่าคอม</div>
+                                                                                <div className="stat-value">฿{Math.round(hInComm || 0).toLocaleString()}</div>
                                                                             </div>
-                                                                            <div style={{ textAlign: 'center' }}>
-                                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>จ่าย</div>
-                                                                                <div style={{ fontWeight: '600', color: 'var(--color-danger)' }}>฿{Math.round(hInPay || 0).toLocaleString()}</div>
+                                                                            <div className="history-stat-box">
+                                                                                <div className="stat-label">จ่าย</div>
+                                                                                <div className="stat-value pay">฿{Math.round(hInPay || 0).toLocaleString()}</div>
                                                                             </div>
-                                                                            <div style={{ textAlign: 'center' }}>
-                                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>กำไร</div>
-                                                                                <div style={{ fontWeight: '600', color: cardProfit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                            <div className="history-stat-box">
+                                                                                <div className="stat-label">กำไร</div>
+                                                                                <div className={`stat-value profit ${cardProfit >= 0 ? 'positive' : 'negative'}`}>
                                                                                     {cardProfit >= 0 ? '+' : ''}฿{Math.round(cardProfit).toLocaleString()}
                                                                                 </div>
                                                                             </div>
