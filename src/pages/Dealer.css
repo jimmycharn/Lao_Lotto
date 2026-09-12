@@ -5163,8 +5163,8 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 .history-breakdown-table {
-    width: 100%;
-    min-width: 660px;
+    width: max-content;
+    min-width: 100%;
     font-size: 0.85rem;
     border-collapse: collapse;
 }
@@ -5176,7 +5176,7 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 .history-breakdown-table th {
-    padding: 0.6rem 0.75rem;
+    padding: 0.55rem 0.65rem;
     font-weight: 600;
     color: var(--color-text-muted);
     border-bottom: 1px solid var(--color-border);
@@ -5185,7 +5185,32 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 .history-breakdown-table td {
-    padding: 0.6rem 0.75rem;
+    padding: 0.55rem 0.65rem;
+}
+
+/* Auto-fit column widths according to data length */
+.history-breakdown-table .col-member {
+    width: auto;
+}
+
+.history-breakdown-table .col-entries {
+    width: 1%;
+    padding-left: 0.35rem !important;
+    padding-right: 0.35rem !important;
+    text-align: center;
+}
+
+.history-breakdown-table .col-amount,
+.history-breakdown-table .col-comm,
+.history-breakdown-table .col-win,
+.history-breakdown-table .col-profit {
+    width: 1%;
+    text-align: right;
+}
+
+.history-breakdown-table .col-settle {
+    width: 1%;
+    text-align: center;
 }
 
 .history-breakdown-table td.expanded-content-cell {
