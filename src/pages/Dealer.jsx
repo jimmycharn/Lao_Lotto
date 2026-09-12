@@ -4077,10 +4077,16 @@ export default function Dealer() {
                                                                 style={{ 
                                                                     borderRadius: '10px', 
                                                                     overflow: 'hidden', 
-                                                                    border: isSettled ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid var(--color-border)', 
-                                                                    borderLeft: isSettled ? '4px solid #10b981' : undefined,
+                                                                    border: isHeaderFocused
+                                                                        ? '1px solid #facc15'
+                                                                        : (isSettled ? '1px solid rgba(16, 185, 129, 0.45)' : '1px solid var(--color-border)'), 
+                                                                    borderLeft: isSettled 
+                                                                        ? '4px solid #10b981' 
+                                                                        : (isHeaderFocused ? '1px solid #facc15' : undefined),
                                                                     background: isSettled ? 'rgba(6, 78, 59, 0.12)' : 'var(--color-surface)',
-                                                                    boxShadow: isSettled ? '0 4px 18px -4px rgba(16, 185, 129, 0.18)' : undefined,
+                                                                    boxShadow: isHeaderFocused
+                                                                        ? '0 0 0 1.5px rgba(250, 204, 21, 0.75), 0 2px 14px rgba(250, 204, 21, 0.22)'
+                                                                        : (isSettled ? '0 4px 18px -4px rgba(16, 185, 129, 0.18)' : undefined),
                                                                     transition: 'all 0.25s ease'
                                                                 }}
                                                             >
