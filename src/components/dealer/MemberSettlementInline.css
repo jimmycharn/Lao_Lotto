@@ -228,20 +228,26 @@
 
 .settlement-logs-table {
     width: 100%;
+    min-width: 520px;
     border-collapse: collapse;
     font-size: 0.8rem;
+}
+
+.settlement-logs-table th,
+.settlement-logs-table td {
+    white-space: nowrap;
 }
 
 .settlement-logs-table th {
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     color: var(--color-text-muted, #94a3b8);
     font-weight: 500;
-    padding: 0.35rem 0.5rem;
+    padding: 0.45rem 0.6rem;
     text-align: left;
 }
 
 .settlement-logs-table td {
-    padding: 0.4rem 0.5rem;
+    padding: 0.45rem 0.6rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 

@@ -4096,16 +4096,16 @@ export default function Dealer() {
                                                                                                 <div style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", padding: "0.5rem" }}>ไม่มีรายละเอียดสมาชิกบันทึกไว้สำหรับงวดนี้</div>
                                                                                             ) : (
                                                                                                 <div className="history-members-breakdown" style={{ overflowX: "auto" }}>
-                                                                                                    <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+                                                                                                    <table className="history-breakdown-table" style={{ width: "100%", minWidth: "660px", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                                                                                                         <thead>
                                                                                                             <tr style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)", textAlign: "left" }}>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem" }}>สมาชิก</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>รายการ</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ยอดส่ง</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ค่าคอม</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ถูกรางวัล</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>กำไร</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>คงค้าง</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", whiteSpace: "nowrap" }}>สมาชิก</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }}>รายการ</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "right", whiteSpace: "nowrap" }}>ยอดส่ง</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "right", whiteSpace: "nowrap" }}>ค่าคอม</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "right", whiteSpace: "nowrap" }}>ถูกรางวัล</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "right", whiteSpace: "nowrap" }}>กำไร</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }}>คงค้าง</th>
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
@@ -4144,7 +4144,7 @@ export default function Dealer() {
                                                                                                                             }}
                                                                                                                             onClick={() => setExpandedMemberSettlementId(isExpanded ? null : settlementKey)}
                                                                                                                         >
-                                                                                                                            <td style={{ padding: "0.5rem", fontWeight: 600 }}>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", fontWeight: 600, whiteSpace: "nowrap" }}>
                                                                                                                                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
                                                                                                                                     <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", opacity: 0.8 }}>
                                                                                                                                         {isExpanded ? "▼" : "▶"}
@@ -4152,14 +4152,14 @@ export default function Dealer() {
                                                                                                                                     {memberName}
                                                                                                                                 </span>
                                                                                                                             </td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "center" }}>{uh.total_entries}</td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600 }}>฿{(uh.total_amount || 0).toLocaleString()}</td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-warning)" }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-danger)" }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600, color: dealerProfit >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }}>{uh.total_entries}</td>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>฿{(uh.total_amount || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-warning)", whiteSpace: "nowrap" }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-danger)", whiteSpace: "nowrap" }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: dealerProfit >= 0 ? "var(--color-success)" : "var(--color-danger)", whiteSpace: "nowrap" }}>
                                                                                                                                 {dealerProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(dealerProfit)).toLocaleString()}
                                                                                                                             </td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "center" }} onClick={e => e.stopPropagation()}>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }} onClick={e => e.stopPropagation()}>
                                                                                                                                 <button
                                                                                                                                     type="button"
                                                                                                                                     onClick={() => setExpandedMemberSettlementId(isExpanded ? null : settlementKey)}
@@ -4188,7 +4188,7 @@ export default function Dealer() {
                                                                                                                         </tr>
                                                                                                                         {isExpanded && (
                                                                                                                             <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                                                                                                                                <td colSpan={7} style={{ padding: "0.75rem 1rem" }}>
+                                                                                                                                <td colSpan={7} className="expanded-content-cell" style={{ padding: "0.75rem 1rem", whiteSpace: "normal" }}>
                                                                                                                                     <MemberSettlementInline
                                                                                                                                         member={uh}
                                                                                                                                         round={history}
@@ -4232,16 +4232,16 @@ export default function Dealer() {
                                                                                                     🚀 รายละเอียดการตีออกให้เจ้ามือในงวดนี้
                                                                                                 </h4>
                                                                                                 <div className="history-transfers-breakdown" style={{ overflowX: "auto" }}>
-                                                                                                    <table style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+                                                                                                    <table className="history-breakdown-table" style={{ width: "100%", minWidth: "660px", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                                                                                                         <thead>
                                                                                                             <tr style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)", textAlign: "left" }}>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem" }}>เจ้ามือรับตีออก</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>รายการ</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ตีออก</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ค่าคอม</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>ถูกรางวัล</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "right" }}>กำไร</th>
-                                                                                                                <th style={{ padding: "0.4rem 0.5rem", textAlign: "center" }}>คงค้าง</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", whiteSpace: "nowrap" }}>เจ้ามือรับตีออก</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }}>รายการ</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "right", whiteSpace: "nowrap" }}>ตีออก</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "right", whiteSpace: "nowrap" }}>ค่าคอม</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "right", whiteSpace: "nowrap" }}>ถูกรางวัล</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "right", whiteSpace: "nowrap" }}>กำไร</th>
+                                                                                                                <th style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }}>คงค้าง</th>
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
@@ -4281,7 +4281,7 @@ export default function Dealer() {
                                                                                                                             }}
                                                                                                                             onClick={() => setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)}
                                                                                                                         >
-                                                                                                                            <td style={{ padding: "0.5rem", fontWeight: 600 }}>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", fontWeight: 600, whiteSpace: "nowrap" }}>
                                                                                                                                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
                                                                                                                                     <span style={{ fontSize: "0.75rem", color: "#ef4444", opacity: 0.8 }}>
                                                                                                                                         {isExpanded ? "▼" : "▶"}
@@ -4289,14 +4289,14 @@ export default function Dealer() {
                                                                                                                                     {upstreamName}
                                                                                                                                 </span>
                                                                                                                             </td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "center" }}>{entriesCount}</td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600, color: "#ef4444" }}>-฿{(t.amount || 0).toLocaleString()}</td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-success)" }}>+฿{Math.round(t.commission_earned || 0).toLocaleString()}</td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", color: "var(--color-success)" }}>+฿{(t.winnings || 0).toLocaleString()}</td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "right", fontWeight: 600, color: tProfit >= 0 ? "var(--color-success)" : "#ef4444" }}>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }}>{entriesCount}</td>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: "#ef4444", whiteSpace: "nowrap" }}>-฿{(t.amount || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>+฿{Math.round(t.commission_earned || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>+฿{(t.winnings || 0).toLocaleString()}</td>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: tProfit >= 0 ? "var(--color-success)" : "#ef4444", whiteSpace: "nowrap" }}>
                                                                                                                                 {tProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(tProfit)).toLocaleString()}
                                                                                                                             </td>
-                                                                                                                            <td style={{ padding: "0.5rem", textAlign: "center" }} onClick={e => e.stopPropagation()}>
+                                                                                                                            <td style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }} onClick={e => e.stopPropagation()}>
                                                                                                                                 <button
                                                                                                                                     type="button"
                                                                                                                                     onClick={() => setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)}
@@ -4325,7 +4325,7 @@ export default function Dealer() {
                                                                                                                         </tr>
                                                                                                                         {isExpanded && (
                                                                                                                             <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-                                                                                                                                <td colSpan={7} style={{ padding: "0.75rem 1rem" }}>
+                                                                                                                                <td colSpan={7} className="expanded-content-cell" style={{ padding: "0.75rem 1rem", whiteSpace: "normal" }}>
                                                                                                                                     <UpstreamSettlementInline
                                                                                                                                         transfer={t}
                                                                                                                                         round={history}
