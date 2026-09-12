@@ -4,6 +4,7 @@ import {
     calculateUpstreamInitialBalance,
     calculateUpstreamCurrentBalance
 } from './memberSettlementCalculator'
+import { THAI_BANKS } from '../constants/bankConstants'
 
 /**
  * Extracts and formats the true round date (YYYY-MM-DD) which ALWAYS corresponds
@@ -634,7 +635,7 @@ export function allocateSettlementPaymentsByMode({
     
     const cleanSender = senderBank ? String(senderBank).replace(/^ธนาคาร\s*/, '').trim() : ''
     let fullCustomNote = customNotes && customNotes.trim() ? customNotes.trim() : ''
-    if (cleanSender && !fullCustomNote.toLowerCase().includes(cleanSender.toLowerCase())) {
+    if (cleanSender && shouldPrependSenderBank(fullCustomNote, cleanSender)) {
         fullCustomNote = `${cleanSender} ${fullCustomNote}`.trim()
     }
 
@@ -839,11 +840,25 @@ export function allocateSettlementPaymentsByMode({
 }
 
 /**
+ * Determines if senderBank should be prepended to customNotes.
+ * Returns false if customNotes already starts with senderBank (with or without 'จาก' or 'ธนาคาร').
+ */
+export function shouldPrependSenderBank(notes, senderBank) {
+    const cleanSender = senderBank ? String(senderBank).replace(/^ธนาคาร\s*/, '').trim() : ''
+    if (!cleanSender) return false
+    if (!notes || !notes.trim()) return true
+    const trimmed = notes.trim()
+    const escaped = cleanSender.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+    const startPattern = new RegExp(`^(จาก\\s*)?(ธนาคาร\\s*)?${escaped}(\\s+|$)`, 'i')
+    return !startPattern.test(trimmed)
+}
+
+/**
  * Parses a payment record note string into its constituent parts:
- * customNotes, paidTime (HH:mm), referenceDoc (without '#'), and prefix.
+ * customNotes, paidTime (HH:mm), referenceDoc (without '#'), prefix, and senderBank.
  *
  * @param {string} notes - Full payment notes string
- * @returns {{ customNotes: string, paidTime: string, referenceDoc: string, prefix: string }}
+ * @returns {{ customNotes: string, paidTime: string, referenceDoc: string, prefix: string, senderBank: string }}
  */
 export function parsePaymentNotes(notes) {
     if (!notes || typeof notes !== 'string') {
@@ -889,11 +904,21 @@ export function parsePaymentNotes(notes) {
         customNotes = raw
         prefix = ''
     } else {
-        // If detailsPart has "... โอนไป ..." pattern, extract senderBank
+        // 1. If detailsPart has "... โอนไป ..." pattern, extract senderBank
         const transferMatch = customNotes.match(/^(.*?)\s+(โอนไป\s+.*)$/)
         if (transferMatch) {
-            senderBank = transferMatch[1].trim()
+            senderBank = transferMatch[1].replace(/^จาก\s*/, '').trim()
             customNotes = transferMatch[2].trim()
+        } else {
+            // If the entire customNotes is a bank name (e.g. "ออมสิน" or "ธนาคารออมสิน")
+            const matchedExactBank = THAI_BANKS.find(b => {
+                const clean = b.replace(/^ธนาคาร\s*/, '').trim().toLowerCase()
+                const cleanNote = customNotes.replace(/^ธนาคาร\s*/, '').trim().toLowerCase()
+                return clean === cleanNote
+            })
+            if (matchedExactBank) {
+                senderBank = matchedExactBank
+            }
         }
     }
 
@@ -940,7 +965,7 @@ export function buildPaymentNotes({
 
     const cleanSender = senderBank ? String(senderBank).replace(/^ธนาคาร\s*/, '').trim() : ''
     let fullCustomNote = customNotes && customNotes.trim() ? customNotes.trim() : ''
-    if (cleanSender && !fullCustomNote.toLowerCase().includes(cleanSender.toLowerCase())) {
+    if (cleanSender && shouldPrependSenderBank(fullCustomNote, cleanSender)) {
         fullCustomNote = `${cleanSender} ${fullCustomNote}`.trim()
     }
 

@@ -658,6 +658,23 @@ describe('crossRoundOffsetCalculator', () => {
             expect(rebuilt).toBe(note)
         })
 
+        it('correctly handles same senderBank and destination bank (e.g. ออมสิน -> ออมสิน)', () => {
+            const note = 'ชำระหนี้งวดนี้ (ออมสิน โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว) เวลา 18:09 #Aa7bf7ec966354829)'
+            const parsed = parsePaymentNotes(note)
+            expect(parsed.prefix).toBe('ชำระหนี้งวดนี้')
+            expect(parsed.senderBank).toBe('ออมสิน')
+            expect(parsed.customNotes).toBe('โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)')
+
+            const built = buildPaymentNotes({
+                originalPrefix: 'ชำระหนี้งวดนี้',
+                senderBank: 'ธนาคารออมสิน',
+                customNotes: 'โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)',
+                paidTime: '18:09',
+                referenceDoc: 'Aa7bf7ec966354829'
+            })
+            expect(built).toBe(note)
+        })
+
         it('handles null and undefined gracefully', () => {
             expect(parsePaymentNotes(null)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '', senderBank: '' })
             expect(parsePaymentNotes(undefined)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '', senderBank: '' })

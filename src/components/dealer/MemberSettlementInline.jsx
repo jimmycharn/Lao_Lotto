@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import {
     FiPlus,
@@ -22,7 +22,8 @@ import {
     getPaymentPresetAmount
 } from '../../utils/memberSettlementCalculator'
 import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes, formatThaiDate } from '../../utils/crossRoundOffsetCalculator'
-import { THAI_BANKS, matchBankOption } from '../../utils/paymentNoticeHelper'
+import { supabase } from '../../lib/supabase'
+import { THAI_BANKS, matchBankOption, resolvePaymentNoticeBankAccount } from '../../utils/paymentNoticeHelper'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
 import PaymentNoticeModal from './PaymentNoticeModal'
 import './MemberSettlementInline.css'
@@ -62,6 +63,42 @@ export default function MemberSettlementInline({
     const [editSaving, setEditSaving] = useState(false)
     const editDateInputRef = useRef(null)
     const editTimeInputRef = useRef(null)
+    const [resolvedMemberBank, setResolvedMemberBank] = useState(null)
+
+    // Preload member's bank account from database
+    useEffect(() => {
+        let isMounted = true
+        const loadMemberBank = async () => {
+            try {
+                const memberUserId = member?.user_id || member?.id || member?.userId
+                const effectiveDealerId = dealerId || member?.dealer_id
+                if (!memberUserId || !effectiveDealerId || !supabase) return
+
+                const mBank = await resolvePaymentNoticeBankAccount({
+                    direction: 'dealer_to_member',
+                    dealerId: effectiveDealerId,
+                    memberUserId,
+                    supabase,
+                    assignedBankAccountId: member?.assigned_bank_account_id || null,
+                    memberBankAccountId: member?.member_bank_account_id || null
+                })
+                if (isMounted && mBank) {
+                    setResolvedMemberBank(mBank)
+                }
+            } catch (err) {
+                console.error('Error preloading member bank in MemberSettlementInline:', err)
+            }
+        }
+        loadMemberBank()
+        return () => { isMounted = false }
+    }, [member?.user_id, member?.id, member?.userId, dealerId, member?.dealer_id])
+
+    // If edit modal is open and sender bank is empty, auto-fill from resolved member bank
+    useEffect(() => {
+        if (editingPayment && !editSenderBank && resolvedMemberBank?.bank_name && (editDirection === 'member_to_dealer')) {
+            setEditSenderBank(matchBankOption(resolvedMemberBank.bank_name, THAI_BANKS))
+        }
+    }, [editingPayment, resolvedMemberBank, editDirection, editSenderBank])
 
     const availableEditBankOptions = useMemo(() => {
         if (editSenderBank && !THAI_BANKS.includes(editSenderBank)) {
@@ -268,7 +305,7 @@ export default function MemberSettlementInline({
         if (parsed.senderBank) {
             initialSenderBank = matchBankOption(parsed.senderBank, THAI_BANKS)
         } else if ((p.direction || 'member_to_dealer') === 'member_to_dealer') {
-            const memberBankName = member?.bank_name || member?.profiles?.bank_name || ''
+            const memberBankName = resolvedMemberBank?.bank_name || member?.bank_name || member?.profiles?.bank_name || ''
             initialSenderBank = matchBankOption(memberBankName, THAI_BANKS)
         }
         setEditSenderBank(initialSenderBank)
