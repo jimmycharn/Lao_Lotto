@@ -4132,24 +4132,44 @@ export default function Dealer() {
                                                                                                                 const settlementStatus = getMemberSettlementStatus(currBal)
                                                                                                                 const settlementKey = `${history.id}_${uh.user_id}`
                                                                                                                 const isExpanded = expandedMemberSettlementId === settlementKey
+                                                                                                                const isSettled = Boolean(settlementStatus.isSettled)
 
                                                                                                                 return (
                                                                                                                     <Fragment key={uh.id || uh.user_id}>
                                                                                                                         <tr 
+                                                                                                                            className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""}`}
                                                                                                                             style={{ 
-                                                                                                                                borderBottom: isExpanded ? "none" : "1px solid rgba(255,255,255,0.05)",
                                                                                                                                 cursor: "pointer",
-                                                                                                                                background: isExpanded ? "rgba(99, 102, 241, 0.08)" : "transparent",
                                                                                                                                 transition: "background 0.2s ease"
                                                                                                                             }}
                                                                                                                             onClick={() => setExpandedMemberSettlementId(isExpanded ? null : settlementKey)}
                                                                                                                         >
                                                                                                                             <td className="col-member" style={{ padding: "0.55rem 0.65rem", fontWeight: 600, whiteSpace: "nowrap" }}>
                                                                                                                                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                                                                                                                                    <span style={{ fontSize: "0.75rem", color: "var(--color-primary)", opacity: 0.8 }}>
+                                                                                                                                    <span style={{ fontSize: "0.75rem", color: isSettled ? "var(--color-success, #10b981)" : "var(--color-primary)", opacity: 0.8 }}>
                                                                                                                                         {isExpanded ? "▼" : "▶"}
                                                                                                                                     </span>
                                                                                                                                     {memberName}
+                                                                                                                                    {isSettled && (
+                                                                                                                                        <span 
+                                                                                                                                            title="เคลียร์ยอดครบแล้ว (ยอดค้าง = 0)"
+                                                                                                                                            style={{ 
+                                                                                                                                                display: "inline-flex", 
+                                                                                                                                                alignItems: "center", 
+                                                                                                                                                justifyContent: "center",
+                                                                                                                                                width: "15px",
+                                                                                                                                                height: "15px",
+                                                                                                                                                borderRadius: "50%",
+                                                                                                                                                background: "rgba(16, 185, 129, 0.18)",
+                                                                                                                                                color: "var(--color-success, #10b981)",
+                                                                                                                                                fontSize: "0.65rem",
+                                                                                                                                                fontWeight: "bold",
+                                                                                                                                                flexShrink: 0
+                                                                                                                                            }}
+                                                                                                                                        >
+                                                                                                                                            ✓
+                                                                                                                                        </span>
+                                                                                                                                    )}
                                                                                                                                 </span>
                                                                                                                             </td>
                                                                                                                             <td className="col-entries" style={{ padding: "0.55rem 0.4rem", textAlign: "center", whiteSpace: "nowrap" }}>{uh.total_entries}</td>
@@ -4187,7 +4207,10 @@ export default function Dealer() {
                                                                                                                             </td>
                                                                                                                         </tr>
                                                                                                                         {isExpanded && (
-                                                                                                                            <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                                                                                                            <tr 
+                                                                                                                                className={`expanded-row ${isSettled ? "expanded-row-settled" : ""}`}
+                                                                                                                                style={{ background: "rgba(0, 0, 0, 0.25)" }}
+                                                                                                                            >
                                                                                                                                 <td colSpan={7} className="expanded-content-cell" style={{ padding: "0.75rem 1rem", whiteSpace: "normal" }}>
                                                                                                                                     <MemberSettlementInline
                                                                                                                                         member={uh}
@@ -4269,24 +4292,44 @@ export default function Dealer() {
                                                                                                                 const settlementStatus = getUpstreamSettlementStatus(currBal)
                                                                                                                 const settlementRowKey = `${history.id}_${upstreamName}`
                                                                                                                 const isExpanded = expandedUpstreamSettlementId === settlementRowKey
+                                                                                                                const isSettled = Boolean(settlementStatus.isSettled)
 
                                                                                                                 return (
                                                                                                                     <Fragment key={t.id || upstreamName}>
                                                                                                                         <tr 
+                                                                                                                            className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""}`}
                                                                                                                             style={{ 
-                                                                                                                                borderBottom: isExpanded ? "none" : "1px solid rgba(255,255,255,0.05)",
                                                                                                                                 cursor: "pointer",
-                                                                                                                                background: isExpanded ? "rgba(239, 68, 68, 0.08)" : "transparent",
                                                                                                                                 transition: "background 0.2s ease"
                                                                                                                             }}
                                                                                                                             onClick={() => setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)}
                                                                                                                         >
                                                                                                                             <td className="col-member" style={{ padding: "0.55rem 0.65rem", fontWeight: 600, whiteSpace: "nowrap" }}>
                                                                                                                                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                                                                                                                                    <span style={{ fontSize: "0.75rem", color: "#ef4444", opacity: 0.8 }}>
+                                                                                                                                    <span style={{ fontSize: "0.75rem", color: isSettled ? "var(--color-success, #10b981)" : "#ef4444", opacity: 0.8 }}>
                                                                                                                                         {isExpanded ? "▼" : "▶"}
                                                                                                                                     </span>
                                                                                                                                     {upstreamName}
+                                                                                                                                    {isSettled && (
+                                                                                                                                        <span 
+                                                                                                                                            title="เคลียร์ยอดครบแล้ว (ยอดค้าง = 0)"
+                                                                                                                                            style={{ 
+                                                                                                                                                display: "inline-flex", 
+                                                                                                                                                alignItems: "center", 
+                                                                                                                                                justifyContent: "center",
+                                                                                                                                                width: "15px",
+                                                                                                                                                height: "15px",
+                                                                                                                                                borderRadius: "50%",
+                                                                                                                                                background: "rgba(16, 185, 129, 0.18)",
+                                                                                                                                                color: "var(--color-success, #10b981)",
+                                                                                                                                                fontSize: "0.65rem",
+                                                                                                                                                fontWeight: "bold",
+                                                                                                                                                flexShrink: 0
+                                                                                                                                            }}
+                                                                                                                                        >
+                                                                                                                                            ✓
+                                                                                                                                        </span>
+                                                                                                                                    )}
                                                                                                                                 </span>
                                                                                                                             </td>
                                                                                                                             <td className="col-entries" style={{ padding: "0.55rem 0.4rem", textAlign: "center", whiteSpace: "nowrap" }}>{entriesCount}</td>
@@ -4324,7 +4367,10 @@ export default function Dealer() {
                                                                                                                             </td>
                                                                                                                         </tr>
                                                                                                                         {isExpanded && (
-                                                                                                                            <tr style={{ background: "rgba(0, 0, 0, 0.25)", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                                                                                                                            <tr 
+                                                                                                                                className={`expanded-row ${isSettled ? "expanded-row-settled" : ""}`}
+                                                                                                                                style={{ background: "rgba(0, 0, 0, 0.25)" }}
+                                                                                                                            >
                                                                                                                                 <td colSpan={7} className="expanded-content-cell" style={{ padding: "0.75rem 1rem", whiteSpace: "normal" }}>
                                                                                                                                     <UpstreamSettlementInline
                                                                                                                                         transfer={t}
