@@ -4088,7 +4088,10 @@ export default function Dealer() {
                                                                 <div 
                                                                     className={`round-accordion-header ${isSettled ? 'settled-header' : ''} ${isHeaderFocused ? 'keyboard-focused' : ''}`} 
                                                                     data-keyboard-target={`card-${cardIdx}-header`}
-                                                                    onClick={() => toggleExpandHistory(history)}
+                                                                    onClick={() => {
+                                                                        setKeyboardNavTarget({ cardIndex: cardIdx, section: 'header', rowIndex: null })
+                                                                        toggleExpandHistory(history)
+                                                                    }}
                                                                     style={{ 
                                                                         cursor: 'pointer', 
                                                                         padding: '0.85rem 1rem', 
@@ -4336,7 +4339,10 @@ export default function Dealer() {
                                                                                                                                 cursor: "pointer",
                                                                                                                                 transition: "background 0.2s ease"
                                                                                                                             }}
-                                                                                                                            onClick={() => setExpandedMemberSettlementId(isExpanded ? null : settlementKey)}
+                                                                                                                            onClick={() => {
+                                                                                                                                setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: memberIdx })
+                                                                                                                                setExpandedMemberSettlementId(isExpanded ? null : settlementKey)
+                                                                                                                            }}
                                                                                                                         >
                                                                                                                             <td className="col-member" style={{ padding: "0.55rem 0.65rem", fontWeight: 600, whiteSpace: "nowrap" }}>
                                                                                                                                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
@@ -4503,7 +4509,10 @@ export default function Dealer() {
                                                                                                                                 cursor: "pointer",
                                                                                                                                 transition: "background 0.2s ease"
                                                                                                                             }}
-                                                                                                                            onClick={() => setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)}
+                                                                                                                            onClick={() => {
+                                                                                                                                setKeyboardNavTarget({ cardIndex: cardIdx, section: 'upstream', rowIndex: upIdx })
+                                                                                                                                setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)
+                                                                                                                            }}
                                                                                                                         >
                                                                                                                             <td className="col-member" style={{ padding: "0.55rem 0.65rem", fontWeight: 600, whiteSpace: "nowrap" }}>
                                                                                                                                 <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
