@@ -620,7 +620,12 @@ export default function UpstreamSettlementInline({
                                                 {isDealerPay ? '-฿' : '+฿'}{Number(p.amount || 0).toLocaleString()}
                                             </td>
                                             <td style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
-                                                {p.notes || '-'}
+                                                <div
+                                                    className="upstream-settlement-log-notes-cell"
+                                                    title={p.notes || ''}
+                                                >
+                                                    {p.notes || '-'}
+                                                </div>
                                             </td>
                                             <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>

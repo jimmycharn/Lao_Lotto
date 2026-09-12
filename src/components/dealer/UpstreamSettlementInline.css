@@ -251,6 +251,20 @@
     padding: 0.45rem 0.6rem;
 }
 
+.upstream-settlement-log-notes-cell {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: default;
+}
+
+@media (max-width: 768px) {
+    .upstream-settlement-log-notes-cell {
+        max-width: 170px;
+    }
+}
+
 .upstream-btn-log-edit {
     background: none;
     border: none;
