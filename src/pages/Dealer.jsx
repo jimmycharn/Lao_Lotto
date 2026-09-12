@@ -1178,9 +1178,17 @@ export default function Dealer() {
         if (roundsTab !== 'history') return
 
         const handleKeyDown = (e) => {
-            // Guard: active text editing element
-            const tag = document.activeElement?.tagName?.toLowerCase()
-            if (tag === 'input' || tag === 'textarea' || tag === 'select' || document.activeElement?.isContentEditable) {
+            // Guard: active text editing or interactive button element
+            const activeEl = document.activeElement
+            const tag = activeEl?.tagName?.toLowerCase()
+            if (
+                tag === 'input' || 
+                tag === 'textarea' || 
+                tag === 'select' || 
+                tag === 'button' || 
+                activeEl?.closest('button') ||
+                activeEl?.isContentEditable
+            ) {
                 return
             }
 
@@ -1228,8 +1236,20 @@ export default function Dealer() {
                     const uh = userHistories[rowIndex]
                     if (uh) {
                         const settlementKey = `${history.id}_${uh.user_id}`
+                        if (expandedMemberSettlementId === settlementKey) {
+                            const rowEl = document.querySelector(`[data-keyboard-target="card-${cardIndex}-member-${rowIndex}"]`)
+                            const inlineRow = rowEl?.nextElementSibling
+                            const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action')
+                            if (paymentBtn) {
+                                paymentBtn.click()
+                                return
+                            }
+                        }
                         setExpandedMemberSettlementId(settlementKey)
-                        setAutoFocusPaymentMemberKey(settlementKey)
+                        setAutoFocusPaymentMemberKey(null)
+                        requestAnimationFrame(() => {
+                            setAutoFocusPaymentMemberKey(settlementKey)
+                        })
                     }
                 } else if (section === 'upstream') {
                     e.preventDefault()
@@ -1256,8 +1276,20 @@ export default function Dealer() {
                     const upstreamName = effectiveTransferNames[rowIndex]
                     if (upstreamName) {
                         const settlementRowKey = `${history.id}_${upstreamName}`
+                        if (expandedUpstreamSettlementId === settlementRowKey) {
+                            const rowEl = document.querySelector(`[data-keyboard-target="card-${cardIndex}-upstream-${rowIndex}"]`)
+                            const inlineRow = rowEl?.nextElementSibling
+                            const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action')
+                            if (paymentBtn) {
+                                paymentBtn.click()
+                                return
+                            }
+                        }
                         setExpandedUpstreamSettlementId(settlementRowKey)
-                        setAutoFocusPaymentUpstreamKey(settlementRowKey)
+                        setAutoFocusPaymentUpstreamKey(null)
+                        requestAnimationFrame(() => {
+                            setAutoFocusPaymentUpstreamKey(settlementRowKey)
+                        })
                     }
                 }
             }
@@ -1265,7 +1297,7 @@ export default function Dealer() {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [roundsTab, filteredRoundHistory, getHistoryCardContent, keyboardNavTarget, historyDetails, settlementOverview, deleteHistoryItem])
+    }, [roundsTab, filteredRoundHistory, getHistoryCardContent, keyboardNavTarget, historyDetails, settlementOverview, deleteHistoryItem, expandedMemberSettlementId, expandedUpstreamSettlementId])
 
     const getRoundSettlementDetails = (history) => {
         if (!history) return {

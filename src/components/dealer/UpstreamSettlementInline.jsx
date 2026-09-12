@@ -415,6 +415,13 @@ export default function UpstreamSettlementInline({
                         type="button"
                         className="btn-upstream-settle-action btn-cross-offset-action"
                         onClick={() => setShowOffsetModal(true)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                setShowOffsetModal(true)
+                            }
+                        }}
                         title="บันทึกชำระเงิน"
                         style={{
                             background: 'rgba(250, 204, 21, 0.12)',
