@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, Fragment } from 'react'
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
@@ -1122,13 +1122,13 @@ export default function Dealer() {
         const details = historyDetails[history.id]
         const userHistories = (details?.userHistories && details.userHistories.length > 0)
             ? details.userHistories
-            : settlementOverview.userHistories.filter(uh =>
+            : (settlementOverview?.userHistories || []).filter(uh =>
                 (history.round_id && String(uh.round_id) === String(history.round_id)) ||
                 (history.id && String(uh.round_id) === String(history.id))
             )
         const rawTransfers = (details?.transfers && details.transfers.length > 0)
             ? details.transfers
-            : settlementOverview.transfers.filter(t =>
+            : (settlementOverview?.transfers || []).filter(t =>
                 (history.round_id && String(t.round_id) === String(history.round_id)) ||
                 (history.id && String(t.round_id) === String(history.id))
             )
@@ -1221,7 +1221,7 @@ export default function Dealer() {
                     const details = historyDetails[history.id]
                     const userHistories = (details?.userHistories && details.userHistories.length > 0)
                         ? details.userHistories
-                        : settlementOverview.userHistories.filter(uh =>
+                        : (settlementOverview?.userHistories || []).filter(uh =>
                             (history.round_id && String(uh.round_id) === String(history.round_id)) ||
                             (history.id && String(uh.round_id) === String(history.id))
                         )
@@ -1236,7 +1236,7 @@ export default function Dealer() {
                     const details = historyDetails[history.id]
                     const rawTransfers = (details?.transfers && details.transfers.length > 0)
                         ? details.transfers
-                        : settlementOverview.transfers.filter(t =>
+                        : (settlementOverview?.transfers || []).filter(t =>
                             (history.round_id && String(t.round_id) === String(history.round_id)) ||
                             (history.id && String(t.round_id) === String(history.id))
                         )
