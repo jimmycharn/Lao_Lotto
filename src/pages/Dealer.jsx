@@ -4908,7 +4908,7 @@ export default function Dealer() {
                                 </div>
 
                                 {/* Search Box Input */}
-                                <div style={{ position: 'relative', minWidth: '240px', flex: '0 1 320px' }}>
+                                <div className="member-search-wrapper" style={{ position: 'relative' }}>
                                     <FiSearch style={{
                                         position: 'absolute',
                                         left: '0.85rem',
