@@ -148,48 +148,48 @@ const renderHistoryWinningPills = (history) => {
         pills.push({ label: '4 ตัว', value: set4 })
     }
 
-    if (top3) pills.push({ label: '3 บน', value: top3 })
-    if (top2) pills.push({ label: '2 บน', value: top2 })
-    if (bot2) pills.push({ label: '2 ล่าง', value: bot2 })
-    if (bot3) pills.push({ label: '3 ล่าง', value: bot3 })
+    if (top3) pills.push({ label: '3 ตัวบน', value: top3 })
+    if (top2) pills.push({ label: '2 ตัวบน', value: top2 })
+    if (bot2) pills.push({ label: '2 ตัวล่าง', value: bot2 })
+    if (bot3) pills.push({ label: '3 ตัวล่าง', value: bot3 })
 
     if (pills.length === 0) return null
 
     return (
         <div 
-            className="history-winning-pills"
+            className="history-winning-table"
             style={{
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
-                gap: '0.35rem',
-                flexWrap: 'wrap',
-                marginTop: '0.2rem'
+                gap: '0.65rem',
+                background: 'rgba(0, 0, 0, 0.35)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                padding: '0.25rem 0.55rem',
+                borderRadius: '6px',
+                marginTop: '0.3rem',
+                width: 'fit-content',
+                maxWidth: '100%',
+                overflowX: 'auto'
             }}
         >
-            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', display: 'inline-flex', alignItems: 'center' }}>
-                ออก:
-            </span>
             {pills.map((p, idx) => (
-                <span
-                    key={idx}
-                    style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.25rem',
-                        fontSize: '0.72rem',
-                        background: 'rgba(0, 0, 0, 0.45)',
-                        border: '1px solid rgba(255, 255, 255, 0.08)',
-                        padding: '0.1rem 0.4rem',
-                        borderRadius: '4px',
-                        color: 'var(--color-text-muted, #94a3b8)',
-                        whiteSpace: 'nowrap'
+                <div 
+                    key={idx} 
+                    style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        textAlign: 'center',
+                        minWidth: idx === 0 && (isThai || isLao || isHanoi) ? '46px' : '36px'
                     }}
                 >
-                    <span>{p.label}:</span>
-                    <strong style={{ color: '#facc15', fontWeight: 700, letterSpacing: '0.5px' }}>
+                    <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+                        {p.label}
+                    </span>
+                    <strong style={{ color: '#facc15', fontWeight: 700, fontSize: '0.84rem', letterSpacing: '0.5px', marginTop: '0.12rem', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
                         {p.value}
                     </strong>
-                </span>
+                </div>
             ))}
         </div>
     )
@@ -4100,7 +4100,6 @@ export default function Dealer() {
                                                                     }}
                                                                     style={{ 
                                                                         cursor: 'pointer', 
-                                                                        padding: '0.85rem 1rem', 
                                                                         display: 'flex', 
                                                                         alignItems: 'center', 
                                                                         justifyContent: 'space-between', 
@@ -4170,10 +4169,11 @@ export default function Dealer() {
                                                                         </div>
                                                                     </div>
                                                                     <div className="history-stats-column">
-                                                                        <div className="history-stats">
+                                                                        {/* Row 1: Incoming (ยอดรับจากสมาชิก) */}
+                                                                        <div className="history-stats incoming-stats">
                                                                             <div className="history-stat-box">
-                                                                                <div className="stat-label">ยอดรวม</div>
-                                                                                <div className="stat-value">฿{history.total_amount?.toLocaleString()}</div>
+                                                                                <div className="stat-label">ยอดรับ</div>
+                                                                                <div className="stat-value">฿{(hInAmt || 0).toLocaleString()}</div>
                                                                             </div>
                                                                             <div className="history-stat-box">
                                                                                 <div className="stat-label">ค่าคอม</div>
@@ -4185,41 +4185,81 @@ export default function Dealer() {
                                                                             </div>
                                                                             <div className="history-stat-box">
                                                                                 <div className="stat-label">กำไร</div>
-                                                                                <div className={`stat-value profit ${cardProfit >= 0 ? 'positive' : 'negative'}`}>
-                                                                                    {cardProfit >= 0 ? '+' : ''}฿{Math.round(cardProfit).toLocaleString()}
+                                                                                <div className={`stat-value profit ${hInProfit >= 0 ? 'positive' : 'negative'}`}>
+                                                                                    {hInProfit >= 0 ? '+' : ''}฿{Math.round(hInProfit).toLocaleString()}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
-                                                                        {hasActivity && (
+
+                                                                        {/* Row 2: Outgoing (ยอดส่งตีออกให้เจ้ามือ) */}
+                                                                        <div className="history-stats outgoing-stats">
+                                                                            <div className="history-stat-box">
+                                                                                <div className="stat-label">ยอดส่ง</div>
+                                                                                <div className={`stat-value ${hOutAmt > 0 ? 'pay' : ''}`}>
+                                                                                    {hOutAmt > 0 ? '-' : ''}฿{Math.round(hOutAmt || 0).toLocaleString()}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="history-stat-box">
+                                                                                <div className="stat-label">ค่าคอม</div>
+                                                                                <div className={`stat-value ${hOutComm > 0 ? 'positive' : ''}`}>
+                                                                                    {hOutComm > 0 ? '+' : ''}฿{Math.round(hOutComm || 0).toLocaleString()}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="history-stat-box">
+                                                                                <div className="stat-label">รับ</div>
+                                                                                <div className={`stat-value ${hOutWin > 0 ? 'positive' : ''}`}>
+                                                                                    {hOutWin > 0 ? '+' : ''}฿{Math.round(hOutWin || 0).toLocaleString()}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="history-stat-box">
+                                                                                <div className="stat-label">กำไร</div>
+                                                                                <div className={`stat-value profit ${hOutProfit >= 0 ? 'positive' : 'negative'}`}>
+                                                                                    {hOutProfit >= 0 ? '+' : ''}฿{Math.round(hOutProfit).toLocaleString()}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Row 3: Bottom Row with Net Profit Badge (Left) & Outstanding Badge (Right) */}
+                                                                        <div className="history-stats-bottom-row">
                                                                             <div 
-                                                                                className="history-outstanding-badge"
-                                                                                title={`ยอดคงค้างสุทธิ:\n• คนส่งค้างเจ้ามือ: +฿${settlementDetails.memberOwesDealer.toLocaleString()}\n• เจ้ามือค้างคนส่ง: -฿${settlementDetails.dealerOwesMember.toLocaleString()}\n• เราค้างเจ้ามือรับตีออก: -฿${settlementDetails.dealerOwesUpstream.toLocaleString()}\n• เจ้ามือรับตีออกค้างเรา: +฿${settlementDetails.upstreamOwesDealer.toLocaleString()}`}
+                                                                                className={`history-total-profit-badge ${cardProfit >= 0 ? 'positive' : 'negative'}`}
+                                                                                title={`กำไรสุทธิรวมงวดนี้:\n• กำไรยอดรับ: ${hInProfit >= 0 ? '+' : ''}฿${Math.round(hInProfit).toLocaleString()}\n• กำไรยอดตีออก: ${hOutProfit >= 0 ? '+' : ''}฿${Math.round(hOutProfit).toLocaleString()}`}
                                                                                 style={{
-                                                                                    display: 'inline-flex',
-                                                                                    alignItems: 'center',
-                                                                                    gap: '0.35rem',
-                                                                                    fontSize: '0.82rem',
-                                                                                    padding: '0.15rem 0.6rem',
-                                                                                    borderRadius: '6px',
-                                                                                    background: isSettled 
-                                                                                        ? 'rgba(16, 185, 129, 0.12)' 
-                                                                                        : (settlementDetails.netOutstanding < 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(245, 158, 11, 0.12)'),
-                                                                                    color: isSettled 
-                                                                                        ? 'var(--color-success, #10b981)' 
-                                                                                        : (settlementDetails.netOutstanding < 0 ? 'var(--color-danger, #ef4444)' : 'var(--color-warning, #f59e0b)'),
-                                                                                    border: `1px solid ${isSettled 
-                                                                                        ? 'rgba(16, 185, 129, 0.25)' 
-                                                                                        : (settlementDetails.netOutstanding < 0 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.25)')}`
+                                                                                    background: cardProfit >= 0 ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+                                                                                    color: cardProfit >= 0 ? 'var(--color-success, #10b981)' : 'var(--color-danger, #ef4444)',
+                                                                                    border: `1px solid ${cardProfit >= 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(239, 68, 68, 0.25)'}`
                                                                                 }}
                                                                             >
-                                                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem', fontWeight: 500 }}>คงค้าง :</span>
-                                                                                <span style={{ fontWeight: 700 }}>
-                                                                                    {isSettled 
-                                                                                        ? '฿0' 
-                                                                                        : `${settlementDetails.netOutstanding > 0 ? '+' : (settlementDetails.netOutstanding < 0 ? '-' : '')}฿${Math.abs(settlementDetails.netOutstanding).toLocaleString()}`}
+                                                                                <span className="badge-label">กำไร :</span>
+                                                                                <span className="badge-value">
+                                                                                    {cardProfit >= 0 ? '+฿' : '-฿'}{Math.abs(Math.round(cardProfit)).toLocaleString()}
                                                                                 </span>
                                                                             </div>
-                                                                        )}
+                                                                            {hasActivity && (
+                                                                                <div 
+                                                                                    className="history-outstanding-badge"
+                                                                                    title={`ยอดคงค้างสุทธิ:\n• คนส่งค้างเจ้ามือ: +฿${settlementDetails.memberOwesDealer.toLocaleString()}\n• เจ้ามือค้างคนส่ง: -฿${settlementDetails.dealerOwesMember.toLocaleString()}\n• เราค้างเจ้ามือรับตีออก: -฿${settlementDetails.dealerOwesUpstream.toLocaleString()}\n• เจ้ามือรับตีออกค้างเรา: +฿${settlementDetails.upstreamOwesDealer.toLocaleString()}`}
+                                                                                    style={{
+                                                                                        background: isSettled 
+                                                                                            ? 'rgba(16, 185, 129, 0.12)' 
+                                                                                            : (settlementDetails.netOutstanding < 0 ? 'rgba(239, 68, 68, 0.12)' : 'rgba(245, 158, 11, 0.12)'),
+                                                                                        color: isSettled 
+                                                                                            ? 'var(--color-success, #10b981)' 
+                                                                                            : (settlementDetails.netOutstanding < 0 ? 'var(--color-danger, #ef4444)' : 'var(--color-warning, #f59e0b)'),
+                                                                                        border: `1px solid ${isSettled 
+                                                                                            ? 'rgba(16, 185, 129, 0.25)' 
+                                                                                            : (settlementDetails.netOutstanding < 0 ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.25)')}`
+                                                                                    }}
+                                                                                >
+                                                                                    <span className="badge-label">คงค้าง :</span>
+                                                                                    <span className="badge-value">
+                                                                                        {isSettled 
+                                                                                            ? '฿0' 
+                                                                                            : `${settlementDetails.netOutstanding > 0 ? '+' : (settlementDetails.netOutstanding < 0 ? '-' : '')}฿${Math.abs(settlementDetails.netOutstanding).toLocaleString()}`}
+                                                                                    </span>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
 
