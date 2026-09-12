@@ -1058,6 +1058,7 @@ export default function MemberSettlementInline({
                                         </label>
                                         <input
                                             type="number"
+                                            className="settlement-input"
                                             min="0.01"
                                             step="any"
                                             value={editAmount}
@@ -1065,12 +1066,14 @@ export default function MemberSettlementInline({
                                             required
                                             style={{
                                                 width: '100%',
+                                                height: '36px',
                                                 padding: '0.38rem 0.55rem',
                                                 fontSize: '0.85rem',
                                                 background: 'rgba(0, 0, 0, 0.3)',
                                                 border: '1px solid rgba(255, 255, 255, 0.15)',
                                                 borderRadius: '6px',
-                                                color: '#f8fafc'
+                                                color: '#f8fafc',
+                                                boxSizing: 'border-box'
                                             }}
                                         />
                                     </div>
@@ -1164,13 +1167,14 @@ export default function MemberSettlementInline({
                                 {/* 6. Sender Bank & Reference Document (2 columns) */}
                                 <div className="settlement-form-grid-2">
                                     <div className="settlement-form-field">
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem', whiteSpace: 'nowrap', minHeight: '20px' }}>
                                             <FiCreditCard /> ธนาคารผู้โอน
                                         </label>
                                         <select
                                             className="settlement-select"
                                             value={editSenderBank}
                                             onChange={e => setEditSenderBank(e.target.value)}
+                                            style={{ height: '36px', boxSizing: 'border-box' }}
                                         >
                                             <option value="">-- เลือกธนาคาร --</option>
                                             {availableEditBankOptions.map(bank => (
@@ -1179,22 +1183,25 @@ export default function MemberSettlementInline({
                                         </select>
                                     </div>
                                     <div className="settlement-form-field">
-                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem' }}>
-                                            <FiHash /> เอกสารอ้างอิง (ระบุหรือไม่ก็ได้)
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: 'var(--color-text-muted, #94a3b8)', marginBottom: '0.2rem', whiteSpace: 'nowrap', minHeight: '20px' }}>
+                                            <FiHash /> เอกสารอ้างอิง <span style={{ opacity: 0.7, fontSize: '0.72rem' }}>(ถ้ามี)</span>
                                         </label>
                                         <input
                                             type="text"
+                                            className="settlement-input"
                                             placeholder="เช่น เลขที่สลิป หรือ รหัสอ้างอิงการโอน"
                                             value={editReferenceDoc}
                                             onChange={e => setEditReferenceDoc(e.target.value)}
                                             style={{
                                                 width: '100%',
+                                                height: '36px',
                                                 padding: '0.38rem 0.55rem',
                                                 fontSize: '0.85rem',
                                                 background: 'rgba(0, 0, 0, 0.3)',
                                                 border: '1px solid rgba(255, 255, 255, 0.15)',
                                                 borderRadius: '6px',
-                                                color: '#f8fafc'
+                                                color: '#f8fafc',
+                                                boxSizing: 'border-box'
                                             }}
                                         />
                                     </div>
@@ -1207,17 +1214,20 @@ export default function MemberSettlementInline({
                                     </label>
                                     <input
                                         type="text"
+                                        className="settlement-input"
                                         placeholder="เช่น บัญชีธนาคาร หรือ หมายเหตุการโอน"
                                         value={editCustomNotes}
                                         onChange={e => setEditCustomNotes(e.target.value)}
                                         style={{
                                             width: '100%',
+                                            height: '36px',
                                             padding: '0.38rem 0.55rem',
                                             fontSize: '0.85rem',
                                             background: 'rgba(0, 0, 0, 0.3)',
                                             border: '1px solid rgba(255, 255, 255, 0.15)',
                                             borderRadius: '6px',
-                                            color: '#f8fafc'
+                                            color: '#f8fafc',
+                                            boxSizing: 'border-box'
                                         }}
                                     />
                                 </div>

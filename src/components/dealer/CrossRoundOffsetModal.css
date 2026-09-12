@@ -213,18 +213,20 @@
 
 .settlement-input-with-action {
     width: 100%;
+    height: 36px;
     padding: 0.38rem 1.95rem 0.38rem 0.55rem !important;
     font-size: 0.85rem;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    line-height: 1.4;
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
     border-radius: 6px;
     color: #f8fafc;
-    box-sizing: border-box;
+    box-sizing: border-box !important;
 }
 
 .settlement-input-with-action:focus {
     outline: none;
-    border-color: var(--color-primary, #facc15);
+    border-color: var(--color-primary, #facc15) !important;
     box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.25);
 }
 
@@ -272,22 +274,29 @@
     align-items: start;
 }
 
+.settlement-input,
 .settlement-select {
     width: 100%;
-    padding: 0.38rem 0.55rem;
+    height: 36px;
+    padding: 0.38rem 0.55rem !important;
     font-size: 0.85rem;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    line-height: 1.4;
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.15) !important;
     border-radius: 6px;
     color: #f8fafc;
-    cursor: pointer;
-    box-sizing: border-box;
+    box-sizing: border-box !important;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.settlement-select {
+    cursor: pointer;
+}
+
+.settlement-input:focus,
 .settlement-select:focus {
     outline: none;
-    border-color: var(--color-primary, #facc15);
+    border-color: var(--color-primary, #facc15) !important;
     box-shadow: 0 0 0 1px rgba(250, 204, 21, 0.25);
 }
 

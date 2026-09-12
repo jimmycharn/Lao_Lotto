@@ -168,6 +168,15 @@
     background: rgba(255, 255, 255, 0.09);
 }
 
+.upstream-settlement-form-field .settlement-select,
+.upstream-settlement-form-field .settlement-input,
+.settlement-form-field .settlement-select,
+.settlement-form-field .settlement-input {
+    height: 36px;
+    padding: 0.38rem 0.55rem !important;
+    box-sizing: border-box !important;
+}
+
 .upstream-settlement-presets {
     display: flex;
     align-items: center;

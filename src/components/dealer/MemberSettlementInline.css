@@ -174,6 +174,13 @@
     border-color: var(--color-primary, #facc15);
 }
 
+.settlement-form-field .settlement-select,
+.settlement-form-field .settlement-input {
+    height: 36px;
+    padding: 0.38rem 0.55rem !important;
+    box-sizing: border-box !important;
+}
+
 .settlement-presets {
     display: flex;
     align-items: center;
