@@ -595,16 +595,24 @@ export default function MemberSettlementInline({
                         ยังไม่มีบันทึกการชำระเงินสำหรับสมาชิกรายนี้
                     </div>
                 ) : (
-                    <div style={{ overflowX: 'auto' }}>
+                    <div className="settlement-logs-table-wrapper">
                         <table className="settlement-logs-table">
+                            <colgroup>
+                                <col className="col-log-date" />
+                                <col className="col-log-type" />
+                                <col className="col-log-direction" />
+                                <col className="col-log-amount" />
+                                <col className="col-log-notes" />
+                                <col className="col-log-actions" />
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th>วันที่จ่าย</th>
-                                    <th>ประเภทรายการ</th>
-                                    <th>ทิศทาง</th>
-                                    <th style={{ textAlign: 'right' }}>จำนวนเงิน</th>
-                                    <th>หมายเหตุ</th>
-                                    <th style={{ textAlign: 'center', width: '70px' }}>จัดการ</th>
+                                    <th className="col-log-date">วันที่จ่าย</th>
+                                    <th className="col-log-type">ประเภทรายการ</th>
+                                    <th className="col-log-direction">ทิศทาง</th>
+                                    <th className="col-log-amount" style={{ textAlign: 'right' }}>จำนวนเงิน</th>
+                                    <th className="col-log-notes">หมายเหตุ</th>
+                                    <th className="col-log-actions" style={{ textAlign: 'center' }}>จัดการ</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -613,10 +621,10 @@ export default function MemberSettlementInline({
                                     const isPrize = p.payment_type === 'prize_payout'
                                     return (
                                         <tr key={p.id}>
-                                            <td style={{ color: 'var(--color-text-muted)' }}>
+                                            <td className="col-log-date" style={{ color: 'var(--color-text-muted)' }}>
                                                 {p.paid_at || '-'}
                                             </td>
-                                            <td>
+                                            <td className="col-log-type">
                                                 {isPrize ? (
                                                     <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
                                                         จ่ายเงินรางวัล
@@ -625,7 +633,7 @@ export default function MemberSettlementInline({
                                                     <span>เคลียร์ยอดสุทธิ</span>
                                                 )}
                                             </td>
-                                            <td>
+                                            <td className="col-log-direction">
                                                 {isMemberPay ? (
                                                     <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
                                                         🟢 คนส่งจ่ายเจ้ามือ
@@ -636,10 +644,10 @@ export default function MemberSettlementInline({
                                                     </span>
                                                 )}
                                             </td>
-                                            <td style={{ textAlign: 'right', fontWeight: 700 }}>
+                                            <td className="col-log-amount" style={{ textAlign: 'right', fontWeight: 700 }}>
                                                 ฿{Number(p.amount || 0).toLocaleString()}
                                             </td>
-                                            <td style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
+                                            <td className="col-log-notes" style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>
                                                 <div
                                                     className="settlement-log-notes-cell"
                                                     title={p.notes || ''}
@@ -647,7 +655,7 @@ export default function MemberSettlementInline({
                                                     {p.notes || '-'}
                                                 </div>
                                             </td>
-                                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                            <td className="col-log-actions" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                                                     <button
                                                         type="button"

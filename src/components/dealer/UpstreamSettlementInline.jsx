@@ -580,16 +580,24 @@ export default function UpstreamSettlementInline({
                         ยังไม่มีบันทึกการชำระเงินสำหรับเจ้ามือรับตีออกรายนี้
                     </div>
                 ) : (
-                    <div style={{ overflowX: 'auto' }}>
+                    <div className="upstream-settlement-logs-table-wrapper">
                         <table className="upstream-settlement-logs-table">
+                            <colgroup>
+                                <col className="col-log-date" />
+                                <col className="col-log-type" />
+                                <col className="col-log-direction" />
+                                <col className="col-log-amount" />
+                                <col className="col-log-notes" />
+                                <col className="col-log-actions" />
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th>วันที่จ่าย</th>
-                                    <th>ประเภท</th>
-                                    <th>ทิศทาง</th>
-                                    <th style={{ textAlign: 'right' }}>จำนวนเงิน</th>
-                                    <th>หมายเหตุ</th>
-                                    <th style={{ textAlign: 'center' }}>จัดการ</th>
+                                    <th className="col-log-date">วันที่จ่าย</th>
+                                    <th className="col-log-type">ประเภท</th>
+                                    <th className="col-log-direction">ทิศทาง</th>
+                                    <th className="col-log-amount" style={{ textAlign: 'right' }}>จำนวนเงิน</th>
+                                    <th className="col-log-notes">หมายเหตุ</th>
+                                    <th className="col-log-actions" style={{ textAlign: 'center' }}>จัดการ</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -597,10 +605,10 @@ export default function UpstreamSettlementInline({
                                     const isDealerPay = p.direction === 'dealer_to_upstream'
                                     return (
                                         <tr key={p.id}>
-                                            <td style={{ whiteSpace: 'nowrap' }}>
+                                            <td className="col-log-date" style={{ whiteSpace: 'nowrap' }}>
                                                 {p.paid_at ? new Date(p.paid_at).toLocaleDateString('th-TH') : '-'}
                                             </td>
-                                            <td>
+                                            <td className="col-log-type">
                                                 {p.payment_type === 'prize_collection' ? (
                                                     <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
                                                         รับคืนรางวัล
@@ -611,15 +619,15 @@ export default function UpstreamSettlementInline({
                                                     </span>
                                                 )}
                                             </td>
-                                            <td>
+                                            <td className="col-log-direction">
                                                 <span style={{ color: isDealerPay ? '#ef4444' : 'var(--color-success)', fontWeight: 600 }}>
                                                     {isDealerPay ? '🔴 เราจ่ายให้เจ้ามือ' : '🟢 เจ้ามือจ่ายเรา'}
                                                 </span>
                                             </td>
-                                            <td style={{ textAlign: 'right', fontWeight: 700, color: isDealerPay ? '#ef4444' : 'var(--color-success)' }}>
+                                            <td className="col-log-amount" style={{ textAlign: 'right', fontWeight: 700, color: isDealerPay ? '#ef4444' : 'var(--color-success)' }}>
                                                 {isDealerPay ? '-฿' : '+฿'}{Number(p.amount || 0).toLocaleString()}
                                             </td>
-                                            <td style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
+                                            <td className="col-log-notes" style={{ color: 'var(--color-text-muted)', fontSize: '0.78rem' }}>
                                                 <div
                                                     className="upstream-settlement-log-notes-cell"
                                                     title={p.notes || ''}
@@ -627,7 +635,7 @@ export default function UpstreamSettlementInline({
                                                     {p.notes || '-'}
                                                 </div>
                                             </td>
-                                            <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                            <td className="col-log-actions" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
                                                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                                                     <button
                                                         type="button"

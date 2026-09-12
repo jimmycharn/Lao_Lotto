@@ -4093,7 +4093,7 @@ export default function Dealer() {
                                                                                                 <div style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", padding: "0.5rem" }}>ไม่มีรายละเอียดสมาชิกบันทึกไว้สำหรับงวดนี้</div>
                                                                                             ) : (
                                                                                                 <div className="history-members-breakdown" style={{ overflowX: "auto" }}>
-                                                                                                    <table className="history-breakdown-table" style={{ width: "max-content", minWidth: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+                                                                                                    <table className="history-breakdown-table" style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                                                                                                         <thead>
                                                                                                             <tr style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)", textAlign: "left" }}>
                                                                                                                 <th className="col-member" style={{ padding: "0.55rem 0.65rem", whiteSpace: "nowrap" }}>สมาชิก</th>
@@ -4208,7 +4208,7 @@ export default function Dealer() {
                                                                                                                                 className={`expanded-row ${isSettled ? "expanded-row-settled" : ""}`}
                                                                                                                                 style={{ background: "rgba(0, 0, 0, 0.25)" }}
                                                                                                                             >
-                                                                                                                                <td colSpan={7} className="expanded-content-cell" style={{ padding: "0.75rem 1rem", whiteSpace: "normal" }}>
+                                                                                                                                <td colSpan={7} className="expanded-content-cell">
                                                                                                                                     <MemberSettlementInline
                                                                                                                                         member={uh}
                                                                                                                                         round={history}
@@ -4252,7 +4252,7 @@ export default function Dealer() {
                                                                                                     🚀 รายละเอียดการตีออกให้เจ้ามือในงวดนี้
                                                                                                 </h4>
                                                                                                 <div className="history-transfers-breakdown" style={{ overflowX: "auto" }}>
-                                                                                                    <table className="history-breakdown-table" style={{ width: "max-content", minWidth: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
+                                                                                                    <table className="history-breakdown-table" style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                                                                                                         <thead>
                                                                                                             <tr style={{ borderBottom: "1px solid var(--color-border)", color: "var(--color-text-muted)", textAlign: "left" }}>
                                                                                                                 <th className="col-member" style={{ padding: "0.55rem 0.65rem", whiteSpace: "nowrap" }}>เจ้ามือรับตีออก</th>
@@ -4368,7 +4368,7 @@ export default function Dealer() {
                                                                                                                                 className={`expanded-row ${isSettled ? "expanded-row-settled" : ""}`}
                                                                                                                                 style={{ background: "rgba(0, 0, 0, 0.25)" }}
                                                                                                                             >
-                                                                                                                                <td colSpan={7} className="expanded-content-cell" style={{ padding: "0.75rem 1rem", whiteSpace: "normal" }}>
+                                                                                                                                <td colSpan={7} className="expanded-content-cell">
                                                                                                                                     <UpstreamSettlementInline
                                                                                                                                         transfer={t}
                                                                                                                                         round={history}

@@ -5233,8 +5233,7 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 .history-breakdown-table {
-    width: max-content;
-    min-width: 100%;
+    width: 100%;
     font-size: 0.85rem;
     border-collapse: collapse;
 }
@@ -5286,6 +5285,13 @@ html.theme-light .icon-btn-sm:hover {
 .history-breakdown-table td.expanded-content-cell {
     white-space: normal !important;
     padding: 0.75rem 1rem;
+    max-width: 0;
+}
+
+@media (max-width: 640px) {
+    .history-breakdown-table td.expanded-content-cell {
+        padding: 0.5rem 0.25rem !important;
+    }
 }
 
 /* =============================================
