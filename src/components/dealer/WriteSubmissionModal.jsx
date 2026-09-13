@@ -97,7 +97,7 @@ export default function WriteSubmissionModal({
     })
 
     // Use custom hook for mobile back button to close modal
-    useModalBackButton(true, onClose)
+    useModalBackButton(true, () => handleCloseAttempt())
 
     // Toggle sound on/off
     const toggleSound = () => {
@@ -1258,7 +1258,7 @@ export default function WriteSubmissionModal({
 
     return (
         <>
-        <div className="modal-overlay" onClick={handleCloseAttempt}>
+        <div className="modal-overlay" data-modal-managed="hook" onClick={handleCloseAttempt}>
             <div className="modal submission-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
                 <div className="modal-header">
                     <div className="header-title">

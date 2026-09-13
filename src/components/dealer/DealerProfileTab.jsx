@@ -343,13 +343,27 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                                                 subscription.status === 'expired' ? 'หมดอายุ' : subscription.status}
                                     </span>
                                     <span className="sub-type" style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                        {subscription.subscription_packages.billing_model === 'per_user_yearly'
-                                            ? `รายหัวต่อปี ฿${parseFloat(subscription.subscription_packages.price_per_user_per_year || 0).toLocaleString()}/คน/ปี`
-                                            : subscription.subscription_packages.billing_model === 'profit_percentage' 
-                                                ? `หักกำไร ${subscription.subscription_packages.profit_percentage_rate}% / ยอด ${subscription.subscription_packages.percentage_rate}%`
-                                                : subscription.subscription_packages.billing_model === 'percentage' 
-                                                    ? `หักยอดขาย ${subscription.subscription_packages.percentage_rate}%`
-                                                    : subscription.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'}
+                                        {(() => {
+                                            const pkg = subscription.subscription_packages || subscription.package_snapshot || {}
+                                            const billingModel = pkg.billing_model || subscription.billing_model
+                                            if (billingModel === 'per_user_yearly') {
+                                                const price = parseFloat(pkg.price_per_user_per_year ?? subscription.price_per_user_per_year ?? 0)
+                                                return `รายหัวต่อปี ฿${price.toLocaleString()}/คน/ปี`
+                                            }
+                                            if (billingModel === 'profit_percentage') {
+                                                const profitRate = pkg.profit_percentage_rate ?? subscription.profit_percentage_rate ?? 0
+                                                const percentRate = pkg.percentage_rate ?? subscription.percentage_rate ?? 0
+                                                if (Number(percentRate) > 0) {
+                                                    return `หักกำไร ${profitRate}% / ยอด ${percentRate}%`
+                                                }
+                                                return `หักกำไร ${profitRate}%`
+                                            }
+                                            if (billingModel === 'percentage') {
+                                                const percentRate = pkg.percentage_rate ?? subscription.percentage_rate ?? 0
+                                                return `หักยอดขาย ${percentRate}%`
+                                            }
+                                            return subscription.billing_cycle === 'yearly' ? 'รายปี' : 'รายเดือน'
+                                        })()}
                                     </span>
                                 </div>
                                 {subscription.expires_at ? (() => {

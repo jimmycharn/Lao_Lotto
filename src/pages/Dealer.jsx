@@ -1921,16 +1921,7 @@ export default function Dealer() {
                     .from('dealer_subscriptions')
                     .select(`
                         *,
-                        subscription_packages (
-                            id,
-                            name,
-                            description,
-                            billing_model,
-                            monthly_price,
-                            yearly_price,
-                            max_users,
-                            features
-                        )
+                        subscription_packages (*)
                     `)
                     .eq('dealer_id', user.id)
                     .order('created_at', { ascending: false })

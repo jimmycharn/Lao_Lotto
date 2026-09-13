@@ -1546,11 +1546,7 @@ export default function SuperAdmin() {
                     .from('dealer_subscriptions')
                     .select(`
                         *,
-                        subscription_packages (
-                            id,
-                            name,
-                            billing_model
-                        )
+                        subscription_packages (*)
                     `)
                     .order('created_at', { ascending: false })
 
@@ -2584,7 +2580,7 @@ export default function SuperAdmin() {
                                     <td>
                                         {subscription ? (
                                             <>
-                                                <div>{subscription.subscription_packages?.name || 'ยอดดีมิลด์'}</div>
+                                                <div>{subscription.subscription_packages?.name || subscription.package_snapshot?.name || 'ไม่มีแพ็คเกจ'}</div>
                                                 <small className="text-muted">
                                                     {getBillingModelLabel(subscription.billing_model)}
                                                 </small>
@@ -4891,42 +4887,63 @@ export default function SuperAdmin() {
                                     <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: 'var(--color-primary)' }}>
                                         📦 แพ็คเกจปัจจุบัน
                                     </div>
-                                    <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem' }}>
-                                        <div>
-                                            <strong>ชื่อแพ็คเกจ:</strong> {selectedDealer.subscription.subscription_packages?.name || 'ไม่ระบุ'}
-                                        </div>
-                                        <div>
-                                            <strong>ประเภท:</strong> {selectedDealer.subscription.subscription_packages?.billing_model === 'per_user_yearly' ? 'รายหัวต่อปี' : selectedDealer.subscription.subscription_packages?.billing_model === 'profit_percentage' ? 'หัก % จากกำไร' : selectedDealer.subscription.subscription_packages?.billing_model === 'percentage' ? 'หักเปอร์เซ็นต์จากยอดขาย' : 'รายเดือน/รายปี'}
-                                        </div>
-                                        {(selectedDealer.subscription.subscription_packages?.billing_model === 'percentage' || selectedDealer.subscription.subscription_packages?.billing_model === 'profit_percentage') && (
-                                            <div>
-                                                <strong>อัตราหัก (ยอด):</strong> {selectedDealer.subscription.subscription_packages?.percentage_rate}%
-                                                {selectedDealer.subscription.subscription_packages?.billing_model === 'profit_percentage' && (
-                                                    <span style={{marginLeft: '1rem'}}><strong>อัตราหัก (กำไร):</strong> {selectedDealer.subscription.subscription_packages?.profit_percentage_rate}%</span>
+                                    {(() => {
+                                        const sub = selectedDealer.subscription
+                                        const pkg = sub.subscription_packages || sub.package_snapshot || {}
+                                        const billingModel = pkg.billing_model || sub.billing_model
+                                        const profitRate = pkg.profit_percentage_rate ?? sub.profit_percentage_rate ?? 0
+                                        const percentRate = pkg.percentage_rate ?? sub.percentage_rate ?? 0
+                                        const userPrice = pkg.price_per_user_per_year ?? sub.price_per_user_per_year ?? 0
+
+                                        return (
+                                            <div style={{ display: 'grid', gap: '0.5rem', fontSize: '0.9rem' }}>
+                                                <div>
+                                                    <strong>ชื่อแพ็คเกจ:</strong> {pkg.name || 'ไม่ระบุ'}
+                                                </div>
+                                                <div>
+                                                    <strong>ประเภท:</strong> {billingModel === 'per_user_yearly' ? 'รายหัวต่อปี' : billingModel === 'profit_percentage' ? 'หัก % จากกำไร' : billingModel === 'percentage' ? 'หักเปอร์เซ็นต์จากยอดขาย' : 'รายเดือน/รายปี'}
+                                                </div>
+                                                {billingModel === 'profit_percentage' && (
+                                                    <div>
+                                                        <strong>อัตราหัก (ยอด):</strong> {percentRate}%
+                                                        <span style={{ marginLeft: '1rem' }}>
+                                                            <strong>อัตราหัก (กำไร):</strong> {profitRate}%
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {billingModel === 'percentage' && (
+                                                    <div>
+                                                        <strong>อัตราหัก (ยอด):</strong> {percentRate}%
+                                                    </div>
+                                                )}
+                                                {billingModel === 'per_user_yearly' && (
+                                                    <div>
+                                                        <strong>ราคา:</strong> ฿{parseFloat(userPrice || 0).toLocaleString()}/คน/ปี
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <strong>สถานะ:</strong>{' '}
+                                                    <span style={{
+                                                        padding: '0.2rem 0.5rem',
+                                                        borderRadius: '4px',
+                                                        fontSize: '0.8rem',
+                                                        background: sub.status === 'active' ? 'rgba(34, 197, 94, 0.2)' :
+                                                                   sub.status === 'trial' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                                                        color: sub.status === 'active' ? '#22c55e' :
+                                                               sub.status === 'trial' ? '#a855f7' : '#ef4444'
+                                                    }}>
+                                                        {sub.status === 'active' ? 'ใช้งาน' :
+                                                         sub.status === 'trial' ? 'ทดลองใช้' : sub.status}
+                                                    </span>
+                                                </div>
+                                                {sub.expires_at && (
+                                                    <div>
+                                                        <strong>หมดอายุ:</strong> {new Date(sub.expires_at).toLocaleDateString('th-TH')}
+                                                    </div>
                                                 )}
                                             </div>
-                                        )}
-                                        <div>
-                                            <strong>สถานะ:</strong>{' '}
-                                            <span style={{
-                                                padding: '0.2rem 0.5rem',
-                                                borderRadius: '4px',
-                                                fontSize: '0.8rem',
-                                                background: selectedDealer.subscription.status === 'active' ? 'rgba(34, 197, 94, 0.2)' :
-                                                           selectedDealer.subscription.status === 'trial' ? 'rgba(168, 85, 247, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                                                color: selectedDealer.subscription.status === 'active' ? '#22c55e' :
-                                                       selectedDealer.subscription.status === 'trial' ? '#a855f7' : '#ef4444'
-                                            }}>
-                                                {selectedDealer.subscription.status === 'active' ? 'ใช้งาน' :
-                                                 selectedDealer.subscription.status === 'trial' ? 'ทดลองใช้' : selectedDealer.subscription.status}
-                                            </span>
-                                        </div>
-                                        {selectedDealer.subscription.expires_at && (
-                                            <div>
-                                                <strong>หมดอายุ:</strong> {new Date(selectedDealer.subscription.expires_at).toLocaleDateString('th-TH')}
-                                            </div>
-                                        )}
-                                    </div>
+                                        )
+                                    })()}
                                 </div>
                             )}
 
@@ -5345,7 +5362,7 @@ export default function SuperAdmin() {
                                 </div>
                                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
                                     <span style={{ color: 'var(--color-text-muted)' }}>แพ็คเกจ</span>
-                                    <strong>{selectedDealer.subscription?.subscription_packages?.name || 'ไม่มีแพ็คเกจ'}</strong>
+                                    <strong>{selectedDealer.subscription?.subscription_packages?.name || selectedDealer.subscription?.package_snapshot?.name || 'ไม่มีแพ็คเกจ'}</strong>
                                 </div>
                                 <div className="detail-row" style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
                                     <span style={{ color: 'var(--color-text-muted)' }}>เครดิตคงเหลือ</span>

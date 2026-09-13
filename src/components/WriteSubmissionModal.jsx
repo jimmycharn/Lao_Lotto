@@ -6,6 +6,7 @@ import { useDragReorder } from '../utils/useDragReorder'
 import { fetchNumberLimits, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import { useModalBackButton } from '../utils/useModalBackButton'
 import { useAuth } from '../contexts/AuthContext'
+import { getForcedBillNote } from '../utils/forcedBillNote'
 import './WriteSubmissionModal.css'
 
 // Shared AudioContext for low-latency sound playback
@@ -414,6 +415,7 @@ export default function WriteSubmissionModal({
     const [isPaid, setIsPaid] = useState(false)
     const [bonusActive, setBonusActive] = useState(bonusSettings?.bonusEnabled || false)
     const [error, setError] = useState('')
+    const [isClosedRoundError, setIsClosedRoundError] = useState(false)
     const [success, setSuccess] = useState(false)
     const [submitting, setSubmitting] = useState(false)
     const [limitInfo, setLimitInfo] = useState('') // Info message for limited payout
@@ -577,8 +579,16 @@ export default function WriteSubmissionModal({
     const { dragState, handleDragStart, handleDragOver, handleDrop, handleDragEnd, handleTouchStart, handleTouchMove, handleTouchEnd, setRowRef, shouldAllowClick } = useDragReorder(lines, setLines)
     const isEditMode = !!editingData
 
-    // Use custom hook for mobile back button to close modal
-    useModalBackButton(isOpen, onClose)
+    // Use custom hook for mobile back button to close modal or sub-modals
+    const isSubModalOpen = showCloseConfirm || showPasteModal || showClearAllConfirm
+    useModalBackButton(isOpen && !isSubModalOpen, () => handleClose())
+    useModalBackButton(showCloseConfirm, () => setShowCloseConfirm(false))
+    useModalBackButton(showPasteModal, () => {
+        setShowPasteModal(false)
+        setPasteText('')
+        setIsManualPasteInput(false)
+    })
+    useModalBackButton(showClearAllConfirm, () => setShowClearAllConfirm(false))
 
     // Sync bonusActive when bonusSettings changes (e.g., member switch in dealer mode)
     useEffect(() => {
@@ -2245,10 +2255,11 @@ export default function WriteSubmissionModal({
         pasteTextareaRef.current?.focus()
     }
 
-    // Handle submit
-    const handleSubmit = async () => {
+    // Execute submit
+    const executeSubmit = async (force = false, forcedBillNote = null) => {
         if (lines.length === 0) {
             setError('กรุณาป้อนข้อมูลอย่างน้อย 1 รายการ')
+            setIsClosedRoundError(false)
             return
         }
 
@@ -2256,19 +2267,27 @@ export default function WriteSubmissionModal({
         const now = new Date()
         if (roundInfo?.open_time && now < new Date(roundInfo.open_time)) {
             setError('ยังไม่ถึงเวลาเปิดรับ ไม่สามารถส่งเลขได้')
+            setIsClosedRoundError(false)
             playSound('error')
             return
         }
-        if (roundInfo?.close_time) {
-            if (now >= new Date(roundInfo.close_time)) {
-                setError('หมดเวลาส่งเลขแล้ว งวดนี้ปิดรับแล้ว')
-                playSound('error')
-                return
-            }
+
+        const isPastClose = Boolean(
+            (roundInfo?.close_time && now >= new Date(roundInfo.close_time)) ||
+            roundInfo?.status === 'closed' ||
+            roundInfo?.status === 'announced'
+        )
+
+        if (isPastClose && !force) {
+            setError('หมดเวลาส่งเลขแล้ว งวดนี้ปิดรับแล้ว')
+            setIsClosedRoundError(true)
+            playSound('error')
+            return
         }
 
         setSubmitting(true)
         setError('')
+        setIsClosedRoundError(false)
 
         try {
             const allEntries = []
@@ -2305,15 +2324,18 @@ export default function WriteSubmissionModal({
                 }
             }
 
+            const effectiveBillNote = forcedBillNote !== null ? forcedBillNote : billNote
+
             if (isEditMode && onEditSubmit) {
                 // Edit mode - call onEditSubmit with original bill data
                 await onEditSubmit({
                     entries: allEntries,
-                    billNote,
+                    billNote: effectiveBillNote,
                     isPaid,
                     rawLines: lines,
                     originalBillId: editingData.billId,
-                    originalItems: editingData.originalItems
+                    originalItems: editingData.originalItems,
+                    forceSubmit: force
                 })
                 // Edit mode - close modal after saving
                 onClose()
@@ -2321,9 +2343,10 @@ export default function WriteSubmissionModal({
                 // New submission
                 await onSubmit({
                     entries: allEntries,
-                    billNote,
+                    billNote: effectiveBillNote,
                     isPaid,
-                    rawLines: lines
+                    rawLines: lines,
+                    forceSubmit: force
                 })
                 // New mode - clear and stay open for next bill
                 setLines([])
@@ -2332,6 +2355,7 @@ export default function WriteSubmissionModal({
                 setBillNote('')
                 setIsPaid(false)
                 setError('')
+                setIsClosedRoundError(false)
                 setIsLocked(false)
                 setLockedAmount('')
                 // Clear draft after successful submit
@@ -2340,9 +2364,28 @@ export default function WriteSubmissionModal({
             }
         } catch (err) {
             setError(err.message || 'เกิดข้อผิดพลาด')
+            setIsClosedRoundError(false)
+            playSound('error')
         } finally {
             setSubmitting(false)
         }
+    }
+
+    // Handle submit
+    const handleSubmit = async () => {
+        await executeSubmit(false, null)
+    }
+
+    // Handle force submit for closed / announced round (Dealer mode only)
+    const handleConfirmForceSubmit = async () => {
+        const isAnnounced = Boolean(
+            roundInfo?.is_result_announced === true ||
+            roundInfo?.status === 'announced' ||
+            (roundInfo?.winning_numbers && Object.keys(roundInfo.winning_numbers).length > 0)
+        )
+        const updatedBillNote = getForcedBillNote(billNote, isAnnounced)
+        setBillNote(updatedBillNote)
+        await executeSubmit(true, updatedBillNote)
     }
 
     // Handle new bill
@@ -2352,6 +2395,7 @@ export default function WriteSubmissionModal({
         setEditingIndex(null)
         setBillNote('')
         setError('')
+        setIsClosedRoundError(false)
     }
 
     // Handle close modal with confirmation
@@ -2717,12 +2761,18 @@ export default function WriteSubmissionModal({
     const total = calculatedTotal
 
     return (
-        <div className="write-modal-overlay" onClick={handleClose}>
+        <div className="write-modal-overlay" data-modal-managed="hook" onClick={handleClose}>
             <div className={`write-modal font-size-${fontSize}`} onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="write-modal-header">
-                    <div className="header-title-area">
+                    <div className="header-left">
                         <h3>{isEditMode ? '✏️ แก้ไขโพย' : '🖊️ เขียนโพย'}</h3>
+                        {roundInfo && (
+                            <span className="header-round-subtitle">{roundInfo.name}</span>
+                        )}
+                    </div>
+
+                    <div className="header-center">
                         <div className="font-size-segmented-control" role="group" aria-label="ปรับขนาดตัวอักษร">
                             <button
                                 type="button"
@@ -2750,22 +2800,22 @@ export default function WriteSubmissionModal({
                             </button>
                         </div>
                     </div>
-                    {roundInfo && (
-                        <span className="round-badge">{roundInfo.name}</span>
-                    )}
-                    {isEditMode && editingData?.billId && (
-                        <span className="bill-badge">{editingData.billId}</span>
-                    )}
-                    <button 
-                        className={`sound-toggle-btn ${soundEnabled ? 'on' : 'off'}`}
-                        onClick={toggleSound}
-                        title={soundEnabled ? 'ปิดเสียง' : 'เปิดเสียง'}
-                    >
-                        {soundEnabled ? <FiVolume2 /> : <FiVolumeX />}
-                    </button>
-                    <button className="close-btn" onClick={handleClose}>
-                        <FiX />
-                    </button>
+
+                    <div className="header-right">
+                        {isEditMode && editingData?.billId && (
+                            <span className="bill-badge">{editingData.billId}</span>
+                        )}
+                        <button 
+                            className={`sound-toggle-btn ${soundEnabled ? 'on' : 'off'}`}
+                            onClick={toggleSound}
+                            title={soundEnabled ? 'ปิดเสียง' : 'เปิดเสียง'}
+                        >
+                            {soundEnabled ? <FiVolume2 /> : <FiVolumeX />}
+                        </button>
+                        <button className="close-btn" onClick={handleClose}>
+                            <FiX />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Bill Note Row */}
@@ -3055,8 +3105,18 @@ export default function WriteSubmissionModal({
 
                 {/* Error Message */}
                 {error && (
-                    <div className="write-modal-error">
-                        {error}
+                    <div className={`write-modal-error ${isDealerMode && isClosedRoundError ? 'has-action-btn' : ''}`}>
+                        <span className="error-text">{error}</span>
+                        {isDealerMode && isClosedRoundError && (
+                            <button
+                                type="button"
+                                className="btn-confirm-closed-submit"
+                                onClick={handleConfirmForceSubmit}
+                                disabled={submitting}
+                            >
+                                {submitting ? 'กำลังบันทึก...' : 'ยืนยันบันทึก'}
+                            </button>
+                        )}
                     </div>
                 )}
 

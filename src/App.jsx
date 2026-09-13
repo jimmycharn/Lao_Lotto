@@ -8,6 +8,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import ForceLogoutOverlay from './components/ForceLogoutOverlay'
 import LoginApprovalModal from './components/LoginApprovalModal'
 import { ConfirmDialogHost } from './utils/confirmDialog'
+import { initGlobalModalBackButton } from './utils/useModalBackButton'
 import './index.css'
 
 // Lazy load pages - โหลดเฉพาะหน้าที่ใช้
@@ -144,6 +145,10 @@ function HomeRedirect() {
 }
 
 function AppContent() {
+  useEffect(() => {
+    initGlobalModalBackButton()
+  }, [])
+
   return (
     <Router>
       <ForceLogoutOverlay />
