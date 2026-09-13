@@ -6002,3 +6002,56 @@ html.theme-light .icon-btn-sm:hover {
     border-bottom-right-radius: 6px;
 }
 
+/* =============================================
+   MEMBER INFO ACCORDION RESPONSIVE STYLES
+   ============================================= */
+
+.member-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+}
+
+.member-info-grid .info-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.member-info-grid .info-item-label {
+    display: block;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.member-info-grid .info-item-value {
+    font-size: 1.1rem;
+    color: var(--color-text);
+}
+
+@media (max-width: 640px) {
+    .member-info-grid {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1.1rem !important;
+    }
+
+    .member-info-grid .info-item {
+        width: 100% !important;
+        grid-column: auto !important;
+    }
+
+    .member-info-grid .info-item-label {
+        font-size: 0.85rem;
+        margin-bottom: 0.2rem;
+    }
+
+    .member-info-grid .info-item-value {
+        font-size: 1.05rem;
+    }
+
+    .member-accordion-body {
+        padding: 1.15rem 1rem !important;
+    }
+}
+

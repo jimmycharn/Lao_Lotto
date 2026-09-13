@@ -454,22 +454,18 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                     <div className="member-tab-content">
                         {activeTab === 'info' && (
                             <div className="member-info-view" style={{ animation: 'fadeIn 0.3s ease' }}>
-                                <div className="info-grid" style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                    gap: '1.5rem'
-                                }}>
+                                <div className="info-grid member-info-grid">
                                     <div className="info-item">
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เบอร์โทรศัพท์</label>
-                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.phone || '-'}</div>
+                                        <label className="info-item-label">เบอร์โทรศัพท์</label>
+                                        <div className="info-item-value">{member.phone || '-'}</div>
                                     </div>
                                     <div className="info-item">
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>วันที่สมัคร</label>
-                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{formatDate(member.created_at)}</div>
+                                        <label className="info-item-label">วันที่สมัคร</label>
+                                        <div className="info-item-value">{formatDate(member.created_at)}</div>
                                     </div>
                                     <div className="info-item">
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะ</label>
-                                        <div style={{ fontSize: '1.1rem', color: membershipExpired ? 'var(--color-error)' : 'var(--color-success)' }}>
+                                        <label className="info-item-label">สถานะ</label>
+                                        <div className="info-item-value" style={{ color: membershipExpired ? 'var(--color-error)' : 'var(--color-success)' }}>
                                             <span className={`status-badge ${membershipExpired ? 'closed' : 'open'}`} style={{ fontSize: '0.9rem' }}>
                                                 {membershipExpired ? 'หมดอายุ' : 'ปกติ'}
                                             </span>
@@ -477,31 +473,32 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                     </div>
                                     {isPerUserYearly && !isDealer && member.membership_expires_at && (
                                         <div className="info-item">
-                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>วันหมดอายุ</label>
-                                            <div style={{ fontSize: '1.1rem', color: membershipExpired ? 'var(--color-error)' : 'var(--color-text)' }}>
+                                            <label className="info-item-label">วันหมดอายุ</label>
+                                            <div className="info-item-value" style={{ color: membershipExpired ? 'var(--color-error)' : 'var(--color-text)' }}>
                                                 {new Date(member.membership_expires_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
                                             </div>
                                         </div>
                                     )}
                                     {isPerUserYearly && !isDealer && member.membership_years && (
                                         <div className="info-item">
-                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>จำนวนปีที่ซื้อ</label>
-                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{member.membership_years} ปี</div>
+                                            <label className="info-item-label">จำนวนปีที่ซื้อ</label>
+                                            <div className="info-item-value">{member.membership_years} ปี</div>
                                         </div>
                                     )}
-                                    <div className="info-item" style={{ gridColumn: 'span 2' }}>
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ผูกบัญชี Line User ID</label>
+                                    <div className="info-item line-uid-item" style={{ gridColumn: 'span 2' }}>
+                                        <label className="info-item-label">Line UID</label>
                                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                                             <input
                                                 type="text"
                                                 className="form-input"
-                                                placeholder="ระบุ Line User ID (เช่น U94906fc...)"
+                                                placeholder="ระบุ Line UID (เช่น U94906fc...)"
                                                 value={lineUserId}
                                                 onChange={(e) => setLineUserId(e.target.value)}
                                                 onClick={(e) => e.stopPropagation()}
                                                 disabled={isSavingLineId}
                                                 style={{
                                                     flex: 1,
+                                                    minWidth: 0,
                                                     background: 'var(--color-surface)',
                                                     border: '1px solid var(--color-border)',
                                                     borderRadius: 'var(--radius-md)',
@@ -533,6 +530,7 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                                     background: lineUserId === (member.line_user_id || '') ? 'var(--color-border)' : 'var(--color-primary)',
                                                     borderColor: lineUserId === (member.line_user_id || '') ? 'var(--color-border)' : 'var(--color-primary)',
                                                     color: '#fff',
+                                                    flexShrink: 0,
                                                     transition: 'all 0.2s'
                                                 }}
                                             >
@@ -545,7 +543,7 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                             marginTop: '0.35rem',
                                             opacity: 0.8
                                         }}>
-                                            เมื่อผูกแล้ว สมาชิกจะสามารถส่งเลขทางไลน์ของกลุ่มร้านคุณได้ทันที
+                                            ผูกเพื่อ รับ/ส่ง ข้อมูลทางไลน์กลุ่ม
                                         </p>
                                     </div>
                                 </div>

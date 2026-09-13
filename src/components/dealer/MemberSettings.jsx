@@ -6,8 +6,7 @@ import {
     FiSettings,
     FiPackage,
     FiCheck,
-    FiX,
-    FiGift
+    FiX
 } from 'react-icons/fi'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
@@ -352,7 +351,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                             border: '1px solid var(--color-border)',
                             alignItems: 'center'
                         }}>
-                            {/* 1. อนุญาตให้ส่ง(แทง) ประเภทหวยนั้นที่ตั้งค่า */}
+                            {/* 1. อนุญาติให้ส่งเลข ประเภทหวยนั้นที่ตั้งค่า */}
                             <label
                                 style={{
                                     display: 'inline-flex',
@@ -377,11 +376,11 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                     style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
                                 />
                                 <span style={{ fontWeight: 500 }}>
-                                    {!blockedLotteryTypes.includes(activeTab) ? '✓ อนุญาตให้ส่ง (แทง)' : '✕ ไม่อนุญาตให้ส่ง (แทง)'}
+                                    {!blockedLotteryTypes.includes(activeTab) ? 'อนุญาติให้ส่งเลข' : 'ไม่อนุญาติให้ส่งเลข'}
                                 </span>
                             </label>
 
-                            {/* 2. บวกเพิ่มเงินซื้อ (เปิดแถม) */}
+                            {/* 2. เพิ่มเปอร์เซนต์แถม */}
                             <label
                                 style={{
                                     display: 'inline-flex',
@@ -407,11 +406,10 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                     }}
                                     style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
                                 />
-                                <FiGift style={{ color: settings[activeTab]?.bonusEnabled ? '#22c55e' : 'var(--color-text-muted)' }} />
-                                <span style={{ fontWeight: 500 }}>บวกเพิ่มเงินซื้อ (เปิดแถม)</span>
+                                <span style={{ fontWeight: 500 }}>เพิ่มเปอร์เซนต์แถม</span>
                             </label>
 
-                            {/* 3. คืนเลขเกินลิมิต (ไม่รับยอดเกิน) */}
+                            {/* 3. คืนเลขเกินลิมิต */}
                             <label
                                 style={{
                                     display: 'inline-flex',
@@ -437,7 +435,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                     }}
                                     style={{ width: '18px', height: '18px', accentColor: '#eab308', cursor: 'pointer' }}
                                 />
-                                <span style={{ fontWeight: 500 }}>คืนเลขเกินลิมิต (ไม่รับยอดเกิน)</span>
+                                <span style={{ fontWeight: 500 }}>คืนเลขเกินลิมิต</span>
                             </label>
                         </div>
 
@@ -533,7 +531,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                         <th>ประเภท</th>
                                         <th>ค่าคอม</th>
                                         <th>อัตราจ่าย</th>
-                                        {settings[activeTab]?.bonusEnabled && <th>+% บวกเพิ่ม (แถม)</th>}
+                                        {settings[activeTab]?.bonusEnabled && <th>+% แถม</th>}
                                     </tr>
                                 </thead>
                                 <tbody>

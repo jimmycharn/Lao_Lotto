@@ -14,7 +14,9 @@ import {
     FiStar,
     FiTrash2,
     FiCheck,
-    FiX
+    FiX,
+    FiSettings,
+    FiCreditCard
 } from 'react-icons/fi'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
@@ -31,6 +33,7 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
     const [editingBank, setEditingBank] = useState(null)
     const [toast, setToast] = useState(null)
     const [showPasswordModal, setShowPasswordModal] = useState(false)
+    const [activeSettingsTab, setActiveSettingsTab] = useState('info')
 
     // Local profile data
     const [profileData, setProfileData] = useState({
@@ -392,78 +395,258 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                 </div>
             </div>
 
-            {/* Personal Info Card */}
+            {/* Unified Settings Section with Tabs */}
             <div className="profile-details card">
-                <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                    <h3 style={{ margin: 0 }}>ข้อมูลส่วนตัว</h3>
-                    {!isEditingInfo && (
-                        <button
-                            className="btn btn-outline btn-sm"
-                            onClick={() => setIsEditingInfo(true)}
-                        >
-                            <FiEdit2 /> แก้ไข
-                        </button>
-                    )}
+                <div className="section-header" style={{ marginBottom: '1rem' }}>
+                    <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <FiSettings /> ตั้งค่า
+                    </h3>
                 </div>
 
-                {isEditingInfo ? (
-                    <div className="profile-form">
-                        <div className="form-group">
-                            <label className="form-label">ชื่อ-นามสกุล</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                value={formData.full_name}
-                                onChange={e => setFormData({ ...formData, full_name: e.target.value })}
-                                placeholder="ชื่อ-นามสกุล"
-                            />
+                {/* Settings Navigation Tabs */}
+                <div className="settings-nav-tabs" style={{
+                    display: 'flex',
+                    gap: '0.5rem',
+                    marginBottom: '1.5rem',
+                    borderBottom: '1px solid var(--color-border)',
+                    overflowX: 'auto',
+                    WebkitOverflowScrolling: 'touch'
+                }}>
+                    <button
+                        type="button"
+                        onClick={() => setActiveSettingsTab('info')}
+                        style={{
+                            padding: '0.75rem 1.25rem',
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: activeSettingsTab === 'info' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                            color: activeSettingsTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            fontWeight: activeSettingsTab === 'info' ? '600' : '500',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            fontSize: '0.95rem',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        <FiUser />
+                        ข้อมูลส่วนตัว
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveSettingsTab('bank')}
+                        style={{
+                            padding: '0.75rem 1.25rem',
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: activeSettingsTab === 'bank' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                            color: activeSettingsTab === 'bank' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            fontWeight: activeSettingsTab === 'bank' ? '600' : '500',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            fontSize: '0.95rem',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        <FiCreditCard />
+                        บัญชีธนาคาร
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setActiveSettingsTab('security')}
+                        style={{
+                            padding: '0.75rem 1.25rem',
+                            background: 'transparent',
+                            border: 'none',
+                            borderBottom: activeSettingsTab === 'security' ? '2px solid var(--color-primary)' : '2px solid transparent',
+                            color: activeSettingsTab === 'security' ? 'var(--color-primary)' : 'var(--color-text-muted)',
+                            fontWeight: activeSettingsTab === 'security' ? '600' : '500',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            fontSize: '0.95rem',
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        <FiLock />
+                        ความปลอดภัย
+                    </button>
+                </div>
+
+                {/* Tab 1: ข้อมูลส่วนตัว */}
+                {activeSettingsTab === 'info' && (
+                    <div className="tab-pane-content" style={{ animation: 'fadeIn 0.25s ease' }}>
+                        <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--color-text)' }}>ข้อมูลส่วนตัว</h4>
+                            {!isEditingInfo && (
+                                <button
+                                    className="btn btn-outline btn-sm"
+                                    onClick={() => setIsEditingInfo(true)}
+                                >
+                                    <FiEdit2 /> แก้ไข
+                                </button>
+                            )}
                         </div>
-                        <div className="form-group">
-                            <label className="form-label">เบอร์โทรศัพท์</label>
-                            <input
-                                type="tel"
-                                className="form-input"
-                                value={formData.phone}
-                                onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                                placeholder="0xx-xxx-xxxx"
-                            />
-                        </div>
-                        <div className="form-actions">
-                            <button
-                                className="btn btn-secondary"
-                                onClick={() => {
-                                    setIsEditingInfo(false)
-                                    setFormData({
-                                        ...formData,
-                                        full_name: profileData.full_name || '',
-                                        phone: profileData.phone || ''
-                                    })
-                                }}
-                            >
-                                ยกเลิก
-                            </button>
-                            <button
-                                className="btn btn-primary"
-                                onClick={handleSaveInfo}
-                                disabled={saving}
-                            >
-                                {saving ? 'กำลังบันทึก...' : <><FiSave /> บันทึก</>}
-                            </button>
-                        </div>
+
+                        {isEditingInfo ? (
+                            <div className="profile-form">
+                                <div className="form-group">
+                                    <label className="form-label">ชื่อ-นามสกุล</label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        value={formData.full_name}
+                                        onChange={e => setFormData({ ...formData, full_name: e.target.value })}
+                                        placeholder="ชื่อ-นามสกุล"
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">เบอร์โทรศัพท์</label>
+                                    <input
+                                        type="tel"
+                                        className="form-input"
+                                        value={formData.phone}
+                                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                        placeholder="0xx-xxx-xxxx"
+                                    />
+                                </div>
+                                <div className="form-actions">
+                                    <button
+                                        className="btn btn-secondary"
+                                        onClick={() => {
+                                            setIsEditingInfo(false)
+                                            setFormData({
+                                                ...formData,
+                                                full_name: profileData.full_name || '',
+                                                phone: profileData.phone || ''
+                                            })
+                                        }}
+                                    >
+                                        ยกเลิก
+                                    </button>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={handleSaveInfo}
+                                        disabled={saving}
+                                    >
+                                        {saving ? 'กำลังบันทึก...' : <><FiSave /> บันทึก</>}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="profile-info-list">
+                                <div className="info-row">
+                                    <span className="info-label">ชื่อ-นามสกุล</span>
+                                    <span className="info-value">{profileData.full_name || '-'}</span>
+                                </div>
+                                <div className="info-row">
+                                    <span className="info-label">อีเมล</span>
+                                    <span className="info-value">{user?.email || '-'}</span>
+                                </div>
+                                <div className="info-row">
+                                    <span className="info-label">เบอร์โทรศัพท์</span>
+                                    <span className="info-value">{profileData.phone || '-'}</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
-                ) : (
-                    <div className="profile-info-list">
-                        <div className="info-row">
-                            <span className="info-label">ชื่อ-นามสกุล</span>
-                            <span className="info-value">{profileData.full_name || '-'}</span>
+                )}
+
+                {/* Tab 2: บัญชีธนาคาร */}
+                {activeSettingsTab === 'bank' && (
+                    <div className="tab-pane-content" style={{ animation: 'fadeIn 0.25s ease' }}>
+                        <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--color-text)' }}>บัญชีธนาคาร</h4>
+                            <button className="btn btn-primary btn-sm" onClick={openAddBank}>
+                                <FiPlus /> เพิ่มบัญชี
+                            </button>
                         </div>
-                        <div className="info-row">
-                            <span className="info-label">อีเมล</span>
-                            <span className="info-value">{user?.email || '-'}</span>
+
+                        {loadingBanks ? (
+                            <div className="loading-state">
+                                <div className="spinner"></div>
+                            </div>
+                        ) : bankAccounts.length === 0 ? (
+                            <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
+                                <p className="text-muted">ยังไม่มีบัญชีธนาคาร</p>
+                                <button className="btn btn-outline" onClick={openAddBank} style={{ marginTop: '1rem' }}>
+                                    <FiPlus /> เพิ่มบัญชีแรก
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="bank-accounts-list">
+                                {bankAccounts.map(bank => (
+                                    <div key={bank.id} className={`bank-account-item ${bank.is_default ? 'default' : ''}`}>
+                                        <div className="bank-info">
+                                            <div className="bank-header">
+                                                <span className="bank-name">{bank.bank_name}</span>
+                                                {bank.is_default && (
+                                                     <span className="default-badge">
+                                                        <FiStar /> ค่าเริ่มต้น
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {bank.account_name && (
+                                                <div className="account-name">{bank.account_name}</div>
+                                            )}
+                                            <div className="bank-account-number" style={{ display: 'flex', alignItems: 'center' }}>
+                                                {bank.bank_account}
+                                                <CopyButton text={bank.bank_account} />
+                                            </div>
+                                        </div>
+                                        <div className="bank-actions">
+                                            {!bank.is_default && (
+                                                <button
+                                                    className="btn btn-outline btn-sm"
+                                                    onClick={() => handleSetDefault(bank.id)}
+                                                    title="ตั้งเป็นค่าเริ่มต้น"
+                                                >
+                                                    <FiStar />
+                                                </button>
+                                            )}
+                                            <button
+                                                className="btn btn-outline btn-sm"
+                                                onClick={() => openEditBank(bank)}
+                                                title="แก้ไข"
+                                            >
+                                                <FiEdit2 />
+                                            </button>
+                                            <button
+                                                className="btn btn-outline btn-sm danger"
+                                                onClick={() => handleDeleteBank(bank.id)}
+                                                title="ลบ"
+                                            >
+                                                <FiTrash2 />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Tab 3: ความปลอดภัย */}
+                {activeSettingsTab === 'security' && (
+                    <div className="tab-pane-content" style={{ animation: 'fadeIn 0.25s ease' }}>
+                        <div className="section-header" style={{ marginBottom: '1rem' }}>
+                            <h4 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--color-text)' }}>ความปลอดภัย</h4>
                         </div>
-                        <div className="info-row">
-                            <span className="info-label">เบอร์โทรศัพท์</span>
-                            <span className="info-value">{profileData.phone || '-'}</span>
+                        <div className="security-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', background: 'var(--color-bg)', borderRadius: '0.5rem' }}>
+                            <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>เปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
+                            <button
+                                className="btn btn-outline"
+                                onClick={() => setShowPasswordModal(true)}
+                            >
+                                เปลี่ยนรหัสผ่าน
+                            </button>
                         </div>
                     </div>
                 )}
@@ -591,96 +774,6 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
                         </div>
                     </div>
                 )}
-            </div>
-
-            {/* Bank Accounts Card */}
-            <div className="profile-details card">
-                <div className="section-header" style={{ marginBottom: '1rem' }}>
-                    <h3 style={{ margin: 0 }}>บัญชีธนาคาร</h3>
-                    <button className="btn btn-primary btn-sm" onClick={openAddBank}>
-                        <FiPlus /> เพิ่มบัญชี
-                    </button>
-                </div>
-
-                {loadingBanks ? (
-                    <div className="loading-state">
-                        <div className="spinner"></div>
-                    </div>
-                ) : bankAccounts.length === 0 ? (
-                    <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
-                        <p className="text-muted">ยังไม่มีบัญชีธนาคาร</p>
-                        <button className="btn btn-outline" onClick={openAddBank} style={{ marginTop: '1rem' }}>
-                            <FiPlus /> เพิ่มบัญชีแรก
-                        </button>
-                    </div>
-                ) : (
-                    <div className="bank-accounts-list">
-                        {bankAccounts.map(bank => (
-                            <div key={bank.id} className={`bank-account-item ${bank.is_default ? 'default' : ''}`}>
-                                <div className="bank-info">
-                                    <div className="bank-header">
-                                        <span className="bank-name">{bank.bank_name}</span>
-                                        {bank.is_default && (
-                                            <span className="default-badge">
-                                                <FiStar /> ค่าเริ่มต้น
-                                            </span>
-                                        )}
-                                    </div>
-                                    {bank.account_name && (
-                                        <div className="account-name">{bank.account_name}</div>
-                                    )}
-                                    <div className="bank-account-number" style={{ display: 'flex', alignItems: 'center' }}>
-                                        {bank.bank_account}
-                                        <CopyButton text={bank.bank_account} />
-                                    </div>
-                                </div>
-                                <div className="bank-actions">
-                                    {!bank.is_default && (
-                                        <button
-                                            className="btn btn-outline btn-sm"
-                                            onClick={() => handleSetDefault(bank.id)}
-                                            title="ตั้งเป็นค่าเริ่มต้น"
-                                        >
-                                            <FiStar />
-                                        </button>
-                                    )}
-                                    <button
-                                        className="btn btn-outline btn-sm"
-                                        onClick={() => openEditBank(bank)}
-                                        title="แก้ไข"
-                                    >
-                                        <FiEdit2 />
-                                    </button>
-                                    <button
-                                        className="btn btn-outline btn-sm danger"
-                                        onClick={() => handleDeleteBank(bank.id)}
-                                        title="ลบ"
-                                    >
-                                        <FiTrash2 />
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-
-            {/* Security Settings Card */}
-            <div className="profile-details card">
-                <h3>ความปลอดภัย</h3>
-                <div className="security-section" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem', background: 'var(--color-bg)', borderRadius: '0.5rem' }}>
-                    <div style={{ fontSize: '2rem', color: 'var(--color-gold)', marginBottom: '0.75rem' }}>
-                        <FiLock />
-                    </div>
-                    <h4 style={{ margin: '0 0 0.25rem', fontSize: '1rem', color: 'var(--color-text)' }}>รหัสผ่าน</h4>
-                    <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', textAlign: 'center' }}>เปลี่ยนรหัสผ่านเพื่อความปลอดภัย</p>
-                    <button
-                        className="btn btn-outline"
-                        onClick={() => setShowPasswordModal(true)}
-                    >
-                        เปลี่ยนรหัสผ่าน
-                    </button>
-                </div>
             </div>
 
             {/* Add/Edit Bank Modal */}
