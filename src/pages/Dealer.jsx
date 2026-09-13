@@ -273,6 +273,16 @@ export default function Dealer() {
     const [expandedRoundId, setExpandedRoundId] = useState(null) // Only one round can be expanded at a time
     const [subscription, setSubscription] = useState(null)
     const [dealerBankAccounts, setDealerBankAccounts] = useState([])
+    const [allowedLotteryTypes, setAllowedLotteryTypes] = useState(
+        () => profile?.allowed_lottery_types || Object.keys(LOTTERY_TYPES)
+    )
+
+    // Sync allowedLotteryTypes when profile changes
+    useEffect(() => {
+        if (profile?.allowed_lottery_types && Array.isArray(profile.allowed_lottery_types)) {
+            setAllowedLotteryTypes(profile.allowed_lottery_types)
+        }
+    }, [profile?.allowed_lottery_types])
     const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed' | 'history'
     const [roundHistory, setRoundHistory] = useState([])
     const [historyLoading, setHistoryLoading] = useState(false)
@@ -1432,31 +1442,52 @@ export default function Dealer() {
 
     // Form state for creating round
     const [roundForm, setRoundForm] = useState({
-        lottery_type: 'lao',
+        lottery_type: 'thai',
         lottery_name: '',
         open_date: new Date().toISOString().split('T')[0],
         open_time: '06:00',
         close_date: new Date().toISOString().split('T')[0],
-        close_time: '20:15',
+        close_time: '14:05',
         delete_before_minutes: 30,
         delete_after_submit_minutes: 120,
         currency_symbol: '฿',
         currency_name: 'บาท',
-        notify_close_to_groups: true,
-        type_limits: getDefaultLimitsForType('lao'),
-        set_prices: getDefaultSetPricesForType('lao'),
+        notify_close_to_groups: false,
+        type_limits: getDefaultLimitsForType('thai'),
+        set_prices: getDefaultSetPricesForType('thai'),
         type_close_times: {},
         type_close_time_behaviors: {}
     })
 
     // Open create round modal and populate with template or defaults
-    const handleOpenCreateModal = () => {
-        const defaultType = 'lao'
+    const handleOpenCreateModal = async () => {
+        let currentAllowed = allowedLotteryTypes
+        if (user?.id) {
+            try {
+                const { data: profData } = await supabase
+                    .from('profiles')
+                    .select('allowed_lottery_types')
+                    .eq('id', user.id)
+                    .single()
+                if (profData?.allowed_lottery_types && Array.isArray(profData.allowed_lottery_types)) {
+                    currentAllowed = profData.allowed_lottery_types
+                    setAllowedLotteryTypes(profData.allowed_lottery_types)
+                }
+            } catch (err) {
+                console.warn('Error fetching allowed_lottery_types:', err)
+            }
+        }
+
+        const allowedList = (currentAllowed && currentAllowed.length > 0)
+            ? currentAllowed
+            : (profile?.allowed_lottery_types && profile.allowed_lottery_types.length > 0 ? profile.allowed_lottery_types : Object.keys(LOTTERY_TYPES))
+
+        const defaultType = allowedList.includes('thai') ? 'thai' : (allowedList[0] || 'thai')
         let open_time = '06:00'
-        let close_time = '20:15'
+        let close_time = defaultType === 'thai' ? '14:05' : (defaultType === 'lao' ? '20:15' : '20:00')
         let delete_after_submit_minutes = 120
         let delete_before_minutes = 30
-        let notify_close_to_groups = true
+        let notify_close_to_groups = defaultType === 'lao'
         let currency_symbol = '฿'
         let currency_name = 'บาท'
         let type_limits = getDefaultLimitsForType(defaultType)
@@ -1468,11 +1499,11 @@ export default function Dealer() {
         if (template) {
             open_time = template.open_time || open_time
             close_time = template.close_time || close_time
-            delete_before_minutes = template.delete_before_minutes
-            delete_after_submit_minutes = template.delete_after_submit_minutes
+            delete_before_minutes = template.delete_before_minutes !== undefined ? template.delete_before_minutes : delete_before_minutes
+            delete_after_submit_minutes = template.delete_after_submit_minutes !== undefined ? template.delete_after_submit_minutes : delete_after_submit_minutes
             currency_symbol = template.currency_symbol || currency_symbol
             currency_name = template.currency_name || currency_name
-            notify_close_to_groups = template.notify_close_to_groups
+            notify_close_to_groups = template.notify_close_to_groups !== undefined ? template.notify_close_to_groups : notify_close_to_groups
             if (template.type_limits) {
                 type_limits = { ...type_limits, ...template.type_limits }
             }
@@ -1726,16 +1757,20 @@ export default function Dealer() {
         if (!user?.id) return
         try {
             setLoadingTemplates(true)
-            const { data, error } = await supabase
-                .from('dealer_lottery_templates')
-                .select('*')
-                .eq('dealer_id', user.id)
+            const [templatesRes, profileRes] = await Promise.all([
+                supabase.from('dealer_lottery_templates').select('*').eq('dealer_id', user.id),
+                supabase.from('profiles').select('allowed_lottery_types').eq('id', user.id).single()
+            ])
 
-            if (error) throw error
+            if (profileRes.data?.allowed_lottery_types && Array.isArray(profileRes.data.allowed_lottery_types)) {
+                setAllowedLotteryTypes(profileRes.data.allowed_lottery_types)
+            }
+
+            if (templatesRes.error) throw templatesRes.error
 
             const templateMap = {}
-            if (data) {
-                data.forEach(t => {
+            if (templatesRes.data) {
+                templatesRes.data.forEach(t => {
                     templateMap[t.lottery_type] = t
                 })
             }
@@ -3163,6 +3198,14 @@ export default function Dealer() {
     }
     async function handleCreateRound() {
         try {
+            const allowedList = (allowedLotteryTypes && allowedLotteryTypes.length > 0)
+                ? allowedLotteryTypes
+                : (profile?.allowed_lottery_types && profile.allowed_lottery_types.length > 0 ? profile.allowed_lottery_types : Object.keys(LOTTERY_TYPES))
+            if (!allowedList.includes(roundForm.lottery_type)) {
+                toast.error(`ประเภทหวย ${LOTTERY_TYPES[roundForm.lottery_type] || roundForm.lottery_type} ยังไม่ได้รับอนุญาตให้สร้าง`)
+                return
+            }
+
             // Combine date and time - store as ISO string with timezone
             const openDateTime = new Date(`${roundForm.open_date}T${roundForm.open_time}:00`)
             const closeDateTime = new Date(`${roundForm.close_date}T${roundForm.close_time}:00`)
@@ -5281,16 +5324,23 @@ export default function Dealer() {
                             <div className="form-group">
                                 <label className="form-label">ประเภทหวย</label>
                                 <div className="lottery-type-grid">
-                                    {Object.entries(LOTTERY_TYPES).map(([key, label]) => (
-                                        <button
-                                            key={key}
-                                            type="button"
-                                            className={`type-option ${roundForm.lottery_type === key ? 'active' : ''}`}
-                                            onClick={() => handleLotteryTypeChange(key)}
-                                        >
-                                            {label}
-                                        </button>
-                                    ))}
+                                    {Object.entries(LOTTERY_TYPES)
+                                        .filter(([key]) => {
+                                            const allowedList = (allowedLotteryTypes && allowedLotteryTypes.length > 0)
+                                                ? allowedLotteryTypes
+                                                : (profile?.allowed_lottery_types && profile.allowed_lottery_types.length > 0 ? profile.allowed_lottery_types : Object.keys(LOTTERY_TYPES))
+                                            return allowedList.includes(key)
+                                        })
+                                        .map(([key, label]) => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                className={`type-option ${roundForm.lottery_type === key ? 'active' : ''}`}
+                                                onClick={() => handleLotteryTypeChange(key)}
+                                            >
+                                                {label}
+                                            </button>
+                                        ))}
                                 </div>
                             </div>
 
