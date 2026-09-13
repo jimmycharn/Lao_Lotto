@@ -1301,17 +1301,17 @@
     
     .line-number {
         min-width: 18px;
-        font-size: 0.85rem;
+        font-size: calc(0.85rem * var(--form-font-scale, 1));
     }
     
     .line-text {
-        font-size: 1rem;
+        font-size: calc(1rem * var(--form-font-scale, 1));
         letter-spacing: -0.3px;
     }
     
     /* Make type text smaller and thinner on mobile */
     .line-text .type-suffix {
-        font-size: 0.8rem;
+        font-size: calc(0.8rem * var(--form-font-scale, 1));
         font-weight: 400;
         opacity: 0.8;
         margin-left: -1px;
@@ -1322,11 +1322,11 @@
     }
     
     .line-expand {
-        font-size: 0.6rem;
+        font-size: calc(0.65rem * var(--form-font-scale, 1));
     }
     
     .line-total {
-        font-size: 0.7rem;
+        font-size: calc(0.85rem * var(--form-font-scale, 1));
     }
 }
 
@@ -1614,7 +1614,7 @@
     
     .save-btn-inline {
         padding: 0.5rem 0.75rem;
-        font-size: 0.8rem;
+        font-size: calc(0.85rem * var(--form-font-scale, 1));
         min-height: 36px;
         white-space: nowrap;
         flex-shrink: 0;
@@ -2216,7 +2216,7 @@ html.theme-light .write-modal-note-row .note-input::placeholder {
     html.theme-light .line-text {
         color: #000000 !important;
         font-weight: 900 !important;
-        font-size: 1.2rem !important;
+        font-size: calc(1.15rem * var(--form-font-scale, 1)) !important;
         -webkit-font-smoothing: antialiased !important;
         text-shadow: 0 0 0.5px #000000 !important;
         letter-spacing: 0.5px !important;
@@ -2226,27 +2226,28 @@ html.theme-light .write-modal-note-row .note-input::placeholder {
     html.theme-light .line-number {
         color: #000000 !important;
         font-weight: 800 !important;
-        font-size: 0.95rem !important;
+        font-size: calc(0.95rem * var(--form-font-scale, 1)) !important;
     }
 
     [data-theme="light"] .line-total,
     html.theme-light .line-total {
         color: #15803d !important;
         font-weight: 900 !important;
-        font-size: 1rem !important;
+        font-size: calc(1rem * var(--form-font-scale, 1)) !important;
     }
 
     [data-theme="light"] .write-modal-total .total-amount,
     html.theme-light .write-modal-total .total-amount {
         color: #15803d !important;
         font-weight: 900 !important;
-        font-size: 1.15rem !important;
+        font-size: calc(1.15rem * var(--form-font-scale, 1)) !important;
     }
 
     [data-theme="light"] .write-modal-total .line-count,
     html.theme-light .write-modal-total .line-count {
         color: #000000 !important;
         font-weight: 700 !important;
+        font-size: calc(0.9rem * var(--form-font-scale, 1)) !important;
     }
 
     [data-theme="light"] .number-pad-4col button,
@@ -2260,7 +2261,7 @@ html.theme-light .write-modal-note-row .note-input::placeholder {
     html.theme-light .line-item.current .line-text {
         color: #166534 !important;
         font-weight: 900 !important;
-        font-size: 1.25rem !important;
+        font-size: calc(1.25rem * var(--form-font-scale, 1)) !important;
     }
 
     [data-theme="light"] .line-item.current .line-number,
