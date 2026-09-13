@@ -76,6 +76,7 @@ import ReferralAffiliateTab from '../components/referral/ReferralAffiliateTab'
 import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 import MemberSettlementInline from '../components/dealer/MemberSettlementInline'
 import UpstreamSettlementInline from '../components/dealer/UpstreamSettlementInline'
+import UpstreamDealersTab from '../components/dealer/UpstreamDealersTab'
 import { getRoundCloseDate } from '../utils/crossRoundOffsetCalculator'
 import {
     getNextKeyboardFocusTarget,
@@ -5474,100 +5475,111 @@ export default function Dealer() {
 
                             {/* Limits by Bet Type - Based on selected lottery type */}
                             <div className="form-section">
-                                <h4>ค่าอั้นตามประเภทเลข ({LOTTERY_TYPES[roundForm.lottery_type]})</h4>
-                                <p className="form-hint" style={{ marginBottom: '1rem', opacity: 0.7, fontSize: '0.85rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                    <h4 style={{ margin: 0 }}>ค่าอั้นตามประเภทเลข ({LOTTERY_TYPES[roundForm.lottery_type]})</h4>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', opacity: 0.9 }}>
+                                        (เลื่อนซ้าย-ขวาเพื่อตั้งค่า)
+                                    </span>
+                                </div>
+                                <p className="form-hint" style={{ marginBottom: '0.75rem', opacity: 0.7, fontSize: '0.85rem' }}>
                                     อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
                                 </p>
 
-                                <div style={{ 
-                                    display: 'grid', 
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', 
-                                    gap: '0.5rem' 
-                                }}>
-                                    {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
-                                        <div key={key} style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            padding: '0.6rem 0.8rem',
-                                            background: 'rgba(212, 175, 55, 0.08)',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid rgba(212, 175, 55, 0.2)'
+                                <div className="round-limits-scroll-container">
+                                    <div className="round-limits-table-wrapper">
+                                        <div style={{ 
+                                            display: 'grid', 
+                                            gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', 
+                                            gap: '0.5rem' 
                                         }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                                <span style={{ fontWeight: 500, color: 'var(--color-primary)', fontSize: '0.9rem', minWidth: '65px' }}>
-                                                    {config.label}
-                                                </span>
-                                                {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
-                                                <input
-                                                    type="number"
-                                                    className="form-input small"
-                                                    style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
-                                                    value={roundForm.type_limits[key] || 0}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_limits: {
-                                                            ...roundForm.type_limits,
-                                                            [key]: parseInt(e.target.value) || 0
-                                                        }
-                                                    })}
-                                                    onFocus={handleInputFocus}
-                                                    onKeyDown={handleInputKeyDown}
-                                                />
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
-                                                <input
-                                                    type="time"
-                                                    className="form-input small"
-                                                    style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
-                                                    value={roundForm.type_close_times?.[key] || ''}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_close_times: {
-                                                            ...roundForm.type_close_times,
-                                                            [key]: e.target.value
-                                                        }
-                                                    })}
-                                                />
-                                                <select
-                                                    className="form-input small"
-                                                    style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
-                                                    value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_close_time_behaviors: {
-                                                            ...roundForm.type_close_time_behaviors,
-                                                            [key]: e.target.value
-                                                        }
-                                                    })}
-                                                >
-                                                    <option value="close_immediately">ปิดรับทันที</option>
-                                                    <option value="return_excess">คืนเลขเกิน</option>
-                                                </select>
-                                            </div>
+                                            {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
+                                                <div key={key} style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '0.6rem 0.8rem',
+                                                    background: 'rgba(212, 175, 55, 0.08)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid rgba(212, 175, 55, 0.2)',
+                                                    whiteSpace: 'nowrap'
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0, marginRight: '0.5rem' }}>
+                                                        <span style={{ fontWeight: 500, color: 'var(--color-primary)', fontSize: '0.9rem', minWidth: '65px' }}>
+                                                            {config.label}
+                                                        </span>
+                                                        {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'nowrap', flexShrink: 0 }}>
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
+                                                        <input
+                                                            type="number"
+                                                            className="form-input small"
+                                                            style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
+                                                            value={roundForm.type_limits[key] || 0}
+                                                            onChange={e => setRoundForm({
+                                                                ...roundForm,
+                                                                type_limits: {
+                                                                    ...roundForm.type_limits,
+                                                                    [key]: parseInt(e.target.value) || 0
+                                                                }
+                                                            })}
+                                                            onFocus={handleInputFocus}
+                                                            onKeyDown={handleInputKeyDown}
+                                                        />
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
+                                                        <input
+                                                            type="time"
+                                                            className="form-input small"
+                                                            style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
+                                                            value={roundForm.type_close_times?.[key] || ''}
+                                                            onChange={e => setRoundForm({
+                                                                ...roundForm,
+                                                                type_close_times: {
+                                                                    ...roundForm.type_close_times,
+                                                                    [key]: e.target.value
+                                                                }
+                                                            })}
+                                                        />
+                                                        <select
+                                                            className="form-input small"
+                                                            style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
+                                                            value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
+                                                            onChange={e => setRoundForm({
+                                                                ...roundForm,
+                                                                type_close_time_behaviors: {
+                                                                    ...roundForm.type_close_time_behaviors,
+                                                                    [key]: e.target.value
+                                                                }
+                                                            })}
+                                                        >
+                                                            <option value="close_immediately">ปิดรับทันที</option>
+                                                            <option value="return_excess">คืนเลขเกิน</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="modal-footer">
-                            <div style={{ marginRight: 'auto', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <button className="btn btn-secondary" onClick={handleResetToSystemDefaults} title="คืนค่าข้อมูลเป็นค่าที่ระบบกำหนดจากโรงงาน">
+                        <div className="modal-footer round-modal-footer">
+                            <div className="round-footer-grid">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary round-footer-btn"
+                                    onClick={handleResetToSystemDefaults}
+                                    title="คืนค่าข้อมูลเป็นค่าที่ระบบกำหนดจากโรงงาน"
+                                >
                                     <FiRotateCcw /> ใช้ค่าเริ่มต้นระบบ
                                 </button>
                                 <button
-                                    className="btn"
+                                    type="button"
+                                    className="btn round-footer-btn round-save-template-btn"
                                     onClick={handleSaveTemplate}
                                     disabled={savingTemplate}
-                                    style={{
-                                        background: 'rgba(212, 175, 55, 0.15)',
-                                        color: 'var(--color-primary)',
-                                        border: '1px solid var(--color-primary)'
-                                    }}
                                 >
                                     {savingTemplate ? 'กำลังบันทึก...' : (
                                         <>
@@ -5575,13 +5587,21 @@ export default function Dealer() {
                                         </>
                                     )}
                                 </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary round-footer-btn round-footer-btn-cancel"
+                                    onClick={() => setShowCreateModal(false)}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary round-footer-btn"
+                                    onClick={handleCreateRound}
+                                >
+                                    <FiCheck /> สร้างงวด
+                                </button>
                             </div>
-                            <button className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
-                                ยกเลิก
-                            </button>
-                            <button className="btn btn-primary" onClick={handleCreateRound}>
-                                <FiCheck /> สร้างงวด
-                            </button>
                         </div>
                     </div>
                 </div>
@@ -5748,93 +5768,113 @@ export default function Dealer() {
 
                             {/* Limits by Bet Type - Compact Style */}
                             <div className="form-section">
-                                <h4>ค่าอั้นตามประเภทเลข ({LOTTERY_TYPES[roundForm.lottery_type]})</h4>
-                                <p className="form-hint" style={{ marginBottom: '1rem', opacity: 0.7, fontSize: '0.85rem' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                    <h4 style={{ margin: 0 }}>ค่าอั้นตามประเภทเลข ({LOTTERY_TYPES[roundForm.lottery_type]})</h4>
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-primary)', opacity: 0.9 }}>
+                                        (เลื่อนซ้าย-ขวาเพื่อตั้งค่า)
+                                    </span>
+                                </div>
+                                <p className="form-hint" style={{ marginBottom: '0.75rem', opacity: 0.7, fontSize: '0.85rem' }}>
                                     อัตราจ่ายจะใช้ตามที่ตั้งค่าให้แต่ละลูกค้า
                                 </p>
 
-                                <div style={{ 
-                                    display: 'grid', 
-                                    gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', 
-                                    gap: '0.5rem' 
-                                }}>
-                                    {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
-                                        <div key={key} style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            justifyContent: 'space-between',
-                                            padding: '0.6rem 0.8rem',
-                                            background: 'rgba(212, 175, 55, 0.08)',
-                                            borderRadius: 'var(--radius-sm)',
-                                            border: '1px solid rgba(212, 175, 55, 0.2)'
+                                <div className="round-limits-scroll-container">
+                                    <div className="round-limits-table-wrapper">
+                                        <div style={{ 
+                                            display: 'grid', 
+                                            gridTemplateColumns: 'repeat(auto-fill, minmax(450px, 1fr))', 
+                                            gap: '0.5rem' 
                                         }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                                <span style={{ fontWeight: 500, color: 'var(--color-primary)', fontSize: '0.9rem', minWidth: '65px' }}>
-                                                    {config.label}
-                                                </span>
-                                                {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
-                                            </div>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
-                                                <input
-                                                    type="number"
-                                                    className="form-input small"
-                                                    style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
-                                                    value={roundForm.type_limits[key] || 0}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_limits: {
-                                                            ...roundForm.type_limits,
-                                                            [key]: parseInt(e.target.value) || 0
-                                                        }
-                                                    })}
-                                                    onFocus={handleInputFocus}
-                                                    onKeyDown={handleInputKeyDown}
-                                                />
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
-                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
-                                                <input
-                                                    type="time"
-                                                    className="form-input small"
-                                                    style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
-                                                    value={roundForm.type_close_times?.[key] || ''}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_close_times: {
-                                                            ...roundForm.type_close_times,
-                                                            [key]: e.target.value
-                                                        }
-                                                    })}
-                                                />
-                                                <select
-                                                    className="form-input small"
-                                                    style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
-                                                    value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
-                                                    onChange={e => setRoundForm({
-                                                        ...roundForm,
-                                                        type_close_time_behaviors: {
-                                                            ...roundForm.type_close_time_behaviors,
-                                                            [key]: e.target.value
-                                                        }
-                                                    })}
-                                                >
-                                                    <option value="close_immediately">ปิดรับทันที</option>
-                                                    <option value="return_excess">คืนเลขเกิน</option>
-                                                </select>
-                                            </div>
+                                            {Object.entries(BET_TYPES_BY_LOTTERY[roundForm.lottery_type] || {}).map(([key, config]) => (
+                                                <div key={key} style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '0.6rem 0.8rem',
+                                                    background: 'rgba(212, 175, 55, 0.08)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px solid rgba(212, 175, 55, 0.2)',
+                                                    whiteSpace: 'nowrap'
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0, marginRight: '0.5rem' }}>
+                                                        <span style={{ fontWeight: 500, color: 'var(--color-primary)', fontSize: '0.9rem', minWidth: '65px' }}>
+                                                            {config.label}
+                                                        </span>
+                                                        {config.isSet && <span className="set-badge" style={{ fontSize: '0.65rem', padding: '0.1rem 0.25rem' }}>ชุด</span>}
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'nowrap', flexShrink: 0 }}>
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>อั้น</span>
+                                                        <input
+                                                            type="number"
+                                                            className="form-input small"
+                                                            style={{ width: '80px', textAlign: 'center', padding: '0.35rem 0.5rem', fontSize: '0.9rem' }}
+                                                            value={roundForm.type_limits[key] || 0}
+                                                            onChange={e => setRoundForm({
+                                                                ...roundForm,
+                                                                type_limits: {
+                                                                    ...roundForm.type_limits,
+                                                                    [key]: parseInt(e.target.value) || 0
+                                                                }
+                                                            })}
+                                                            onFocus={handleInputFocus}
+                                                            onKeyDown={handleInputKeyDown}
+                                                        />
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', minWidth: '25px' }}>{config.isSet ? 'ชุด' : roundForm.currency_name}</span>
+                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginLeft: '0.25rem' }}>ปิด</span>
+                                                        <input
+                                                            type="time"
+                                                            className="form-input small"
+                                                            style={{ width: '85px', padding: '0.35rem 0.3rem', fontSize: '0.85rem' }}
+                                                            value={roundForm.type_close_times?.[key] || ''}
+                                                            onChange={e => setRoundForm({
+                                                                ...roundForm,
+                                                                type_close_times: {
+                                                                    ...roundForm.type_close_times,
+                                                                    [key]: e.target.value
+                                                                }
+                                                            })}
+                                                        />
+                                                        <select
+                                                            className="form-input small"
+                                                            style={{ width: '100px', padding: '0.35rem 0.3rem', fontSize: '0.85rem', marginLeft: '0.25rem' }}
+                                                            value={roundForm.type_close_time_behaviors?.[key] || 'close_immediately'}
+                                                            onChange={e => setRoundForm({
+                                                                ...roundForm,
+                                                                type_close_time_behaviors: {
+                                                                    ...roundForm.type_close_time_behaviors,
+                                                                    [key]: e.target.value
+                                                                }
+                                                            })}
+                                                        >
+                                                            <option value="close_immediately">ปิดรับทันที</option>
+                                                            <option value="return_excess">คืนเลขเกิน</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => { setShowEditModal(false); setEditingRound(null); }}>
-                                ยกเลิก
-                            </button>
-                            <button className="btn btn-primary" onClick={handleUpdateRound}>
-                                <FiCheck /> บันทึกการแก้ไข
-                            </button>
+                        <div className="modal-footer round-modal-footer">
+                            <div className="round-footer-grid round-footer-grid-edit">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary round-footer-btn round-footer-btn-cancel"
+                                    onClick={() => { setShowEditModal(false); setEditingRound(null); }}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-primary round-footer-btn"
+                                    onClick={handleUpdateRound}
+                                >
+                                    <FiCheck /> บันทึกการแก้ไข
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -7873,1375 +7913,6 @@ function SubmissionsModal({ round, onClose }) {
 }
 
 
-
-// Upstream Dealer Settings Inline Component - For displaying commission and payout rates inline
-function UpstreamDealerSettingsInline({ dealer, isLinked, onSaved }) {
-    const [loading, setLoading] = useState(true)
-    const [saving, setSaving] = useState(false)
-    const [activeTab, setActiveTab] = useState('thai')
-
-    const getDefaultSettings = () => ({
-        thai: {
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_top': { commission: 30, payout: 550 },
-            '3_tod': { commission: 15, payout: 100 },
-            '3_bottom': { commission: 15, payout: 135 },
-            '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
-        },
-        lao: {
-            '4_set': { 
-                commission: 25, 
-                setPrice: 120,
-                isSet: true,
-                prizes: {
-                    '4_straight_set': 100000,
-                    '4_tod_set': 4000,
-                    '3_straight_set': 30000,
-                    '3_tod_set': 3000,
-                    '2_front_set': 1000,
-                    '2_back_set': 1000
-                }
-            },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
-        },
-        hanoi: {
-            '4_set': { 
-                commission: 25, 
-                setPrice: 120,
-                isSet: true,
-                prizes: {
-                    '4_straight_set': 100000,
-                    '4_tod_set': 4000,
-                    '3_straight_set': 30000,
-                    '3_tod_set': 3000,
-                    '2_front_set': 1000,
-                    '2_back_set': 1000
-                }
-            },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
-        },
-        stock: {
-            '2_top': { commission: 15, payout: 65 },
-            '2_bottom': { commission: 15, payout: 65 }
-        }
-    })
-
-    const [settings, setSettings] = useState(getDefaultSettings())
-
-    const BET_LABELS = {
-        thai: {
-            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวบน', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
-            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
-        },
-        lao: {
-            '4_set': '4 ตัวชุด',
-            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
-            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
-        },
-        hanoi: {
-            '4_set': '4 ตัวชุด',
-            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
-            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
-        },
-        stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
-    }
-
-    const SET_PRIZE_LABELS = {
-        '4_straight_set': '4 ตัวตรงชุด',
-        '4_tod_set': '4 ตัวโต๊ดชุด',
-        '3_straight_set': '3 ตัวตรงชุด',
-        '3_tod_set': '3 ตัวโต๊ดชุด',
-        '2_front_set': '2 ตัวหน้าชุด',
-        '2_back_set': '2 ตัวหลังชุด'
-    }
-
-    const LOTTERY_TABS = [
-        { key: 'thai', label: 'หวยไทย' },
-        { key: 'lao', label: 'หวยลาว' },
-        { key: 'hanoi', label: 'หวยฮานอย' },
-        { key: 'stock', label: 'หวยหุ้น' }
-    ]
-
-    useEffect(() => {
-        fetchSettings()
-    }, [dealer.id])
-
-    async function fetchSettings() {
-        setLoading(true)
-        try {
-            if (dealer.lottery_settings) {
-                const merged = { ...getDefaultSettings() }
-                Object.keys(dealer.lottery_settings).forEach(tab => {
-                    if (merged[tab]) {
-                        Object.keys(dealer.lottery_settings[tab]).forEach(key => {
-                            if (merged[tab][key]) {
-                                merged[tab][key] = { ...merged[tab][key], ...dealer.lottery_settings[tab][key] }
-                            }
-                        })
-                    }
-                })
-                setSettings(merged)
-            }
-        } catch (error) {
-            console.error('Error loading settings:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    async function handleSave() {
-        setSaving(true)
-        try {
-            const { error } = await supabase
-                .from('dealer_upstream_connections')
-                .update({
-                    lottery_settings: settings,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', dealer.id)
-
-            if (error) throw error
-            toast.success('บันทึกการตั้งค่าสำเร็จ')
-            onSaved?.()
-        } catch (error) {
-            console.error('Error saving settings:', error)
-            toast.error('เกิดข้อผิดพลาด: ' + error.message)
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const updateSetting = (tab, key, field, value) => {
-        setSettings(prev => ({
-            ...prev,
-            [tab]: {
-                ...prev[tab],
-                [key]: { ...prev[tab][key], [field]: parseFloat(value) || 0 }
-            }
-        }))
-    }
-
-    const updateSetPrize = (tab, prizeKey, value) => {
-        setSettings(prev => ({
-            ...prev,
-            [tab]: {
-                ...prev[tab],
-                '4_set': {
-                    ...prev[tab]['4_set'],
-                    prizes: {
-                        ...prev[tab]['4_set'].prizes,
-                        [prizeKey]: parseFloat(value) || 0
-                    }
-                }
-            }
-        }))
-    }
-
-    // Handle Enter key to jump to next input and select all
-    const handleSettingsInputKeyDown = (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault()
-            const form = e.target.closest('.upstream-dealer-settings-inline')
-            if (!form) return
-
-            const inputs = Array.from(form.querySelectorAll('input[type="number"]:not([disabled])'))
-            const currentIndex = inputs.indexOf(e.target)
-            
-            if (currentIndex >= 0 && currentIndex < inputs.length - 1) {
-                const nextInput = inputs[currentIndex + 1]
-                nextInput.focus()
-                nextInput.select()
-            }
-        }
-    }
-
-    // Handle focus to select all text
-    const handleSettingsInputFocus = (e) => {
-        e.target.select()
-    }
-
-    if (loading) {
-        return <div className="loading-state"><div className="spinner"></div></div>
-    }
-
-    // For linked dealers, show read-only view
-    const readOnly = isLinked
-
-    return (
-        <div className="upstream-dealer-settings-inline">
-            {readOnly && (
-                <div style={{ 
-                    background: 'rgba(212, 175, 55, 0.1)', 
-                    border: '1px solid rgba(212, 175, 55, 0.3)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '0.75rem 1rem',
-                    marginBottom: '1rem',
-                    fontSize: '0.9rem',
-                    color: 'var(--color-warning)'
-                }}>
-                    <FiInfo style={{ marginRight: '0.5rem' }} />
-                    ค่าคอมและอัตราจ่ายถูกกำหนดโดยเจ้ามือที่รับเลขจากคุณ (แก้ไขไม่ได้)
-                </div>
-            )}
-            {!readOnly && (
-                <div style={{ 
-                    background: 'rgba(76, 175, 80, 0.1)', 
-                    border: '1px solid rgba(76, 175, 80, 0.3)',
-                    borderRadius: 'var(--radius-md)',
-                    padding: '0.75rem 1rem',
-                    marginBottom: '1rem',
-                    fontSize: '0.9rem',
-                    color: 'var(--color-success)'
-                }}>
-                    <FiEdit2 style={{ marginRight: '0.5rem' }} />
-                    กรอกค่าคอมและอัตราจ่ายที่เจ้ามือนอกระบบให้คุณ เพื่อใช้คำนวณรายได้
-                </div>
-            )}
-
-            {/* Lottery Type Tabs */}
-            <div className="settings-tabs" style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-                {LOTTERY_TABS.map(tab => (
-                    <button
-                        key={tab.key}
-                        className={`btn btn-sm ${activeTab === tab.key ? 'btn-primary' : 'btn-outline'}`}
-                        onClick={() => setActiveTab(tab.key)}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </div>
-
-            {/* 4 ตัวชุด Section for Lao or Hanoi */}
-            {(activeTab === 'lao' || activeTab === 'hanoi') && settings[activeTab]?.['4_set'] && (
-                <div className="set-settings-section" style={{ 
-                    marginBottom: '1.5rem', 
-                    padding: '1rem',
-                    background: 'rgba(212, 175, 55, 0.05)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid rgba(212, 175, 55, 0.2)'
-                }}>
-                    <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)', fontSize: '1rem' }}>
-                        <FiPackage style={{ marginRight: '0.5rem' }} />
-                        4 ตัวชุด
-                    </h4>
-                    
-                    {/* Set Price and Commission */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ราคาชุดละ</label>
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={settings[activeTab]['4_set'].setPrice || 0}
-                                onChange={e => updateSetting(activeTab, '4_set', 'setPrice', e.target.value)}
-                                onKeyDown={handleSettingsInputKeyDown}
-                                onFocus={handleSettingsInputFocus}
-                                disabled={readOnly}
-                                style={{ width: '100%' }}
-                            />
-                        </div>
-                        <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ค่าคอม (%)</label>
-                            <input
-                                type="number"
-                                className="form-input"
-                                value={settings[activeTab]['4_set'].commission || 0}
-                                onChange={e => updateSetting(activeTab, '4_set', 'commission', e.target.value)}
-                                onKeyDown={handleSettingsInputKeyDown}
-                                onFocus={handleSettingsInputFocus}
-                                disabled={readOnly}
-                                style={{ width: '100%' }}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Prize Settings */}
-                    <div style={{ fontSize: '0.9rem', fontWeight: '500', marginBottom: '0.5rem', color: 'var(--color-text)' }}>อัตราจ่ายรางวัล</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
-                        {Object.entries(settings[activeTab]['4_set'].prizes || {}).map(([prizeKey, prizeValue]) => (
-                            <div key={prizeKey}>
-                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>
-                                    {SET_PRIZE_LABELS[prizeKey] || prizeKey}
-                                </label>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    value={prizeValue}
-                                    onChange={e => updateSetPrize(activeTab, prizeKey, e.target.value)}
-                                    onKeyDown={handleSettingsInputKeyDown}
-                                    onFocus={handleSettingsInputFocus}
-                                    disabled={readOnly}
-                                    style={{ width: '100%', fontSize: '0.9rem' }}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Regular Bet Types */}
-            <div className="bet-settings-grid" style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-                gap: '0.75rem' 
-            }}>
-                {Object.entries(BET_LABELS[activeTab] || {}).filter(([key]) => key !== '4_set').map(([key, label]) => (
-                    <div key={key} className="bet-setting-row" style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        padding: '0.5rem 0.75rem',
-                        background: 'var(--color-surface-light)',
-                        borderRadius: 'var(--radius-sm)'
-                    }}>
-                        <span style={{ flex: '1', fontSize: '0.9rem', color: 'var(--color-text)' }}>{label}</span>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>คอม%</span>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    value={settings[activeTab]?.[key]?.commission || 0}
-                                    onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
-                                    onKeyDown={handleSettingsInputKeyDown}
-                                    onFocus={handleSettingsInputFocus}
-                                    disabled={readOnly}
-                                    style={{ width: '60px', textAlign: 'center', fontSize: '0.85rem', padding: '0.3rem' }}
-                                />
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>จ่าย</span>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    value={settings[activeTab]?.[key]?.payout || 0}
-                                    onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
-                                    onKeyDown={handleSettingsInputKeyDown}
-                                    onFocus={handleSettingsInputFocus}
-                                    disabled={readOnly}
-                                    style={{ width: '70px', textAlign: 'center', fontSize: '0.85rem', padding: '0.3rem' }}
-                                />
-                            </div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Save Button - Only for non-linked dealers */}
-            {!readOnly && (
-                <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                    <button 
-                        className="btn btn-primary" 
-                        onClick={handleSave}
-                        disabled={saving}
-                    >
-                        {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึกการตั้งค่า</>}
-                    </button>
-                </div>
-            )}
-        </div>
-    )
-}
-
-// Upstream Dealer Accordion Item Component
-function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onDelete, onToggleBlock, onSaveSettings }) {
-    const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings'
-    const isLinked = dealer.is_linked
-    const isBlocked = dealer.is_blocked
-
-    return (
-        <div className={`upstream-dealer-accordion-item ${isExpanded ? 'expanded' : ''}`} style={{
-            background: 'var(--color-surface)',
-            borderRadius: 'var(--radius-lg)',
-            marginBottom: '1rem',
-            border: isLinked ? '2px solid var(--color-success)' : '1px solid var(--color-border)',
-            overflow: 'hidden',
-            transition: 'all 0.3s ease',
-            opacity: isBlocked ? 0.7 : 1
-        }}>
-            {/* Header - Click to toggle */}
-            <div
-                className="upstream-dealer-accordion-header"
-                onClick={onToggle}
-                style={{
-                    padding: '1.25rem 1.5rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    cursor: 'pointer',
-                    background: isExpanded ? 'var(--color-surface-light)' : 'transparent',
-                    borderBottom: isExpanded ? '1px solid var(--color-border)' : 'none'
-                }}
-            >
-                <div className="dealer-info-summary" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <div className="dealer-avatar" style={{
-                        width: '40px',
-                        height: '40px',
-                        borderRadius: '50%',
-                        background: isLinked ? 'var(--color-success)' : 'var(--color-warning)',
-                        color: '#fff',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '1.2rem',
-                        fontWeight: 'bold'
-                    }}>
-                        {isLinked ? <FiCheck /> : <FiUser />}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span className="dealer-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
-                                {dealer.upstream_name || 'ไม่ระบุชื่อ'}
-                            </span>
-                            {isLinked && (
-                                <span style={{
-                                    background: 'var(--color-success)',
-                                    color: '#fff',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.7rem',
-                                    fontWeight: '600'
-                                }}>
-                                    ในระบบ
-                                </span>
-                            )}
-                            {isBlocked && (
-                                <span style={{
-                                    background: 'var(--color-danger)',
-                                    color: '#fff',
-                                    padding: '0.15rem 0.5rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.7rem',
-                                    fontWeight: '600'
-                                }}>
-                                    <FiSlash size={10} /> บล็อก
-                                </span>
-                            )}
-                        </div>
-                        <span className="dealer-contact" style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
-                            {isLinked && dealer.upstream_profile ? dealer.upstream_profile.email : (dealer.upstream_contact || 'ไม่มีข้อมูลติดต่อ')}
-                        </span>
-                    </div>
-                </div>
-                <div className="accordion-icon" style={{
-                    color: isExpanded ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.3s ease'
-                }}>
-                    <FiChevronDown size={24} />
-                </div>
-            </div>
-
-            {/* Body - Only visible if expanded */}
-            {isExpanded && (
-                <div className="upstream-dealer-accordion-body" style={{ padding: '1.5rem' }}>
-                    {/* Internal Tabs */}
-                    <div className="dealer-internal-tabs" style={{
-                        display: 'flex',
-                        gap: '1rem',
-                        marginBottom: '1.5rem',
-                        borderBottom: '1px solid var(--color-border)'
-                    }}>
-                        <button
-                            onClick={() => setActiveTab('info')}
-                            style={{
-                                padding: '0.75rem 1rem',
-                                background: 'transparent',
-                                border: 'none',
-                                borderBottom: activeTab === 'info' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                                color: activeTab === 'info' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                fontWeight: '500',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem'
-                            }}
-                        >
-                            <FiUser /> โปรไฟล์
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('settings')}
-                            style={{
-                                padding: '0.75rem 1rem',
-                                background: 'transparent',
-                                border: 'none',
-                                borderBottom: activeTab === 'settings' ? '2px solid var(--color-primary)' : '2px solid transparent',
-                                color: activeTab === 'settings' ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                                fontWeight: '500',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem'
-                            }}
-                        >
-                            <FiSettings /> ค่าคอม/อัตราจ่าย
-                        </button>
-                    </div>
-
-                    {/* Tab Content */}
-                    {activeTab === 'info' && (
-                        <div className="dealer-info-content" style={{ animation: 'fadeIn 0.3s ease' }}>
-                            <div className="info-grid" style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                                gap: '1.5rem'
-                            }}>
-                                <div className="info-item">
-                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ชื่อเจ้ามือ</label>
-                                    <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_name || '-'}</div>
-                                </div>
-                                {isLinked && dealer.upstream_profile && (
-                                    <>
-                                        <div className="info-item">
-                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>อีเมล</label>
-                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_profile.email || '-'}</div>
-                                        </div>
-                                        <div className="info-item">
-                                            <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>เบอร์โทร</label>
-                                            <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_profile.phone || '-'}</div>
-                                        </div>
-                                    </>
-                                )}
-                                {!isLinked && (
-                                    <div className="info-item">
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ข้อมูลติดต่อ</label>
-                                        <div style={{ fontSize: '1.1rem', color: 'var(--color-text)' }}>{dealer.upstream_contact || '-'}</div>
-                                    </div>
-                                )}
-                                <div className="info-item">
-                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>ประเภท</label>
-                                    <div style={{ fontSize: '1.1rem', color: isLinked ? 'var(--color-success)' : 'var(--color-warning)' }}>
-                                        {isLinked ? 'เจ้ามือในระบบ' : 'เจ้ามือนอกระบบ'}
-                                    </div>
-                                </div>
-                                <div className="info-item">
-                                    <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะ</label>
-                                    <div style={{ fontSize: '1.1rem', color: isBlocked ? 'var(--color-danger)' : 'var(--color-success)' }}>
-                                        {isBlocked ? 'ถูกบล็อก' : 'ปกติ'}
-                                    </div>
-                                </div>
-                                {dealer.notes && (
-                                    <div className="info-item" style={{ gridColumn: '1 / -1' }}>
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>หมายเหตุ</label>
-                                        <div style={{ fontSize: '1rem', color: 'var(--color-text)' }}>{dealer.notes}</div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                <button
-                                    className="btn btn-outline btn-sm"
-                                    onClick={(e) => { e.stopPropagation(); onToggleBlock(); }}
-                                    style={{ color: isBlocked ? 'var(--color-success)' : 'var(--color-warning)', borderColor: isBlocked ? 'var(--color-success)' : 'var(--color-warning)' }}
-                                >
-                                    {isBlocked ? <><FiCheck /> ปลดบล็อก</> : <><FiSlash /> บล็อก</>}
-                                </button>
-                                {!isLinked && (
-                                    <button
-                                        className="btn btn-outline btn-sm"
-                                        onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                                    >
-                                        <FiEdit2 /> แก้ไข
-                                    </button>
-                                )}
-                                <button
-                                    className="btn btn-outline btn-sm"
-                                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                                    style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }}
-                                >
-                                    <FiTrash2 /> {isLinked ? 'ยกเลิกการเชื่อมต่อ' : 'ลบ'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {activeTab === 'settings' && (
-                        <div className="dealer-settings-content" style={{ animation: 'fadeIn 0.3s ease' }}>
-                            <UpstreamDealerSettingsInline
-                                dealer={dealer}
-                                isLinked={isLinked}
-                                onSaved={onSaveSettings}
-                            />
-                        </div>
-                    )}
-                </div>
-            )}
-        </div>
-    )
-}
-
-// Upstream Dealers Tab - For managing dealers to transfer bets to
-function UpstreamDealersTab({ user, upstreamDealers, setUpstreamDealers, loadingUpstream, setLoadingUpstream, fetchUpstreamDealers: fetchUpstreamDealersProp }) {
-    const [showAddModal, setShowAddModal] = useState(false)
-    const [saving, setSaving] = useState(false)
-    const [editingDealer, setEditingDealer] = useState(null)
-    const [formData, setFormData] = useState({
-        upstream_name: '',
-        upstream_contact: '',
-        notes: ''
-    })
-    const [showSettingsModal, setShowSettingsModal] = useState(false)
-    const [settingsDealer, setSettingsDealer] = useState(null)
-    const [expandedDealerId, setExpandedDealerId] = useState(null)
-
-    // Fetch upstream dealers on mount - only if not already loaded
-    useEffect(() => {
-        if (upstreamDealers.length === 0 && !loadingUpstream) {
-            fetchUpstreamDealers()
-        }
-    }, [user?.id])
-
-    async function fetchUpstreamDealers() {
-        if (fetchUpstreamDealersProp) {
-            return fetchUpstreamDealersProp()
-        }
-        if (!user?.id) {
-            setLoadingUpstream(false)
-            return
-        }
-        setLoadingUpstream(true)
-        
-        // Set a timeout to prevent infinite loading
-        const timeoutId = setTimeout(() => {
-            console.warn('Fetch upstream dealers timeout')
-            setLoadingUpstream(false)
-        }, 10000)
-        
-        try {
-            // Fetch manual upstream connections
-            const { data: manualData, error: manualError } = await supabase
-                .from('dealer_upstream_connections')
-                .select(`
-                    *,
-                    upstream_profile:upstream_dealer_id (
-                        id, full_name, email, phone
-                    )
-                `)
-                .eq('dealer_id', user.id)
-                .order('created_at', { ascending: false })
-
-            // Fetch dealers that user was a member of (excluding self)
-            const { data: membershipData, error: membershipError } = await supabase
-                .from('user_dealer_memberships')
-                .select(`
-                    dealer_id,
-                    status,
-                    created_at,
-                    profiles:dealer_id (
-                        id, full_name, email, phone, role
-                    )
-                `)
-                .eq('user_id', user.id)
-                .eq('status', 'active')
-                .neq('dealer_id', user.id) // Exclude self-membership
-
-            clearTimeout(timeoutId)
-            
-            let allDealers = []
-            
-            // Add manual upstream connections
-            if (!manualError && manualData) {
-                allDealers = [...manualData]
-            }
-            
-            // Add dealers from memberships (convert to upstream format)
-            // Only include profiles with role = 'dealer' (not superadmin or other roles)
-            if (!membershipError && membershipData) {
-                const membershipDealers = membershipData
-                    .filter(m => m.profiles?.id && m.profiles?.role === 'dealer') // Only include dealers
-                    .map(m => ({
-                        id: `membership-${m.dealer_id}`,
-                        dealer_id: user.id,
-                        upstream_dealer_id: m.dealer_id,
-                        upstream_name: m.profiles?.full_name || m.profiles?.email || 'ไม่ระบุชื่อ',
-                        upstream_contact: m.profiles?.phone || m.profiles?.email || '',
-                        upstream_profile: m.profiles,
-                        is_linked: true,
-                        is_from_membership: true, // Mark as from membership
-                        created_at: m.created_at
-                    }))
-                
-                // Merge, avoiding duplicates (by upstream_dealer_id)
-                const existingIds = allDealers.map(d => d.upstream_dealer_id).filter(Boolean)
-                const newDealers = membershipDealers.filter(d => !existingIds.includes(d.upstream_dealer_id))
-                allDealers = [...allDealers, ...newDealers]
-            }
-            
-            setUpstreamDealers(allDealers)
-        } catch (error) {
-            clearTimeout(timeoutId)
-            console.error('Error fetching upstream dealers:', error)
-            setUpstreamDealers([])
-        } finally {
-            setLoadingUpstream(false)
-        }
-    }
-
-    // Open modal for adding new manual dealer
-    function handleOpenAddModal() {
-        setEditingDealer(null)
-        setFormData({ upstream_name: '', upstream_contact: '', notes: '' })
-        setShowAddModal(true)
-    }
-
-    // Open modal for editing
-    function handleEditDealer(dealer) {
-        setEditingDealer(dealer)
-        setFormData({
-            upstream_name: dealer.upstream_name || '',
-            upstream_contact: dealer.upstream_contact || '',
-            notes: dealer.notes || ''
-        })
-        setShowAddModal(true)
-    }
-
-    // Save (add or update)
-    async function handleSave() {
-        if (!formData.upstream_name.trim()) {
-            toast.warning('กรุณากรอกชื่อเจ้ามือ')
-            return
-        }
-
-        setSaving(true)
-        try {
-            if (editingDealer) {
-                // Update
-                const { error } = await supabase
-                    .from('dealer_upstream_connections')
-                    .update({
-                        upstream_name: formData.upstream_name,
-                        upstream_contact: formData.upstream_contact,
-                        notes: formData.notes,
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', editingDealer.id)
-
-                if (error) throw error
-                toast.success('แก้ไขข้อมูลสำเร็จ!')
-            } else {
-                // Insert new manual dealer
-                const { error } = await supabase
-                    .from('dealer_upstream_connections')
-                    .insert({
-                        dealer_id: user.id,
-                        upstream_name: formData.upstream_name,
-                        upstream_contact: formData.upstream_contact,
-                        notes: formData.notes,
-                        is_linked: false
-                    })
-
-                if (error) throw error
-                toast.success('เพิ่มเจ้ามือสำเร็จ!')
-            }
-
-            setShowAddModal(false)
-            fetchUpstreamDealers()
-        } catch (error) {
-            console.error('Error saving upstream dealer:', error)
-            toast.error('เกิดข้อผิดพลาด: ' + error.message)
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    // Delete
-    async function handleDelete(dealer) {
-        if (!confirm(`ต้องการลบ "${dealer.upstream_name}" หรือไม่?`)) return
-
-        try {
-            const { error } = await supabase
-                .from('dealer_upstream_connections')
-                .delete()
-                .eq('id', dealer.id)
-
-            if (error) throw error
-            toast.success('ลบสำเร็จ!')
-            fetchUpstreamDealers()
-        } catch (error) {
-            console.error('Error deleting upstream dealer:', error)
-            toast.error('เกิดข้อผิดพลาด: ' + error.message)
-        }
-    }
-
-    // Toggle block/unblock
-    async function handleToggleBlock(dealer) {
-        const newBlockedState = !dealer.is_blocked
-        try {
-            const { error } = await supabase
-                .from('dealer_upstream_connections')
-                .update({ 
-                    is_blocked: newBlockedState,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', dealer.id)
-
-            if (error) throw error
-            
-            // Update state immediately for instant UI feedback
-            setUpstreamDealers(prev => prev.map(d => 
-                d.id === dealer.id ? { ...d, is_blocked: newBlockedState } : d
-            ))
-            
-            toast.success(newBlockedState ? 'บล็อกเจ้ามือแล้ว' : 'ยกเลิกการบล็อกแล้ว')
-        } catch (error) {
-            console.error('Error toggling block:', error)
-            toast.error('เกิดข้อผิดพลาด: ' + error.message)
-        }
-    }
-
-    // Open settings modal
-    function handleOpenSettings(dealer) {
-        setSettingsDealer(dealer)
-        setShowSettingsModal(true)
-    }
-
-    return (
-        <div className="upstream-dealers-section">
-            {/* Header */}
-            <div className="section-header">
-                <h2><FiSend /> เจ้ามือตีออก</h2>
-                <button className="btn btn-primary" onClick={handleOpenAddModal}>
-                    <FiPlus /> เพิ่มเจ้ามือ
-                </button>
-            </div>
-
-            <p className="section-description" style={{ marginBottom: '1.5rem', color: 'var(--color-text-muted)' }}>
-                จัดการรายชื่อเจ้ามือที่คุณสามารถตีเลขออกไปได้ สามารถเพิ่มเจ้ามือด้วยตนเอง หรือเชื่อมต่อกับเจ้ามือในระบบ
-            </p>
-
-            {loadingUpstream ? (
-                <div className="loading-state">
-                    <div className="spinner"></div>
-                    <p>กำลังโหลด...</p>
-                </div>
-            ) : upstreamDealers.length === 0 ? (
-                <div className="empty-state card" style={{ padding: '3rem', textAlign: 'center' }}>
-                    <FiSend style={{ fontSize: '3rem', color: 'var(--color-text-muted)', marginBottom: '1rem' }} />
-                    <h3>ยังไม่มีเจ้ามือตีออก</h3>
-                    <p style={{ color: 'var(--color-text-muted)', marginBottom: '1.5rem' }}>
-                        เพิ่มเจ้ามือที่คุณต้องการตีเลขออกไป
-                    </p>
-                    <button className="btn btn-primary" onClick={handleOpenAddModal}>
-                        <FiPlus /> เพิ่มเจ้ามือคนแรก
-                    </button>
-                </div>
-            ) : (
-                <>
-                    {/* Linked Dealers Section */}
-                    {upstreamDealers.filter(d => d.is_linked).length > 0 && (
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <FiCheck style={{ color: 'var(--color-success)' }} /> เจ้ามือในระบบ ({upstreamDealers.filter(d => d.is_linked).length})
-                            </h4>
-                            <div className="upstream-dealers-accordion-list">
-                                {upstreamDealers.filter(d => d.is_linked).map(dealer => (
-                                    <UpstreamDealerAccordionItem
-                                        key={dealer.id}
-                                        dealer={dealer}
-                                        isExpanded={expandedDealerId === dealer.id}
-                                        onToggle={() => setExpandedDealerId(expandedDealerId === dealer.id ? null : dealer.id)}
-                                        onEdit={() => handleEditDealer(dealer)}
-                                        onDelete={() => handleDelete(dealer)}
-                                        onToggleBlock={() => handleToggleBlock(dealer)}
-                                        onSaveSettings={fetchUpstreamDealers}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Manual Dealers Section */}
-                    {upstreamDealers.filter(d => !d.is_linked).length > 0 && (
-                        <div>
-                            <h4 style={{ marginBottom: '0.75rem', color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <FiUser style={{ color: 'var(--color-text-muted)' }} /> เจ้ามือนอกระบบ ({upstreamDealers.filter(d => !d.is_linked).length})
-                            </h4>
-                            <div className="upstream-dealers-accordion-list">
-                                {upstreamDealers.filter(d => !d.is_linked).map(dealer => (
-                                    <UpstreamDealerAccordionItem
-                                        key={dealer.id}
-                                        dealer={dealer}
-                                        isExpanded={expandedDealerId === dealer.id}
-                                        onToggle={() => setExpandedDealerId(expandedDealerId === dealer.id ? null : dealer.id)}
-                                        onEdit={() => handleEditDealer(dealer)}
-                                        onDelete={() => handleDelete(dealer)}
-                                        onToggleBlock={() => handleToggleBlock(dealer)}
-                                        onSaveSettings={fetchUpstreamDealers}
-                                    />
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {/* Add/Edit Modal */}
-            {showAddModal && (
-                <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-                    <div className="modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header">
-                            <h3>{editingDealer ? <><FiEdit2 /> แก้ไขเจ้ามือ</> : <><FiPlus /> เพิ่มเจ้ามือใหม่</>}</h3>
-                            <button className="modal-close" onClick={() => setShowAddModal(false)}>
-                                <FiX />
-                            </button>
-                        </div>
-
-                        <div className="modal-body">
-                            <div className="form-group">
-                                <label className="form-label">ชื่อเจ้ามือ *</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    placeholder="เช่น พี่หนึ่ง, เจ้ใหญ่"
-                                    value={formData.upstream_name}
-                                    onChange={e => setFormData({ ...formData, upstream_name: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">เบอร์ติดต่อ / Line ID</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    placeholder="เช่น 08x-xxx-xxxx หรือ line_id"
-                                    value={formData.upstream_contact}
-                                    onChange={e => setFormData({ ...formData, upstream_contact: e.target.value })}
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">หมายเหตุ</label>
-                                <textarea
-                                    className="form-input"
-                                    rows="2"
-                                    placeholder="เช่น รับได้แค่ 2 ตัว, หลัง 5 โมง"
-                                    value={formData.notes}
-                                    onChange={e => setFormData({ ...formData, notes: e.target.value })}
-                                ></textarea>
-                            </div>
-                        </div>
-
-                        <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
-                                ยกเลิก
-                            </button>
-                            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                                {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึก</>}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Upstream Dealer Settings Modal */}
-            {showSettingsModal && settingsDealer && (
-                <UpstreamDealerSettings 
-                    dealer={settingsDealer} 
-                    onClose={() => { setShowSettingsModal(false); setSettingsDealer(null); }}
-                    onSaved={fetchUpstreamDealers}
-                />
-            )}
-        </div>
-    )
-}
-
-// Upstream Dealer Settings Component - For setting commission and payout rates
-function UpstreamDealerSettings({ dealer, onClose, onSaved }) {
-    const { user } = useAuth()
-    const [loading, setLoading] = useState(true)
-    const [saving, setSaving] = useState(false)
-    const [activeTab, setActiveTab] = useState('thai')
-
-    const getDefaultSettings = () => ({
-        thai: {
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_top': { commission: 30, payout: 550 },
-            '3_tod': { commission: 15, payout: 100 },
-            '3_bottom': { commission: 15, payout: 135 },
-            '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
-        },
-        lao: {
-            '4_set': { 
-                commission: 25, 
-                setPrice: 120,
-                isSet: true,
-                prizes: {
-                    '4_straight_set': 100000,
-                    '4_tod_set': 4000,
-                    '3_straight_set': 30000,
-                    '3_tod_set': 3000,
-                    '2_front_set': 1000,
-                    '2_back_set': 1000
-                }
-            },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
-        },
-        hanoi: {
-            '4_set': { 
-                commission: 25, 
-                setPrice: 120,
-                isSet: true,
-                prizes: {
-                    '4_straight_set': 100000,
-                    '4_tod_set': 4000,
-                    '3_straight_set': 30000,
-                    '3_tod_set': 3000,
-                    '2_front_set': 1000,
-                    '2_back_set': 1000
-                }
-            },
-            'run_top': { commission: 15, payout: 3 },
-            'run_bottom': { commission: 15, payout: 4 },
-            'pak_top': { commission: 15, payout: 8 },
-            'pak_bottom': { commission: 15, payout: 6 },
-            '2_top': { commission: 15, payout: 65 },
-            '2_front': { commission: 15, payout: 65 },
-            '2_center': { commission: 15, payout: 65 },
-            '2_run': { commission: 15, payout: 10 },
-            '2_bottom': { commission: 15, payout: 65 },
-            '3_straight': { commission: 30, payout: 550 },
-            '3_tod_single': { commission: 15, payout: 100 },
-            '4_run': { commission: 15, payout: 20 },
-            '5_run': { commission: 15, payout: 10 }
-        },
-        stock: {
-            '2_top': { commission: 15, payout: 65 },
-            '2_bottom': { commission: 15, payout: 65 }
-        }
-    })
-
-    const [settings, setSettings] = useState(getDefaultSettings())
-
-    const BET_LABELS = {
-        thai: {
-            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวบน', '3_tod': '3 ตัวโต๊ด', '3_bottom': '3 ตัวล่าง',
-            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
-        },
-        lao: {
-            '4_set': '4 ตัวชุด',
-            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
-            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
-        },
-        hanoi: {
-            '4_set': '4 ตัวชุด',
-            'run_top': 'ลอยบน', 'run_bottom': 'ลอยล่าง',
-            'pak_top': 'ปักบน', 'pak_bottom': 'ปักล่าง',
-            '2_top': '2 ตัวบน', '2_front': '2 ตัวหน้า', '2_center': '2 ตัวถ่าง', '2_run': '2 ตัวลอย', '2_bottom': '2 ตัวล่าง',
-            '3_top': '3 ตัวตรง', '3_straight': '3 ตัวตรง', '3_tod_single': '3 ตัวโต๊ด',
-            '4_run': '4 ตัวลอย', '5_run': '5 ตัวลอย'
-        },
-        stock: { '2_top': '2 ตัวบน', '2_bottom': '2 ตัวล่าง' }
-    }
-
-    const SET_PRIZE_LABELS = {
-        '4_straight_set': '4 ตัวตรงชุด',
-        '4_tod_set': '4 ตัวโต๊ดชุด',
-        '3_straight_set': '3 ตัวตรงชุด',
-        '3_tod_set': '3 ตัวโต๊ดชุด',
-        '2_front_set': '2 ตัวหน้าชุด',
-        '2_back_set': '2 ตัวหลังชุด'
-    }
-
-    useEffect(() => {
-        fetchSettings()
-    }, [dealer.id])
-
-    async function fetchSettings() {
-        setLoading(true)
-        try {
-            if (dealer.lottery_settings) {
-                const merged = { ...getDefaultSettings() }
-                Object.keys(dealer.lottery_settings).forEach(tab => {
-                    if (merged[tab]) {
-                        Object.keys(dealer.lottery_settings[tab]).forEach(key => {
-                            if (merged[tab][key]) {
-                                merged[tab][key] = { ...merged[tab][key], ...dealer.lottery_settings[tab][key] }
-                            }
-                        })
-                    }
-                })
-                setSettings(merged)
-            }
-        } catch (error) {
-            console.error('Error loading settings:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    async function handleSave() {
-        setSaving(true)
-        try {
-            const { error } = await supabase
-                .from('dealer_upstream_connections')
-                .update({
-                    lottery_settings: settings,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', dealer.id)
-
-            if (error) throw error
-            toast.success('บันทึกการตั้งค่าสำเร็จ')
-            onSaved?.()
-            onClose()
-        } catch (error) {
-            console.error('Error saving settings:', error)
-            toast.error('เกิดข้อผิดพลาด: ' + error.message)
-        } finally {
-            setSaving(false)
-        }
-    }
-
-    const updateSetting = (tab, key, field, value) => {
-        setSettings(prev => ({
-            ...prev,
-            [tab]: {
-                ...prev[tab],
-                [key]: { ...prev[tab][key], [field]: parseFloat(value) || 0 }
-            }
-        }))
-    }
-
-    const LOTTERY_TABS = [
-        { key: 'thai', label: 'หวยไทย' },
-        { key: 'lao', label: 'หวยลาว' },
-        { key: 'hanoi', label: 'หวยฮานอย' },
-        { key: 'stock', label: 'หวยหุ้น' }
-    ]
-
-    return (
-        <div className="modal-overlay" onClick={onClose}>
-            <div className="modal modal-xl" onClick={e => e.stopPropagation()}>
-                <div className="modal-header">
-                    <h3><FiSettings /> ตั้งค่าเจ้ามือ: {dealer.upstream_name}</h3>
-                    <button className="modal-close" onClick={onClose}><FiX /></button>
-                </div>
-
-                <div className="modal-body">
-                    {loading ? (
-                        <div className="loading-state"><div className="spinner"></div></div>
-                    ) : (
-                        <div className="settings-form">
-                            <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-                                ตั้งค่าคอมมิชชั่นและอัตราจ่ายสำหรับเลขที่รับจากเจ้ามือนี้
-                            </p>
-                            <div className="settings-tabs">
-                                {LOTTERY_TABS.map(tab => (
-                                    <button
-                                        key={tab.key}
-                                        className={`settings-tab ${activeTab === tab.key ? 'active' : ''}`}
-                                        onClick={() => setActiveTab(tab.key)}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* 4 ตัวชุด Section for Lao or Hanoi */}
-                            {(activeTab === 'lao' || activeTab === 'hanoi') && settings[activeTab]?.['4_set'] && (
-                                <div className="set-settings-section" style={{ marginBottom: '1.5rem' }}>
-                                    <h4 style={{ marginBottom: '1rem', color: 'var(--color-primary)' }}>
-                                        <FiPackage style={{ marginRight: '0.5rem' }} />
-                                        4 ตัวชุด
-                                    </h4>
-                                    
-                                    {/* Set Price and Commission Row */}
-                                    <div className="set-config-row">
-                                        <div className="set-config-item">
-                                            <span className="info-label">ราคาชุดละ:</span>
-                                            <div className="input-group input-group-wide">
-                                                <input
-                                                    type="number"
-                                                    className="form-input"
-                                                    value={settings[activeTab]['4_set'].setPrice || 120}
-                                                    onChange={e => {
-                                                        const newSettings = { ...settings }
-                                                        newSettings[activeTab]['4_set'].setPrice = Number(e.target.value)
-                                                        setSettings(newSettings)
-                                                    }}
-                                                />
-                                                <span className="input-suffix">บาท</span>
-                                            </div>
-                                        </div>
-                                        <div className="set-config-item">
-                                            <span className="info-label">ค่าคอม:</span>
-                                            <div className="input-group input-group-wide">
-                                                <input
-                                                    type="number"
-                                                    className="form-input"
-                                                    value={settings[activeTab]['4_set'].commission}
-                                                    onChange={e => {
-                                                        const newSettings = { ...settings }
-                                                        newSettings[activeTab]['4_set'].commission = Number(e.target.value)
-                                                        setSettings(newSettings)
-                                                    }}
-                                                />
-                                                <span className="input-suffix">฿/ชุด</span>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Prize Table */}
-                                    <table className="settings-table settings-table-wide">
-                                        <thead>
-                                            <tr>
-                                                <th>ประเภทรางวัล</th>
-                                                <th>เงินรางวัล (บาท/ชุด)</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {Object.entries(settings[activeTab]['4_set'].prizes || {}).map(([prizeKey, prizeAmount]) => (
-                                                <tr key={prizeKey}>
-                                                    <td className="type-cell">{SET_PRIZE_LABELS[prizeKey] || prizeKey}</td>
-                                                    <td>
-                                                        <div className="input-group input-group-wide">
-                                                            <input
-                                                                type="number"
-                                                                className="form-input"
-                                                                value={prizeAmount}
-                                                                onChange={e => {
-                                                                    const newSettings = { ...settings }
-                                                                    newSettings[activeTab]['4_set'].prizes[prizeKey] = Number(e.target.value)
-                                                                    setSettings(newSettings)
-                                                                }}
-                                                            />
-                                                            <span className="input-suffix">บาท</span>
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-
-                            {/* Regular Bet Types Table */}
-                            <div className="settings-table-wrap">
-                                <table className="settings-table settings-table-wide">
-                                    <thead>
-                                        <tr>
-                                            <th>ประเภท</th>
-                                            <th>ค่าคอม</th>
-                                            <th>อัตราจ่าย</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {Object.entries(settings[activeTab] || {})
-                                            .filter(([key]) => key !== '4_set')
-                                            .map(([key, value]) => (
-                                            <tr key={key}>
-                                                <td className="type-cell">{BET_LABELS[activeTab]?.[key] || key}</td>
-                                                <td>
-                                                    <div className="input-group input-group-wide">
-                                                        <input
-                                                            type="number"
-                                                            className="form-input"
-                                                            value={value.commission}
-                                                            onChange={e => updateSetting(activeTab, key, 'commission', e.target.value)}
-                                                        />
-                                                        <span className="input-suffix">%</span>
-                                                    </div>
-                                                </td>
-                                                <td>
-                                                    <div className="input-group input-group-wide">
-                                                        <input
-                                                            type="number"
-                                                            className="form-input"
-                                                            value={value.payout}
-                                                            onChange={e => updateSetting(activeTab, key, 'payout', e.target.value)}
-                                                        />
-                                                        <span className="input-suffix">เท่า</span>
-                                                    </div>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                <div className="modal-footer">
-                    <button className="btn btn-secondary" onClick={onClose}>ยกเลิก</button>
-                    <button className="btn btn-primary" onClick={handleSave} disabled={saving || loading}>
-                        {saving ? 'กำลังบันทึก...' : <><FiCheck /> บันทึก</>}
-                    </button>
-                </div>
-            </div>
-        </div>
-    )
-}
 
 // Member Settings Component - With Lottery Type Tabs
 // Refactored from UserSettingsModal to support inline rendering

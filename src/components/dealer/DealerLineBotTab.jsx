@@ -17,6 +17,7 @@ import {
 } from 'react-icons/fi'
 import CopyButton from '../CopyButton'
 import { LOTTERY_TYPES } from '../../constants/lotteryTypes'
+import './DealerLineBotTab.css'
 
 export default function DealerLineBotTab({ user, profile }) {
     const { toast } = useToast()
@@ -500,28 +501,7 @@ export default function DealerLineBotTab({ user, profile }) {
         }
     }
 
-    const handleToggleGroupNotification = async (groupId, key, value) => {
-        // Optimistic update
-        setLineGroups(prev => prev.map(g => g.id === groupId ? { ...g, [key]: value } : g))
 
-        try {
-            const { error } = await supabase
-                .from('line_groups')
-                .update({
-                    [key]: value,
-                    updated_at: new Date().toISOString()
-                })
-                .eq('id', groupId)
-
-            if (error) throw error
-
-            toast.success('อัปเดตตั้งค่าการแจ้งเตือนของกลุ่มสำเร็จ!')
-        } catch (error) {
-            console.error('Error toggling group notification:', error)
-            toast.error('ไม่สามารถแก้ไขตั้งค่าการแจ้งเตือนได้')
-            fetchLineGroups()
-        }
-    }
 
     const configGroup = lineGroups.find(g => g.id === selectedConfigGroupId)
     const memberPerms = configGroup?.member_permissions || {
@@ -592,10 +572,125 @@ export default function DealerLineBotTab({ user, profile }) {
     });
     const pendingCodeObj = lineGroups.find(g => g.line_group_id === 'pending' || !g.line_group_id)
 
+    // Render left-aligned staff bet & bot reply controls
+    const renderStaffBetControls = (group, isMobile = false) => {
+        return (
+            <div className={`staff-bet-controls ${isMobile ? 'mobile' : ''}`}>
+                <label className="staff-bet-label" style={{ cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed' }}>
+                    <input
+                        type="checkbox"
+                        className="staff-bet-checkbox"
+                        checked={group.disable_replies || false}
+                        disabled={!isOwnerOrSuper}
+                        onChange={e => handleToggleDisableReplies(group.id, e.target.checked)}
+                    />
+                    <span style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 'bold' }}>บอทไม่ตอบกลับ</span>
+                </label>
+                <label className="staff-bet-label" style={{ cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed' }}>
+                    <input
+                        type="checkbox"
+                        className="staff-bet-checkbox"
+                        checked={group.allow_staff_bet || false}
+                        disabled={!isOwnerOrSuper}
+                        onChange={e => handleToggleAllowStaffBet(group.id, e.target.checked)}
+                    />
+                    <span style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>อนุญาตส่งเลข</span>
+                </label>
+                {group.allow_staff_bet && (
+                    <select
+                        className="form-input staff-bet-select"
+                        value={group.staff_member_id || ''}
+                        disabled={!isOwnerOrSuper}
+                        onChange={e => handleUpdateStaffMember(group.id, e.target.value)}
+                    >
+                        <option value="">-- เลือกบัญชีตัวแทน --</option>
+                        {activeMembers.map(m => (
+                            <option key={m.id} value={m.id}>{m.full_name} {m.member_code ? `(รหัส: ${m.member_code})` : ''}</option>
+                        ))}
+                    </select>
+                )}
+            </div>
+        )
+    }
+
+    // Render expanded group member list
+    const renderExpandedGroupContent = (group) => {
+        return (
+            <div>
+
+                <div style={{ fontWeight: 600, marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ color: 'var(--color-primary)' }}>👥 รายชื่อสมาชิกในกลุ่ม LINE นี้ ({(groupMembers[group.line_group_id] || []).length} คน)</span>
+                </div>
+                {loadingGroupMembers[group.line_group_id] ? (
+                    <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                        กำลังโหลดรายชื่อสมาชิกกลุ่ม...
+                    </div>
+                ) : (groupMembers[group.line_group_id] || []).length === 0 ? (
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>
+                        ยังไม่มีสมาชิกที่ตรวจพบในกลุ่ม LINE นี้ (จะบันทึกรายชื่อเมื่อสมาชิกส่งข้อความในห้องแชท)
+                    </div>
+                ) : (
+                    <div style={{ maxHeight: '250px', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                        <table style={{ width: '100%', minWidth: '550px', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                            <thead>
+                                <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem', width: '180px' }}>ชื่อใน LINE</th>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem', width: '240px' }}>LINE User ID</th>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>สถานะการผูกบัญชี</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {(groupMembers[group.line_group_id] || []).map(member => (
+                                    <tr key={member.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
+                                        <td style={{ padding: '0.5rem', fontWeight: 500 }}>{member.display_name}</td>
+                                        <td style={{ padding: '0.5rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                                                    {member.line_user_id}
+                                                </code>
+                                                <CopyButton text={member.line_user_id} />
+                                            </div>
+                                        </td>
+                                        <td style={{ padding: '0.5rem' }}>
+                                            {member.user_id ? (
+                                                <span style={{ 
+                                                    color: 'var(--color-success)', 
+                                                    fontSize: '0.8rem',
+                                                    background: 'rgba(34, 197, 94, 0.08)',
+                                                    padding: '0.15rem 0.4rem',
+                                                    borderRadius: '4px',
+                                                    border: '1px solid rgba(34, 197, 94, 0.15)',
+                                                    fontWeight: 600
+                                                }}>
+                                                    ผูกแล้ว: {member.profiles?.full_name || 'ไม่ทราบชื่อ'}{member.profiles?.member_code ? ` (รหัส: ${member.profiles.member_code})` : ''}
+                                                </span>
+                                            ) : (
+                                                <span style={{ 
+                                                    color: 'var(--color-text-muted)', 
+                                                    fontSize: '0.8rem',
+                                                    background: 'rgba(239, 68, 68, 0.08)',
+                                                    padding: '0.15rem 0.4rem',
+                                                    borderRadius: '4px',
+                                                    border: '1px solid rgba(239, 68, 68, 0.15)'
+                                                }}>
+                                                    ยังไม่ผูกบัญชี LINE
+                                                </span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        )
+    }
+
     return (
         <div className="line-bot-section">
             {/* Dealer Member Code & 1-on-1 Registration Guide Card */}
-            <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid #36a2eb', background: 'rgba(54, 162, 235, 0.02)' }}>
+            <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
                 <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#36a2eb' }}>
                     <FiTerminal /> ข้อมูลเจ้ามือสำหรับการส่งโพยส่วนตัว (1-on-1)
                 </h3>
@@ -639,7 +734,7 @@ export default function DealerLineBotTab({ user, profile }) {
             </div>
 
             {/* Guide Card */}
-            <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem', borderLeft: '4px solid var(--color-primary)' }}>
+            <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
                 <h3 style={{ margin: '0 0 1rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-primary)' }}>
                     <FiMessageSquare /> คู่มือการผูกกลุ่ม LINE Bot
                 </h3>
@@ -733,9 +828,9 @@ export default function DealerLineBotTab({ user, profile }) {
 
             {/* Bound Groups Table */}
             <div className="card" style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
                     <h3 style={{ margin: 0 }}>
-                        กลุ่ม LINE ที่ผูกเชื่อมต่อแล้ว {searchGroupQuery.trim() ? `(${filteredActiveGroups.length} จาก ${activeGroups.length})` : `(${activeGroups.length})`}
+                        กลุ่ม LINE ที่ผูกเชื่อมต่อแล้ว {(searchGroupQuery.trim() || selectedTypeFilter !== 'all') ? `(${filteredActiveGroups.length} จาก ${activeGroups.length})` : `(${activeGroups.length})`}
                     </h3>
                     <button
                         className="btn btn-outline btn-sm"
@@ -744,6 +839,72 @@ export default function DealerLineBotTab({ user, profile }) {
                     >
                         <FiRefreshCw /> รีเฟรช
                     </button>
+                </div>
+
+                {/* Filter & Search Bar */}
+                <div className="line-groups-filter-bar">
+                    <div className="line-groups-search-wrapper">
+                        <input
+                            type="text"
+                            className="line-groups-search-input"
+                            placeholder="🔍 ค้นหาชื่อกลุ่ม หรือ กลุ่ม ID..."
+                            value={searchGroupQuery}
+                            onChange={e => setSearchGroupQuery(e.target.value)}
+                        />
+                        {searchGroupQuery && (
+                            <button
+                                type="button"
+                                onClick={() => setSearchGroupQuery('')}
+                                style={{
+                                    position: 'absolute',
+                                    right: '8px',
+                                    background: 'none',
+                                    border: 'none',
+                                    color: 'var(--color-text-muted)',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '4px',
+                                    borderRadius: '50%',
+                                    transition: 'color 0.2s, background-color 0.2s'
+                                }}
+                                onMouseOver={e => {
+                                    e.currentTarget.style.color = 'var(--color-danger)';
+                                    e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+                                }}
+                                onMouseOut={e => {
+                                    e.currentTarget.style.color = 'var(--color-text-muted)';
+                                    e.currentTarget.style.backgroundColor = 'transparent';
+                                }}
+                                title="ล้างข้อความค้นหา"
+                            >
+                                <FiX size={14} />
+                            </button>
+                        )}
+                    </div>
+                    <div className="line-groups-type-filter">
+                        <select
+                            className="form-input"
+                            value={selectedTypeFilter}
+                            onChange={e => setSelectedTypeFilter(e.target.value)}
+                            style={{
+                                padding: '0.5rem 0.75rem',
+                                fontSize: '0.85rem',
+                                borderRadius: 'var(--radius-md)',
+                                width: '100%',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            <option value="all">แสดงทุกประเภทหวย</option>
+                            {allowedLotteryTypes.map(typeKey => {
+                                const label = LOTTERY_TYPES[typeKey] || typeKey.toUpperCase()
+                                return (
+                                    <option key={typeKey} value={typeKey}>{label}</option>
+                                )
+                            })}
+                        </select>
+                    </div>
                 </div>
 
                 {loading ? (
@@ -757,395 +918,274 @@ export default function DealerLineBotTab({ user, profile }) {
                         <p style={{ color: 'var(--color-text-muted)', margin: 0 }}>ยังไม่มีการผูกกลุ่ม LINE เพื่อรับบิลโพยหวย</p>
                     </div>
                 ) : (
-                    <div className="table-responsive">
-                        <table className="table" style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse' }}>
-                            <thead>
-                                <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-                                    <th style={{ textAlign: 'left', padding: '0.75rem' }}>ชื่อกลุ่ม / กลุ่ม ID</th>
-                                    <th style={{ textAlign: 'center', padding: '0.75rem', width: '150px' }}>ประเภทหวยหลัก</th>
-                                    <th style={{ textAlign: 'center', padding: '0.75rem', width: '220px' }}>เจ้ามือ/แอดมินส่งเลขได้</th>
-                                    <th style={{ textAlign: 'center', padding: '0.75rem', width: '120px' }}>สถานะ</th>
-                                    <th style={{ textAlign: 'center', padding: '0.75rem', width: '80px' }}>การจัดการ</th>
-                                </tr>
-                                <tr>
-                                    <td style={{ padding: '0.5rem 0.75rem' }}>
-                                        <div style={{ position: 'relative', display: 'inline-flex', alignItems: 'center', width: '100%', maxWidth: '280px' }}>
-                                            <input
-                                                type="text"
-                                                placeholder="🔍 ค้นหาชื่อกลุ่ม หรือ กลุ่ม ID..."
-                                                value={searchGroupQuery}
-                                                onChange={e => setSearchGroupQuery(e.target.value)}
-                                                style={{
-                                                    width: '100%',
-                                                    padding: '0.35rem 2rem 0.35rem 0.75rem',
-                                                    fontSize: '0.85rem',
-                                                    borderRadius: 'var(--radius-md)',
-                                                    border: '1px solid var(--color-border)',
-                                                    background: 'var(--color-surface)',
-                                                    color: 'var(--color-text)',
-                                                    outline: 'none'
-                                                }}
-                                            />
-                                            {searchGroupQuery && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setSearchGroupQuery('')}
-                                                    style={{
-                                                        position: 'absolute',
-                                                        right: '8px',
-                                                        background: 'none',
-                                                        border: 'none',
-                                                        color: 'var(--color-text-muted)',
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        padding: '4px',
-                                                        borderRadius: '50%',
-                                                        transition: 'color 0.2s, background-color 0.2s'
-                                                    }}
-                                                    onMouseOver={e => {
-                                                        e.currentTarget.style.color = 'var(--color-danger)';
-                                                        e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-                                                    }}
-                                                    onMouseOut={e => {
-                                                        e.currentTarget.style.color = 'var(--color-text-muted)';
-                                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                                    }}
-                                                    title="ล้างข้อความค้นหา"
-                                                >
-                                                    <FiX size={14} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </td>
-                                                                  <td style={{ padding: '0.5rem 0.75rem', textAlign: 'center' }}>
-                                        <select
-                                            className="form-input"
-                                            value={selectedTypeFilter}
-                                            onChange={e => setSelectedTypeFilter(e.target.value)}
-                                            style={{
-                                                padding: '0.35rem 0.5rem',
-                                                fontSize: '0.85rem',
-                                                borderRadius: 'var(--radius-md)',
-                                                border: '1px solid var(--color-border)',
-                                                background: 'var(--color-surface)',
-                                                color: 'var(--color-text)',
-                                                outline: 'none',
-                                                width: '100%',
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            <option value="all">แสดงทั้งหมด</option>
-                                            {allowedLotteryTypes.map(typeKey => {
-                                                const label = LOTTERY_TYPES[typeKey] || typeKey.toUpperCase()
-                                                return (
-                                                    <option key={typeKey} value={typeKey}>{label}</option>
-                                                )
-                                            })}
-                                        </select>
-                                    </td>
-                                    <td></td>
-                                    <td></td>
-                                    <td></td>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredActiveGroups.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={5} style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
-                                            <FiAlertCircle size={24} style={{ display: 'block', margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
-                                            ไม่พบกลุ่มแชทที่ตรงกับการค้นหาของคุณ
-                                        </td>
+                    <>
+                        {/* Desktop Table View */}
+                        <div className="table-responsive line-groups-table-desktop">
+                            <table className="table" style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse' }}>
+                                <thead>
+                                    <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
+                                        <th style={{ textAlign: 'left', padding: '0.75rem' }}>ชื่อกลุ่ม / กลุ่ม ID</th>
+                                        <th style={{ textAlign: 'center', padding: '0.75rem', width: '150px' }}>ประเภทหวยหลัก</th>
+                                        <th style={{ textAlign: 'center', padding: '0.75rem', width: '220px' }}>เจ้ามือ/แอดมินส่งเลขได้</th>
+                                        <th style={{ textAlign: 'center', padding: '0.75rem', width: '120px' }}>สถานะ</th>
+                                        <th style={{ textAlign: 'center', padding: '0.75rem', width: '80px' }}>การจัดการ</th>
                                     </tr>
-                                ) : (
-                                    filteredActiveGroups.map(group => {
+                                </thead>
+                                <tbody>
+                                    {filteredActiveGroups.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                                                <FiAlertCircle size={24} style={{ display: 'block', margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
+                                                ไม่พบกลุ่มแชทที่ตรงกับการค้นหาของคุณ
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        filteredActiveGroups.map(group => {
+                                            const isOpen = openRounds.some(r => r.lottery_type === group.lottery_type);
+                                            const isExpanded = selectedGroupId === group.id;
+                                            return (
+                                                <Fragment key={group.id}>
+                                                    <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: isExpanded ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
+                                                        <td 
+                                                            style={{ padding: '0.75rem', cursor: 'pointer' }}
+                                                            onClick={() => {
+                                                                if (isExpanded) {
+                                                                    setSelectedGroupId(null)
+                                                                } else {
+                                                                    setSelectedGroupId(group.id)
+                                                                    fetchGroupMembers(group.line_group_id)
+                                                                }
+                                                            }}
+                                                            title="คลิกเพื่อดูรายชื่อสมาชิกกลุ่ม"
+                                                        >
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{group.group_name || 'กลุ่มไลน์รับยอด'}</div>
+                                                                <span style={{ 
+                                                                    fontSize: '0.7rem', 
+                                                                    color: 'var(--color-text-muted)', 
+                                                                    background: 'rgba(255,255,255,0.05)', 
+                                                                    padding: '0.1rem 0.35rem', 
+                                                                    borderRadius: '4px',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.2rem'
+                                                                }}>
+                                                                    {isExpanded ? '▲ ซ่อนสมาชิก' : '▼ ดูสมาชิก'}
+                                                                </span>
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
+                                                                <code style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                    {group.line_group_id}
+                                                                </code>
+                                                                {group.line_group_id?.startsWith('pending-') && group.binding_code && (
+                                                                    <span 
+                                                                        onClick={e => e.stopPropagation()} 
+                                                                        title="คัดลอกคำสั่งผูกกลุ่ม"
+                                                                        style={{ display: 'inline-flex', verticalAlign: 'middle' }}
+                                                                    >
+                                                                        <CopyButton text={`/bind ${group.binding_code}`} keepSpace={true} />
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                            <select
+                                                                className="form-input"
+                                                                value={group.lottery_type}
+                                                                disabled={!isOwnerOrSuper}
+                                                                onChange={e => handleUpdateLotteryType(group.id, e.target.value)}
+                                                                style={{ padding: '0.25rem 0.5rem', width: '100%', fontSize: '0.85rem' }}
+                                                            >
+                                                                {Object.entries(LOTTERY_TYPES).map(([typeKey, label]) => (
+                                                                    <option key={typeKey} value={typeKey}>{label}</option>
+                                                                ))}
+                                                            </select>
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                            {renderStaffBetControls(group, false)}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                            {isOpen ? (
+                                                                <span style={{
+                                                                    background: 'rgba(34, 197, 94, 0.12)',
+                                                                    color: '#22c55e',
+                                                                    padding: '0.2rem 0.5rem',
+                                                                    borderRadius: '4px',
+                                                                    fontSize: '0.75rem',
+                                                                    fontWeight: 'bold',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.25rem'
+                                                                }}>
+                                                                    <FiCheck size={12} /> รับยอดอยู่
+                                                                </span>
+                                                            ) : (
+                                                                <span style={{
+                                                                    background: 'rgba(239, 68, 68, 0.12)',
+                                                                    color: '#ef4444',
+                                                                    padding: '0.2rem 0.5rem',
+                                                                    borderRadius: '4px',
+                                                                    fontSize: '0.75rem',
+                                                                    fontWeight: 'bold',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '0.25rem'
+                                                                }}>
+                                                                    <FiAlertCircle size={12} /> ปิดรับ
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                            <button
+                                                                className="btn btn-outline btn-sm danger"
+                                                                onClick={() => handleDeleteGroup(group.id, null)}
+                                                                title="ยกเลิกการผูกกลุ่ม"
+                                                                style={{ padding: '0.25rem 0.5rem' }}
+                                                                disabled={!isOwnerOrSuper}
+                                                            >
+                                                                <FiTrash2 />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                    {isExpanded && (
+                                                        <tr style={{ background: 'rgba(0,0,0,0.15)' }}>
+                                                            <td colSpan={5} style={{ padding: '1rem' }}>
+                                                                <div style={{
+                                                                    background: 'var(--color-background-dark)',
+                                                                    borderRadius: '8px',
+                                                                    padding: '1rem',
+                                                                    border: '1px solid var(--color-border)'
+                                                                }}>
+                                                                    {renderExpandedGroupContent(group)}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </Fragment>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Mobile Cards View */}
+                        <div className="line-groups-cards-mobile">
+                            {filteredActiveGroups.length === 0 ? (
+                                <div style={{ padding: '2.5rem 1rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                                    <FiAlertCircle size={24} style={{ display: 'block', margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
+                                    ไม่พบกลุ่มแชทที่ตรงกับการค้นหาของคุณ
+                                </div>
+                            ) : (
+                                filteredActiveGroups.map(group => {
                                     const isOpen = openRounds.some(r => r.lottery_type === group.lottery_type);
                                     const isExpanded = selectedGroupId === group.id;
                                     return (
-                                        <Fragment key={group.id}>
-                                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: isExpanded ? 'rgba(255,255,255,0.02)' : 'transparent' }}>
-                                                <td 
-                                                    style={{ padding: '0.75rem', cursor: 'pointer' }}
-                                                onClick={() => {
-                                                    if (isExpanded) {
-                                                        setSelectedGroupId(null)
-                                                    } else {
-                                                        setSelectedGroupId(group.id)
-                                                        fetchGroupMembers(group.line_group_id)
-                                                    }
-                                                }}
-                                                title="คลิกเพื่อดูรายชื่อสมาชิกกลุ่ม"
-                                            >
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <div style={{ fontWeight: 600, color: 'var(--color-primary)' }}>{group.group_name || 'กลุ่มไลน์รับยอด'}</div>
-                                                        <span style={{ 
-                                                            fontSize: '0.7rem', 
-                                                            color: 'var(--color-text-muted)', 
-                                                            background: 'rgba(255,255,255,0.05)', 
-                                                            padding: '0.1rem 0.35rem', 
-                                                            borderRadius: '4px',
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            gap: '0.2rem'
-                                                        }}>
-                                                            {isExpanded ? '▲ ซ่อนสมาชิก' : '▼ ดูสมาชิก'}
+                                        <div key={group.id} className={`line-group-mobile-card ${isExpanded ? 'expanded' : ''}`}>
+                                            {/* Header: Title, Member toggle, Status, Delete */}
+                                            <div className="line-group-mobile-header">
+                                                <div style={{ flex: 1, minWidth: 0 }}>
+                                                    <div className="line-group-mobile-title">
+                                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {group.group_name || 'กลุ่มไลน์รับยอด'}
+                                                        </span>
+                                                        <span 
+                                                            className="line-group-mobile-member-pill"
+                                                            onClick={() => {
+                                                                if (isExpanded) {
+                                                                    setSelectedGroupId(null)
+                                                                } else {
+                                                                    setSelectedGroupId(group.id)
+                                                                    fetchGroupMembers(group.line_group_id)
+                                                                }
+                                                            }}
+                                                        >
+                                                            {isExpanded ? '▲ ซ่อน' : '▼ สมาชิก'}
                                                         </span>
                                                     </div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
-                                                        <code style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                            {group.line_group_id}
-                                                        </code>
+                                                    <div className="line-group-mobile-id">
+                                                        <code>{group.line_group_id}</code>
                                                         {group.line_group_id?.startsWith('pending-') && group.binding_code && (
-                                                            <span 
-                                                                onClick={e => e.stopPropagation()} 
-                                                                title="คัดลอกคำสั่งผูกกลุ่ม"
-                                                                style={{ display: 'inline-flex', verticalAlign: 'middle' }}
-                                                            >
-                                                                <CopyButton text={`/bind ${group.binding_code}`} keepSpace={true} />
-                                                            </span>
+                                                            <CopyButton text={`/bind ${group.binding_code}`} keepSpace={true} />
                                                         )}
                                                     </div>
-                                                </td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                                                    <select
-                                                        className="form-input"
-                                                        value={group.lottery_type}
-                                                        disabled={!isOwnerOrSuper}
-                                                        onChange={e => handleUpdateLotteryType(group.id, e.target.value)}
-                                                        style={{ padding: '0.25rem 0.5rem', width: '100%', fontSize: '0.85rem' }}
-                                                    >
-                                                        {Object.entries(LOTTERY_TYPES).map(([typeKey, label]) => (
-                                                            <option key={typeKey} value={typeKey}>{label}</option>
-                                                        ))}
-                                                    </select>
-                                                </td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-                                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={group.disable_replies || false}
-                                                                disabled={!isOwnerOrSuper}
-                                                                onChange={e => handleToggleDisableReplies(group.id, e.target.checked)}
-                                                            />
-                                                            <span style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 'bold' }}>บอทไม่ตอบกลับ</span>
-                                                        </label>
-                                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={group.allow_staff_bet || false}
-                                                                disabled={!isOwnerOrSuper}
-                                                                onChange={e => handleToggleAllowStaffBet(group.id, e.target.checked)}
-                                                            />
-                                                            <span style={{ fontSize: '0.85rem', color: 'var(--color-text)' }}>อนุญาตส่งเลข</span>
-                                                        </label>
-                                                        {group.allow_staff_bet && (
-                                                            <select
-                                                                className="form-input"
-                                                                value={group.staff_member_id || ''}
-                                                                disabled={!isOwnerOrSuper}
-                                                                onChange={e => handleUpdateStaffMember(group.id, e.target.value)}
-                                                                style={{ padding: '0.25rem 0.5rem', width: '100%', maxWidth: '200px', fontSize: '0.85rem' }}
-                                                            >
-                                                                <option value="">-- เลือกบัญชีตัวแทน --</option>
-                                                                {activeMembers.map(m => (
-                                                                    <option key={m.id} value={m.id}>{m.full_name} {m.member_code ? `(รหัส: ${m.member_code})` : ''}</option>
-                                                                ))}
-                                                            </select>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                </div>
+                                                <div className="line-group-mobile-actions">
                                                     {isOpen ? (
                                                         <span style={{
                                                             background: 'rgba(34, 197, 94, 0.12)',
                                                             color: '#22c55e',
-                                                            padding: '0.2rem 0.5rem',
+                                                            padding: '0.2rem 0.45rem',
                                                             borderRadius: '4px',
-                                                            fontSize: '0.75rem',
+                                                            fontSize: '0.72rem',
                                                             fontWeight: 'bold',
                                                             display: 'inline-flex',
                                                             alignItems: 'center',
-                                                            gap: '0.25rem'
+                                                            gap: '0.2rem'
                                                         }}>
-                                                            <FiCheck size={12} /> รับยอดอยู่
+                                                            <FiCheck size={11} /> รับยอด
                                                         </span>
                                                     ) : (
                                                         <span style={{
                                                             background: 'rgba(239, 68, 68, 0.12)',
                                                             color: '#ef4444',
-                                                            padding: '0.2rem 0.5rem',
+                                                            padding: '0.2rem 0.45rem',
                                                             borderRadius: '4px',
-                                                            fontSize: '0.75rem',
+                                                            fontSize: '0.72rem',
                                                             fontWeight: 'bold',
                                                             display: 'inline-flex',
                                                             alignItems: 'center',
-                                                            gap: '0.25rem'
+                                                            gap: '0.2rem'
                                                         }}>
-                                                            <FiAlertCircle size={12} /> ปิดรับ
+                                                            <FiAlertCircle size={11} /> ปิดรับ
                                                         </span>
                                                     )}
-                                                </td>
-                                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                                     <button
                                                         className="btn btn-outline btn-sm danger"
                                                         onClick={() => handleDeleteGroup(group.id, null)}
                                                         title="ยกเลิกการผูกกลุ่ม"
-                                                        style={{ padding: '0.25rem 0.5rem' }}
+                                                        style={{ padding: '0.25rem 0.45rem' }}
                                                         disabled={!isOwnerOrSuper}
                                                     >
-                                                        <FiTrash2 />
+                                                        <FiTrash2 size={13} />
                                                     </button>
-                                                </td>
-                                            </tr>
-                                            {isExpanded && (
-                                                <tr style={{ background: 'rgba(0,0,0,0.15)' }}>
-                                                    <td colSpan={5} style={{ padding: '1rem' }}>
-                                                        <div style={{
-                                                            background: 'var(--color-background-dark)',
-                                                            borderRadius: '8px',
-                                                            padding: '1rem',
-                                                            border: '1px solid var(--color-border)'
-                                                        }}>
-                                                            {/* Automation & Notification Settings */}
-                                                            <div style={{
-                                                                background: 'rgba(255, 255, 255, 0.02)',
-                                                                border: '1px solid var(--color-border)',
-                                                                borderRadius: '8px',
-                                                                padding: '1rem',
-                                                                marginBottom: '1rem'
-                                                            }}>
-                                                                <div style={{ fontWeight: 600, marginBottom: '0.75rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                    <FiSettings /> ตั้งค่าแจ้งเตือนและการทำงานอัตโนมัติประจำกลุ่ม
-                                                                </div>
-                                                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={group.notify_round_created || false}
-                                                                            disabled={!isOwnerOrSuper}
-                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_round_created', e.target.checked)}
-                                                                        />
-                                                                        <span style={{ fontSize: '0.85rem' }}>📢 แจ้งเตือนเมื่อเปิดงวดใหม่</span>
-                                                                    </label>
-                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={group.notify_admin_alerts || false}
-                                                                            disabled={!isOwnerOrSuper}
-                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_admin_alerts', e.target.checked)}
-                                                                        />
-                                                                        <span style={{ fontSize: '0.85rem' }}>⚠️ แจ้งเตือนแอดมิน/ข้อผิดพลาด</span>
-                                                                    </label>
-                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={group.notify_layoff_bets || false}
-                                                                            disabled={!isOwnerOrSuper}
-                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_layoff_bets', e.target.checked)}
-                                                                        />
-                                                                        <span style={{ fontSize: '0.85rem' }}>📥 รับโพยส่งออก (เลขตีออก)</span>
-                                                                    </label>
-                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={group.notify_round_summary || false}
-                                                                            disabled={!isOwnerOrSuper}
-                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_round_summary', e.target.checked)}
-                                                                        />
-                                                                        <span style={{ fontSize: '0.85rem' }}>📊 ส่งสรุปยอดโพยเมื่อปิดงวด</span>
-                                                                    </label>
-                                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed', margin: 0 }}>
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            checked={group.notify_lottery_results || false}
-                                                                            disabled={!isOwnerOrSuper}
-                                                                            onChange={e => handleToggleGroupNotification(group.id, 'notify_lottery_results', e.target.checked)}
-                                                                        />
-                                                                        <span style={{ fontSize: '0.85rem' }}>🏆 ส่งผลรางวัลและรายงานผู้ชนะ</span>
-                                                                    </label>
-                                                                </div>
-                                                            </div>
+                                                </div>
+                                            </div>
 
-                                                            <div style={{ fontWeight: 600, marginBottom: '0.75rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                <span style={{ color: 'var(--color-primary)' }}>👥 รายชื่อสมาชิกในกลุ่ม LINE นี้ ({(groupMembers[group.line_group_id] || []).length} คน)</span>
-                                                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', fontWeight: 'normal' }}>
-                                                                    (แสดงเฉพาะคนในกลุ่ม LINE นี้เท่านั้น ทั้งบัญชีที่ผูกแล้วและบัญชีทั่วไปที่ยังไม่ผูกในระบบเว็บ)
-                                                                </span>
-                                                            </div>
-                                                            {loadingGroupMembers[group.line_group_id] ? (
-                                                                <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                                                                    กำลังโหลดรายชื่อสมาชิกกลุ่ม...
-                                                                </div>
-                                                            ) : (groupMembers[group.line_group_id] || []).length === 0 ? (
-                                                                <div style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '1rem' }}>
-                                                                    ยังไม่มีสมาชิกที่ตรวจพบในกลุ่ม LINE นี้ (จะบันทึกรายชื่อเมื่อสมาชิกส่งข้อความในห้องแชท)
-                                                                </div>
-                                                            ) : (
-                                                                <div style={{ maxHeight: '250px', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                                                                    <table style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-                                                                        <thead>
-                                                                            <tr style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}>
-                                                                                <th style={{ textAlign: 'left', padding: '0.5rem', width: '220px' }}>ชื่อใน LINE (Display Name)</th>
-                                                                                <th style={{ textAlign: 'left', padding: '0.5rem', width: '280px' }}>LINE User ID</th>
-                                                                                <th style={{ textAlign: 'left', padding: '0.5rem' }}>สถานะการผูกบัญชีในระบบเว็บ</th>
-                                                                            </tr>
-                                                                        </thead>
-                                                                        <tbody>
-                                                                            {(groupMembers[group.line_group_id] || []).map(member => (
-                                                                                <tr key={member.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                                                                                    <td style={{ padding: '0.5rem', fontWeight: 500 }}>{member.display_name}</td>
-                                                                                    <td style={{ padding: '0.5rem' }}>
-                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                            <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace' }}>
-                                                                                                {member.line_user_id}
-                                                                                            </code>
-                                                                                            <CopyButton text={member.line_user_id} />
-                                                                                        </div>
-                                                                                    </td>
-                                                                                    <td style={{ padding: '0.5rem' }}>
-                                                                                        {member.user_id ? (
-                                                                                            <span style={{ 
-                                                                                                color: 'var(--color-success)', 
-                                                                                                fontSize: '0.8rem',
-                                                                                                background: 'rgba(34, 197, 94, 0.08)',
-                                                                                                padding: '0.15rem 0.4rem',
-                                                                                                borderRadius: '4px',
-                                                                                                border: '1px solid rgba(34, 197, 94, 0.15)',
-                                                                                                fontWeight: 600
-                                                                                            }}>
-                                                                                                ผูกแล้ว: {member.profiles?.full_name || 'ไม่ทราบชื่อ'}{member.profiles?.member_code ? ` (รหัส: ${member.profiles.member_code})` : ''}
-                                                                                            </span>
-                                                                                        ) : (
-                                                                                            <span style={{ 
-                                                                                                color: 'var(--color-text-muted)', 
-                                                                                                fontSize: '0.8rem',
-                                                                                                background: 'rgba(239, 68, 68, 0.08)',
-                                                                                                padding: '0.15rem 0.4rem',
-                                                                                                borderRadius: '4px',
-                                                                                                border: '1px solid rgba(239, 68, 68, 0.15)'
-                                                                                            }}>
-                                                                                                ยังไม่ผูกบัญชี LINE
-                                                                                            </span>
-                                                                                        )}
-                                                                                    </td>
-                                                                                </tr>
-                                                                            ))}
-                                                                        </tbody>
-                                                                    </table>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
+                                            {/* Lottery Type Selection */}
+                                            <div className="line-group-mobile-row">
+                                                <label>ประเภทหวยหลัก</label>
+                                                <select
+                                                    className="form-input"
+                                                    value={group.lottery_type}
+                                                    disabled={!isOwnerOrSuper}
+                                                    onChange={e => handleUpdateLotteryType(group.id, e.target.value)}
+                                                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.85rem', flex: '1 1 auto', maxWidth: '200px' }}
+                                                >
+                                                    {Object.entries(LOTTERY_TYPES).map(([typeKey, label]) => (
+                                                        <option key={typeKey} value={typeKey}>{label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Staff Bet Controls */}
+                                            <div className="line-group-mobile-section">
+                                                <div className="line-group-mobile-section-title">เจ้ามือ/แอดมินส่งเลขได้</div>
+                                                {renderStaffBetControls(group, true)}
+                                            </div>
+
+                                            {/* Expanded details */}
+                                            {isExpanded && (
+                                                <div className="line-group-mobile-expanded">
+                                                    {renderExpandedGroupContent(group)}
+                                                </div>
                                             )}
-                                        </Fragment>
-                                    );
-                                }))}
-                            </tbody>
-                        </table>
-                    </div>
+                                        </div>
+                                    )
+                                })
+                            )}
+                        </div>
+                    </>
                 )}
             </div>
 
@@ -1277,10 +1317,10 @@ export default function DealerLineBotTab({ user, profile }) {
                         <table className="table" style={{ width: '100%', minWidth: '600px', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                             <thead>
                                 <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-                                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>ชื่อเรียก / นามแฝง</th>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>ชื่อเรียก</th>
                                     <th style={{ textAlign: 'left', padding: '0.5rem' }}>LINE User ID</th>
                                     <th style={{ textAlign: 'left', padding: '0.5rem', width: '120px' }}>บทบาท</th>
-                                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>สิทธิ์การใช้งาน</th>
+                                    <th style={{ textAlign: 'left', padding: '0.5rem' }}>สิทธิ์</th>
                                     <th style={{ textAlign: 'center', padding: '0.5rem', width: '100px' }}>สถานะ</th>
                                     <th style={{ textAlign: 'center', padding: '0.5rem', width: '80px' }}>จัดการ</th>
                                 </tr>

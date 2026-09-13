@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useToast } from '../../contexts/ToastContext'
 import {
     FiClock,
     FiCheck,
@@ -21,9 +22,11 @@ import UpstreamDealerSettings from './UpstreamDealerSettings'
 import BankAccountCard from '../BankAccountCard'
 import CopyButton from '../CopyButton'
 import { confirmDialog } from '../../utils/confirmDialog'
+import { THAI_BANKS, matchBankOption } from '../../constants/bankConstants'
 
 // Upstream Dealer Accordion Item Component
 export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onToggle, onEdit, onDelete, onToggleBlock, onSetDefault, onSaveSettings }) {
+    const { toast } = useToast()
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'settings' | 'bank'
     const isLinked = dealer.is_linked
     const isBlocked = dealer.is_blocked
@@ -38,6 +41,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
     const [savingBank, setSavingBank] = useState(false)
     const [bankFormData, setBankFormData] = useState({
         bank_name: '',
+        custom_bank_name: '',
         bank_account: '',
         account_name: '',
         is_default: false
@@ -159,20 +163,14 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                     .eq('dealer_id', currentUser.id)
                     .order('is_default', { ascending: false })
 
-                const { data: myUserBanks } = await supabase
-                    .from('user_bank_accounts')
-                    .select('*')
-                    .eq('user_id', currentUser.id)
-                    .order('is_default', { ascending: false })
-
-                setMyBankAccounts([...(myDealerBanks || []), ...(myUserBanks || [])])
+                setMyBankAccounts(myDealerBanks || [])
 
                 // Get my_bank_account_id from the connection
                 const { data: conn } = await supabase
                     .from('dealer_upstream_connections')
                     .select('my_bank_account_id')
                     .eq('id', dealer.id)
-                    .single()
+                    .maybeSingle()
                 setMyMemberBankAccountId(conn?.my_bank_account_id || null)
             }
         } catch (error) {
@@ -183,20 +181,28 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
     }
 
     async function handleSaveBank() {
-        if (!bankFormData.bank_name.trim() || !bankFormData.bank_account.trim()) return
+        const effectiveBankName = bankFormData.bank_name === 'อื่นๆ'
+            ? bankFormData.custom_bank_name.trim()
+            : bankFormData.bank_name.trim()
+
+        if (!effectiveBankName || !bankFormData.bank_account.trim()) {
+            toast.warning('กรุณาเลือกธนาคารและระบุเลขบัญชี')
+            return
+        }
         setSavingBank(true)
         try {
             if (editingBank) {
                 const { error } = await supabase
                     .from('upstream_dealer_bank_accounts')
                     .update({
-                        bank_name: bankFormData.bank_name,
-                        bank_account: bankFormData.bank_account,
-                        account_name: bankFormData.account_name,
+                        bank_name: effectiveBankName,
+                        bank_account: bankFormData.bank_account.trim(),
+                        account_name: bankFormData.account_name.trim(),
                         is_default: bankFormData.is_default
                     })
                     .eq('id', editingBank.id)
                 if (error) throw error
+                toast.success('แก้ไขบัญชีธนาคารสำเร็จ')
             } else {
                 const { data: { user } } = await supabase.auth.getUser()
                 const { error } = await supabase
@@ -204,19 +210,21 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                     .insert({
                         connection_id: dealer.id,
                         dealer_id: user.id,
-                        bank_name: bankFormData.bank_name,
-                        bank_account: bankFormData.bank_account,
-                        account_name: bankFormData.account_name,
+                        bank_name: effectiveBankName,
+                        bank_account: bankFormData.bank_account.trim(),
+                        account_name: bankFormData.account_name.trim(),
                         is_default: bankAccounts.length === 0 ? true : bankFormData.is_default
                     })
                 if (error) throw error
+                toast.success('เพิ่มบัญชีธนาคารสำเร็จ')
             }
             setShowBankForm(false)
             setEditingBank(null)
-            setBankFormData({ bank_name: '', bank_account: '', account_name: '', is_default: false })
+            setBankFormData({ bank_name: '', custom_bank_name: '', bank_account: '', account_name: '', is_default: false })
             fetchBankAccounts()
         } catch (error) {
             console.error('Error saving bank:', error)
+            toast.error('เกิดข้อผิดพลาดในการบันทึกบัญชี: ' + (error.message || ''))
         } finally {
             setSavingBank(false)
         }
@@ -230,9 +238,11 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                 .delete()
                 .eq('id', bankId)
             if (error) throw error
+            toast.success('ลบบัญชีธนาคารสำเร็จ')
             fetchBankAccounts()
         } catch (error) {
             console.error('Error deleting bank:', error)
+            toast.error('เกิดข้อผิดพลาดในการลบบัญชี: ' + (error.message || ''))
         }
     }
 
@@ -243,16 +253,21 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                 .update({ is_default: true })
                 .eq('id', bankId)
             if (error) throw error
+            toast.success('ตั้งเป็นบัญชีหลักสำเร็จ')
             fetchBankAccounts()
         } catch (error) {
             console.error('Error setting default:', error)
+            toast.error('เกิดข้อผิดพลาดในการตั้งค่า: ' + (error.message || ''))
         }
     }
 
     function openEditBank(bank) {
         setEditingBank(bank)
+        const matched = matchBankOption(bank.bank_name, THAI_BANKS)
+        const isStandard = THAI_BANKS.includes(matched) && matched !== 'อื่นๆ'
         setBankFormData({
-            bank_name: bank.bank_name,
+            bank_name: isStandard ? matched : (bank.bank_name ? 'อื่นๆ' : ''),
+            custom_bank_name: isStandard ? '' : (bank.bank_name || ''),
             bank_account: bank.bank_account,
             account_name: bank.account_name || '',
             is_default: bank.is_default
@@ -262,7 +277,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
 
     function openAddBank() {
         setEditingBank(null)
-        setBankFormData({ bank_name: '', bank_account: '', account_name: '', is_default: false })
+        setBankFormData({ bank_name: '', custom_bank_name: '', bank_account: '', account_name: '', is_default: false })
         setShowBankForm(true)
     }
 
@@ -628,29 +643,45 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                                 if (!currentUser) return
 
                                                 // Save to dealer_upstream_connections.my_bank_account_id (primary)
-                                                const { data: connData, error: connError } = await supabase
-                                                    .from('dealer_upstream_connections')
-                                                    .update({ my_bank_account_id: newId })
-                                                    .eq('dealer_id', currentUser.id)
-                                                    .eq('upstream_dealer_id', dealer.upstream_dealer_id)
-                                                    .select()
+                                                let updated = false
+                                                try {
+                                                    const { data: connData, error: connError } = await supabase
+                                                        .from('dealer_upstream_connections')
+                                                        .update({ my_bank_account_id: newId })
+                                                        .eq('dealer_id', currentUser.id)
+                                                        .eq('upstream_dealer_id', dealer.upstream_dealer_id)
+                                                        .select()
 
-                                                if (connError) throw connError
+                                                    if (!connError && connData && connData.length > 0) {
+                                                        updated = true
+                                                    }
+                                                } catch (e) {
+                                                    console.warn('Connection bank update bypassed:', e)
+                                                }
 
                                                 // Also try membership table as fallback (for member_bank_account_id)
-                                                if (!connData || connData.length === 0) {
-                                                    const { error: memError } = await supabase
-                                                        .from('user_dealer_memberships')
-                                                        .update({ member_bank_account_id: newId })
-                                                        .eq('user_id', currentUser.id)
-                                                        .eq('dealer_id', dealer.upstream_dealer_id)
-                                                        .eq('status', 'active')
-                                                    if (memError) throw memError
+                                                if (!updated) {
+                                                    try {
+                                                        const { data: memData, error: memError } = await supabase
+                                                            .from('user_dealer_memberships')
+                                                            .update({ member_bank_account_id: newId })
+                                                            .eq('user_id', currentUser.id)
+                                                            .eq('dealer_id', dealer.upstream_dealer_id)
+                                                            .eq('status', 'active')
+                                                            .select()
+                                                        if (!memError && memData && memData.length > 0) {
+                                                            updated = true
+                                                        }
+                                                    } catch (e) {
+                                                        console.warn('Membership bank update bypassed:', e)
+                                                    }
                                                 }
 
                                                 setMyMemberBankAccountId(newId)
+                                                toast.success('บันทึกการเลือกบัญชีเรียบร้อย')
                                             } catch (err) {
                                                 console.error('Error updating member bank:', err)
+                                                toast.error('เกิดข้อผิดพลาดในการบันทึก: ' + (err.message || ''))
                                             } finally {
                                                 setSavingMyBank(false)
                                             }
@@ -800,8 +831,8 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                     border: '2px solid var(--color-primary)'
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                                        <h5 style={{ margin: 0, color: 'var(--color-text)' }}>
-                                            {editingBank ? 'แก้ไขบัญชี' : 'เพิ่มบัญชีใหม่'}
+                                        <h5 style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.95rem' }}>
+                                            {editingBank ? '✏️ แก้ไขบัญชีธนาคาร' : '➕ เพิ่มบัญชีธนาคารใหม่'}
                                         </h5>
                                         <button
                                             onClick={() => { setShowBankForm(false); setEditingBank(null) }}
@@ -812,15 +843,33 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                     </div>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
                                         <div>
-                                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ชื่อธนาคาร *</label>
-                                            <input
-                                                type="text"
+                                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>ธนาคาร *</label>
+                                            <select
                                                 className="form-input"
-                                                placeholder="เช่น กสิกร, กรุงไทย"
                                                 value={bankFormData.bank_name}
-                                                onChange={e => setBankFormData({ ...bankFormData, bank_name: e.target.value })}
-                                                style={{ width: '100%' }}
-                                            />
+                                                onChange={e => setBankFormData({
+                                                    ...bankFormData,
+                                                    bank_name: e.target.value,
+                                                    custom_bank_name: e.target.value === 'อื่นๆ' ? bankFormData.custom_bank_name : ''
+                                                })}
+                                                style={{ width: '100%', cursor: 'pointer' }}
+                                            >
+                                                <option value="">-- เลือกธนาคาร --</option>
+                                                {THAI_BANKS.map(bank => (
+                                                    <option key={bank} value={bank}>{bank}</option>
+                                                ))}
+                                            </select>
+                                            {bankFormData.bank_name === 'อื่นๆ' && (
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    placeholder="ระบุชื่อธนาคาร / บริการทางการเงิน"
+                                                    value={bankFormData.custom_bank_name}
+                                                    onChange={e => setBankFormData({ ...bankFormData, custom_bank_name: e.target.value })}
+                                                    style={{ width: '100%', marginTop: '0.5rem' }}
+                                                    autoFocus
+                                                />
+                                            )}
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>เลขบัญชี *</label>
@@ -845,6 +894,22 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                             />
                                         </div>
                                     </div>
+
+                                    {/* Default Account Checkbox */}
+                                    <div style={{ marginTop: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <input
+                                            type="checkbox"
+                                            id={`is_default_upstream_${dealer.id}`}
+                                            checked={bankAccounts.length === 0 ? true : bankFormData.is_default}
+                                            disabled={bankAccounts.length === 0}
+                                            onChange={e => setBankFormData({ ...bankFormData, is_default: e.target.checked })}
+                                            style={{ cursor: 'pointer', width: '16px', height: '16px', accentColor: 'var(--color-primary)' }}
+                                        />
+                                        <label htmlFor={`is_default_upstream_${dealer.id}`} style={{ fontSize: '0.85rem', color: 'var(--color-text)', cursor: 'pointer' }}>
+                                            ตั้งเป็นบัญชีหลัก (ค่าเริ่มต้น)
+                                        </label>
+                                    </div>
+
                                     <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                                         <button className="btn btn-secondary btn-sm" onClick={() => { setShowBankForm(false); setEditingBank(null) }}>
                                             ยกเลิก
@@ -852,7 +917,12 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                         <button
                                             className="btn btn-primary btn-sm"
                                             onClick={handleSaveBank}
-                                            disabled={savingBank || !bankFormData.bank_name.trim() || !bankFormData.bank_account.trim()}
+                                            disabled={
+                                                savingBank ||
+                                                !bankFormData.bank_name ||
+                                                (bankFormData.bank_name === 'อื่นๆ' && !bankFormData.custom_bank_name?.trim()) ||
+                                                !bankFormData.bank_account.trim()
+                                            }
                                         >
                                             {savingBank ? 'กำลังบันทึก...' : <><FiCheck /> บันทึก</>}
                                         </button>
@@ -860,7 +930,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                 </div>
                             )}
 
-                            {/* Section: Select my bank account to show to this upstream dealer */}
+                            {/* Section: Select my bank account to receive money from this upstream dealer */}
                             {myBankAccounts.length > 0 && (
                                 <div style={{
                                     marginTop: '1.5rem',
@@ -877,7 +947,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                         fontWeight: '500'
                                     }}>
                                         <FiStar style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />
-                                        บัญชีของฉันที่ให้เจ้ามือเห็น
+                                        บัญชีของฉันสำหรับรับเงิน (จากเจ้ามือนี้)
                                     </label>
                                     <select
                                         className="form-input"
@@ -892,8 +962,10 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                                     .eq('id', dealer.id)
                                                 if (error) throw error
                                                 setMyMemberBankAccountId(newId)
+                                                toast.success('บันทึกการเลือกบัญชีเรียบร้อย')
                                             } catch (err) {
                                                 console.error('Error updating my bank for upstream:', err)
+                                                toast.error('เกิดข้อผิดพลาดในการบันทึก: ' + (err.message || ''))
                                             } finally {
                                                 setSavingMyBank(false)
                                             }
@@ -923,7 +995,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                         marginTop: '0.5rem',
                                         opacity: 0.8
                                     }}>
-                                        {savingMyBank ? 'กำลังบันทึก...' : 'เจ้ามือจะเห็นบัญชีนี้ในหน้าข้อมูลสมาชิก'}
+                                        {savingMyBank ? 'กำลังบันทึก...' : 'บัญชีที่คุณเลือกไว้สำหรับรับเงินรางวัลหรือเคลียร์ยอดจากเจ้ามือนี้'}
                                     </p>
                                 </div>
                             )}
