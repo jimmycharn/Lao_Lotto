@@ -537,6 +537,26 @@ export default function WriteSubmissionModal({
             return true
         }
     })
+    const [fontSize, setFontSize] = useState(() => {
+        try {
+            const saved = localStorage.getItem('lao_lotto_modal_font_size')
+            if (saved && ['sm', 'md', 'lg'].includes(saved)) {
+                return saved
+            }
+            return 'sm'
+        } catch {
+            return 'sm'
+        }
+    })
+
+    const handleFontSizeChange = (size) => {
+        setFontSize(size)
+        try {
+            localStorage.setItem('lao_lotto_modal_font_size', size)
+        } catch {
+            // Ignore localStorage errors
+        }
+    }
     const [isCtrlPressed, setIsCtrlPressed] = useState(false) // Virtual Ctrl key state for mobile
     const [defaultTypes, setDefaultTypes] = useState(() => {
         // Load default types from localStorage
@@ -2698,10 +2718,38 @@ export default function WriteSubmissionModal({
 
     return (
         <div className="write-modal-overlay" onClick={handleClose}>
-            <div className="write-modal" onClick={e => e.stopPropagation()}>
+            <div className={`write-modal font-size-${fontSize}`} onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="write-modal-header">
-                    <h3>{isEditMode ? '✏️ แก้ไขโพย' : '🖊️ เขียนโพย'}</h3>
+                    <div className="header-title-area">
+                        <h3>{isEditMode ? '✏️ แก้ไขโพย' : '🖊️ เขียนโพย'}</h3>
+                        <div className="font-size-segmented-control" role="group" aria-label="ปรับขนาดตัวอักษร">
+                            <button
+                                type="button"
+                                className={`font-size-btn size-sm ${fontSize === 'sm' ? 'active' : ''}`}
+                                onClick={() => handleFontSizeChange('sm')}
+                                title="ขนาดตัวอักษร: เล็ก (ปกติ)"
+                            >
+                                A
+                            </button>
+                            <button
+                                type="button"
+                                className={`font-size-btn size-md ${fontSize === 'md' ? 'active' : ''}`}
+                                onClick={() => handleFontSizeChange('md')}
+                                title="ขนาดตัวอักษร: กลาง"
+                            >
+                                A
+                            </button>
+                            <button
+                                type="button"
+                                className={`font-size-btn size-lg ${fontSize === 'lg' ? 'active' : ''}`}
+                                onClick={() => handleFontSizeChange('lg')}
+                                title="ขนาดตัวอักษร: ใหญ่"
+                            >
+                                A
+                            </button>
+                        </div>
+                    </div>
                     {roundInfo && (
                         <span className="round-badge">{roundInfo.name}</span>
                     )}
