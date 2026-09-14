@@ -376,7 +376,7 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                                     style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }}
                                 />
                                 <span style={{ fontWeight: 500 }}>
-                                    {!blockedLotteryTypes.includes(activeTab) ? 'อนุญาติให้ส่งเลข' : 'ไม่อนุญาติให้ส่งเลข'}
+                                    อนุญาตให้ส่งเลข
                                 </span>
                             </label>
 

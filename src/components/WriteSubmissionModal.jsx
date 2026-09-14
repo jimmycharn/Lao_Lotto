@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX, FiClipboard } from 'react-icons/fi'
+import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
 import { parseMultiLinePaste, get3DigitPermCount, normalizeUnicode, extractInlineContext } from '../utils/pasteParser'
 import { useDragReorder } from '../utils/useDragReorder'
@@ -1063,13 +1063,23 @@ export default function WriteSubmissionModal({
         if (!isOpen) return
 
         const handleKeyDown = (e) => {
-            // If paste modal is open, let user use Escape to close it, and ignore all other global keypad shortcuts
+            // If paste modal is open, let user use Escape to close it, and Ctrl+Enter to submit
             if (showPasteModal) {
                 if (e.key === 'Escape') {
                     e.preventDefault()
                     setShowPasteModal(false)
                     setPasteText('')
                     setIsManualPasteInput(false)
+                    return
+                }
+                const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13
+                if ((e.ctrlKey || e.metaKey) && isEnter) {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (pasteText.trim()) {
+                        handlePasteNumbers()
+                    }
+                    return
                 }
                 return
             }
@@ -1385,7 +1395,7 @@ export default function WriteSubmissionModal({
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [isOpen, showPasteModal, showCloseConfirm, currentInput, isLocked, lockedAmount, focusedTypeIndex, topBottomToggle, isDealerMode, allMembers, onMemberChange, selectedMember, isMemberDropdownOpen])
+    }, [isOpen, showPasteModal, showCloseConfirm, currentInput, isLocked, lockedAmount, focusedTypeIndex, topBottomToggle, isDealerMode, allMembers, onMemberChange, selectedMember, isMemberDropdownOpen, pasteText])
 
     // Prevent body scroll when modal is open
     useEffect(() => {
@@ -2213,45 +2223,10 @@ export default function WriteSubmissionModal({
         setIsManualPasteInput(false)
     }
 
-    // Direct clipboard paste handler
-    const handlePasteFromClipboard = async () => {
-        try {
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                const text = await navigator.clipboard.readText()
-                if (text && text.trim()) {
-                    const textarea = pasteTextareaRef.current
-                    let newText = ''
-                    let newCursorPos = 0
-                    if (textarea && pasteText.trim()) {
-                        const start = textarea.selectionStart ?? pasteText.length
-                        const end = textarea.selectionEnd ?? pasteText.length
-                        const prefix = pasteText.slice(0, start)
-                        const suffix = pasteText.slice(end)
-                        const separator = (start === pasteText.length && prefix.length > 0 && !prefix.endsWith('\n') && !prefix.endsWith(' ')) ? '\n' : ''
-                        newText = prefix + separator + text + suffix
-                        newCursorPos = start + separator.length + text.length
-                    } else {
-                        newText = text
-                        newCursorPos = text.length
-                    }
-                    setPasteText(newText)
-                    setIsManualPasteInput(true)
-                    setTimeout(() => {
-                        if (pasteTextareaRef.current) {
-                            pasteTextareaRef.current.selectionStart = newCursorPos
-                            pasteTextareaRef.current.selectionEnd = newCursorPos
-                            pasteTextareaRef.current.focus()
-                        }
-                    }, 0)
-                    return
-                } else {
-                    setError('ไม่พบข้อความในคลิปบอร์ด')
-                    return
-                }
-            }
-        } catch (err) {
-            console.warn('[WriteModal] Clipboard read warning:', err)
-        }
+    // Clear paste text handler
+    const handleClearPasteText = () => {
+        setPasteText('')
+        setIsManualPasteInput(false)
         pasteTextareaRef.current?.focus()
     }
 
@@ -3387,11 +3362,12 @@ export default function WriteSubmissionModal({
                                     <p className="paste-hint">วางข้อความที่มีเลข ระบบจะวิเคราะห์ประเภทอัตโนมัติ</p>
                                     <button
                                         type="button"
-                                        className="paste-clipboard-action-btn"
-                                        onClick={handlePasteFromClipboard}
-                                        title="วางข้อความจากคลิปบอร์ดทันที"
+                                        className="paste-clear-action-btn"
+                                        onClick={handleClearPasteText}
+                                        disabled={!pasteText}
+                                        title="เคลียร์ข้อความในช่องป้อนข้อมูล"
                                     >
-                                        <FiClipboard /> วางจากคลิปบอร์ด
+                                        <FiTrash2 /> เคลียร์
                                     </button>
                                 </div>
                                 <textarea
@@ -3401,25 +3377,30 @@ export default function WriteSubmissionModal({
                                     placeholder={'วางข้อความที่นี่ (Ctrl+V) หรือป้อนตัวเลข...'}
                                     autoFocus
                                     value={pasteText}
-                                    onPaste={(e) => {
+                                    onPaste={async (e) => {
                                         const text = e.clipboardData?.getData('text')
                                         if (!text || !text.trim()) return
 
+                                        const cleanText = text.trim()
+
+                                        // Condition 1: ถ้ายังไม่มีการป้อนข้อมูลด้วยมือ ให้ประมวลผลเลยทันที และบันทึก draft ในฟอร์มป้อนข้อมูล
+                                        if (!pasteText.trim() && !isManualPasteInput) {
+                                            e.preventDefault()
+                                            setPasteText(cleanText)
+                                            await handlePasteNumbers(cleanText)
+                                            return
+                                        }
+
+                                        // Condition 2: ถ้ามีการป้อนข้อมูลอยู่แล้ว ให้วางต่อลงใน textarea ต่อจากข้อมูลเดิมในบรรทัดถัดไป และรอการกดปุ่มตกลง
                                         e.preventDefault()
-                                        const textarea = e.target
-                                        const start = textarea.selectionStart ?? pasteText.length
-                                        const end = textarea.selectionEnd ?? pasteText.length
-                                        const prefix = pasteText.slice(0, start)
-                                        const suffix = pasteText.slice(end)
-                                        const separator = (start === pasteText.length && prefix.length > 0 && !prefix.endsWith('\n') && !prefix.endsWith(' ')) ? '\n' : ''
-                                        const newText = prefix + separator + text + suffix
-                                        const newPos = start + separator.length + text.length
+                                        const trimmedPrev = pasteText.replace(/\s+$/, '')
+                                        const newText = trimmedPrev ? `${trimmedPrev}\n${cleanText}` : cleanText
                                         setPasteText(newText)
                                         setIsManualPasteInput(true)
                                         setTimeout(() => {
                                             if (pasteTextareaRef.current) {
-                                                pasteTextareaRef.current.selectionStart = newPos
-                                                pasteTextareaRef.current.selectionEnd = newPos
+                                                pasteTextareaRef.current.selectionStart = newText.length
+                                                pasteTextareaRef.current.selectionEnd = newText.length
                                                 pasteTextareaRef.current.focus()
                                             }
                                         }, 0)
@@ -3429,9 +3410,13 @@ export default function WriteSubmissionModal({
                                         setIsManualPasteInput(true)
                                     }}
                                     onKeyDown={e => {
-                                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                                        const isEnter = e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter' || e.keyCode === 13
+                                        if ((e.ctrlKey || e.metaKey) && isEnter) {
                                             e.preventDefault()
-                                            handlePasteNumbers()
+                                            e.stopPropagation()
+                                            if (pasteText.trim()) {
+                                                handlePasteNumbers()
+                                            }
                                         }
                                     }}
                                 />
@@ -3458,8 +3443,9 @@ export default function WriteSubmissionModal({
                                         type="button"
                                         className="paste-btn-submit"
                                         onClick={() => handlePasteNumbers()}
+                                        title="ตกลง หรือกด Ctrl+Enter เพื่อบันทึก"
                                     >
-                                        <FiCheck /> ตกลง
+                                        <FiCheck /> ตกลง <span className="paste-submit-kbd">Ctrl+↵</span>
                                     </button>
                                 </div>
                             )}
