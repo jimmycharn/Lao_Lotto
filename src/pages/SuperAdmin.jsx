@@ -905,6 +905,36 @@ export default function SuperAdmin() {
                 }
             }
             
+            // Record credit transaction
+            const finalBal = creditData ? (creditData.balance || 0) + topupAmount - debtRecovered : topupAmount
+            const { error: transError } = await supabase
+                .from('credit_transactions')
+                .insert({
+                    dealer_id: request.dealer_id,
+                    transaction_type: 'topup',
+                    amount: topupAmount,
+                    balance_after: finalBal,
+                    description: `เติมเครดิตจากสลิป (SuperAdmin อนุมัติ)${debtRecovered > 0 ? ` - หักยอดค้าง ฿${debtRecovered.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : ''}`,
+                    performed_by: user.id
+                })
+            
+            if (transError) {
+                console.error('Record transaction error:', transError)
+            }
+
+            if (debtRecovered > 0) {
+                await supabase
+                    .from('credit_transactions')
+                    .insert({
+                        dealer_id: request.dealer_id,
+                        transaction_type: 'debt_recovery',
+                        amount: -debtRecovered,
+                        balance_after: finalBal,
+                        description: `หักยอดค้างชำระ ฿${debtRecovered.toLocaleString('th-TH', { minimumFractionDigits: 2 })} จากการเติมเครดิต`,
+                        performed_by: user.id
+                    })
+            }
+
             const debtMsg = debtRecovered > 0 ? ` (หักยอดค้าง ฿${debtRecovered.toLocaleString('th-TH', {minimumFractionDigits: 2})})` : ''
             toast.success(`อนุมัติคำขอเติมเครดิตสำเร็จ${debtMsg}`)
             fetchTopupRequests()

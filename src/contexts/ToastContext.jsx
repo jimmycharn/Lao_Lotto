@@ -8,15 +8,21 @@ export const useToast = () => useContext(ToastContext)
 export function ToastProvider({ children }) {
     const [toasts, setToasts] = useState([])
 
-    const addToast = useCallback((message, type = 'info', duration = 3000) => {
+    const addToast = useCallback((message, type = 'info', durationOrOptions = 3000) => {
         const id = Date.now() + Math.random()
         setToasts(prev => [...prev, { id, message, type }])
         
-        if (duration > 0) {
-            setTimeout(() => {
-                setToasts(prev => prev.filter(t => t.id !== id))
-            }, duration)
+        let duration = typeof durationOrOptions === 'object' && durationOrOptions !== null
+            ? durationOrOptions.duration
+            : durationOrOptions
+
+        if (typeof duration !== 'number' || isNaN(duration) || duration <= 0) {
+            duration = type === 'error' ? 5000 : 3500
         }
+        
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id))
+        }, duration)
         
         return id
     }, [])
@@ -56,6 +62,17 @@ function ToastContainer({ toasts, removeToast }) {
                         {t.type === 'info' && 'ℹ'}
                     </span>
                     <span className="toast-message">{t.message}</span>
+                    <button
+                        type="button"
+                        className="toast-close"
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            removeToast(t.id)
+                        }}
+                        aria-label="Close"
+                    >
+                        ✕
+                    </button>
                 </div>
             ))}
         </div>

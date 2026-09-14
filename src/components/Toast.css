@@ -58,6 +58,26 @@
     color: var(--color-text);
 }
 
+.toast-close {
+    background: transparent;
+    border: none;
+    color: var(--color-text-muted, rgba(255, 255, 255, 0.5));
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 0.2rem 0.35rem;
+    line-height: 1;
+    border-radius: 4px;
+    opacity: 0.6;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.toast-close:hover {
+    opacity: 1;
+    color: var(--color-text, #ffffff);
+    background: rgba(255, 255, 255, 0.1);
+}
+
 /* Success */
 .toast-success {
     border-color: var(--color-success);
