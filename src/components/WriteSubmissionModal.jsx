@@ -428,6 +428,15 @@ export default function WriteSubmissionModal({
     const [isManualPasteInput, setIsManualPasteInput] = useState(false)
     const pasteTextareaRef = useRef(null)
 
+    // Calculate number of lines entered in paste modal (counting non-empty lines)
+    const pasteLineCount = useMemo(() => {
+        if (!pasteText || !pasteText.trim()) return 0
+        return pasteText
+            .split(/\r\n|\r|\n/)
+            .filter(line => line.trim().length > 0)
+            .length
+    }, [pasteText])
+
     // Auto-focus textarea when paste modal opens
     useEffect(() => {
         if (showPasteModal) {
@@ -2210,18 +2219,10 @@ export default function WriteSubmissionModal({
             if (navigator.clipboard && navigator.clipboard.readText) {
                 const text = await navigator.clipboard.readText()
                 if (text && text.trim()) {
-                    // Condition 1: If empty, process immediately
-                    if (!pasteText.trim()) {
-                        setPasteText(text)
-                        await handlePasteNumbers(text)
-                        return
-                    }
-
-                    // Condition 2: If text already exists, append/insert at cursor and wait for [ตกลง]
                     const textarea = pasteTextareaRef.current
                     let newText = ''
                     let newCursorPos = 0
-                    if (textarea) {
+                    if (textarea && pasteText.trim()) {
                         const start = textarea.selectionStart ?? pasteText.length
                         const end = textarea.selectionEnd ?? pasteText.length
                         const prefix = pasteText.slice(0, start)
@@ -2230,9 +2231,8 @@ export default function WriteSubmissionModal({
                         newText = prefix + separator + text + suffix
                         newCursorPos = start + separator.length + text.length
                     } else {
-                        const separator = (pasteText.length > 0 && !pasteText.endsWith('\n')) ? '\n' : ''
-                        newText = pasteText + separator + text
-                        newCursorPos = newText.length
+                        newText = text
+                        newCursorPos = text.length
                     }
                     setPasteText(newText)
                     setIsManualPasteInput(true)
@@ -3401,27 +3401,19 @@ export default function WriteSubmissionModal({
                                     placeholder={'วางข้อความที่นี่ (Ctrl+V) หรือป้อนตัวเลข...'}
                                     autoFocus
                                     value={pasteText}
-                                    onPaste={async (e) => {
+                                    onPaste={(e) => {
                                         const text = e.clipboardData?.getData('text')
                                         if (!text || !text.trim()) return
 
-                                        // Condition 1: If empty, process immediately
-                                        if (!pasteText.trim()) {
-                                            e.preventDefault()
-                                            setPasteText(text)
-                                            await handlePasteNumbers(text)
-                                            return
-                                        }
-
-                                        // Condition 2: If text already exists, insert at cursor and wait for [ตกลง]
                                         e.preventDefault()
                                         const textarea = e.target
                                         const start = textarea.selectionStart ?? pasteText.length
                                         const end = textarea.selectionEnd ?? pasteText.length
                                         const prefix = pasteText.slice(0, start)
                                         const suffix = pasteText.slice(end)
-                                        const newText = prefix + text + suffix
-                                        const newPos = start + text.length
+                                        const separator = (start === pasteText.length && prefix.length > 0 && !prefix.endsWith('\n') && !prefix.endsWith(' ')) ? '\n' : ''
+                                        const newText = prefix + separator + text + suffix
+                                        const newPos = start + separator.length + text.length
                                         setPasteText(newText)
                                         setIsManualPasteInput(true)
                                         setTimeout(() => {
@@ -3443,6 +3435,11 @@ export default function WriteSubmissionModal({
                                         }
                                     }}
                                 />
+                                <div className="paste-modal-status-row">
+                                    <span className={`paste-line-count ${pasteLineCount > 0 ? 'has-lines' : 'is-empty'}`}>
+                                        {pasteLineCount} บรรทัด
+                                    </span>
+                                </div>
                             </div>
                             {pasteText.trim().length > 0 && (
                                 <div className="paste-modal-footer">

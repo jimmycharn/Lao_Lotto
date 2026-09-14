@@ -695,6 +695,30 @@
     color: rgba(255, 255, 255, 0.4);
 }
 
+.paste-modal-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-top: 0.5rem;
+    padding: 0 0.15rem;
+}
+
+.paste-line-count {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #22c55e;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    user-select: none;
+    transition: all 0.2s ease;
+}
+
+.paste-line-count.is-empty {
+    color: rgba(255, 255, 255, 0.4);
+    font-weight: 400;
+}
+
 .paste-modal-footer {
     display: flex;
     justify-content: flex-end;
@@ -2455,5 +2479,15 @@ html.theme-light .paste-btn-cancel {
 html.theme-light .paste-btn-cancel:hover {
     background: #e2e8f0 !important;
     color: #1e293b !important;
+}
+
+[data-theme="light"] .paste-line-count.has-lines,
+html.theme-light .paste-line-count.has-lines {
+    color: #16a34a !important;
+}
+
+[data-theme="light"] .paste-line-count.is-empty,
+html.theme-light .paste-line-count.is-empty {
+    color: rgba(0, 0, 0, 0.4) !important;
 }
 
