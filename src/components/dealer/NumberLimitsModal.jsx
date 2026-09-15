@@ -6,7 +6,7 @@ import { BET_TYPES, BET_TYPES_BY_LOTTERY, getPermutations } from '../../constant
 import { confirmDialog } from '../../utils/confirmDialog'
 
 // Generate all permutations (reversed numbers) for a given number string
-function generateReversedNumbers(numbers) {
+export function generateReversedNumbers(numbers) {
     if (!numbers || numbers.length <= 1) return []
     const perms = getPermutations(numbers)
     // Filter out the original number
@@ -67,12 +67,12 @@ export default function NumberLimitsModal({ round, onClose }) {
     })
 
     // Determine which bet type keys are enabled based on the number input length
+    const numberLength = (newLimit.numbers || '').length
     const enabledBetKeys = useMemo(() => {
-        const len = (newLimit.numbers || '').length
-        if (len === 0) return new Set()
-        const matched = betTypeGroups.filter(g => g.digitCount === len)
+        if (numberLength === 0) return new Set()
+        const matched = betTypeGroups.filter(g => g.digitCount === numberLength)
         return new Set(matched.flatMap(g => g.types.map(t => t.key)))
-    }, [newLimit.numbers, betTypeGroups])
+    }, [numberLength, betTypeGroups])
 
     // Auto-clear selected bet types that no longer match when number changes
     useEffect(() => {
@@ -92,6 +92,16 @@ export default function NumberLimitsModal({ round, onClose }) {
     useEffect(() => {
         fetchLimits()
     }, [round.id])
+
+    // Focus number input on modal open
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (numberInputRef.current) {
+                numberInputRef.current.focus()
+            }
+        }, 150)
+        return () => clearTimeout(timer)
+    }, [])
 
     async function fetchLimits() {
         setLoading(true)
@@ -135,6 +145,7 @@ export default function NumberLimitsModal({ round, onClose }) {
     }
 
     async function handleAddLimit() {
+        if (saving) return
         if (!newLimit.numbers) {
             toast.warning('กรุณากรอกเลข')
             return
@@ -148,6 +159,7 @@ export default function NumberLimitsModal({ round, onClose }) {
             return
         }
 
+        const targetNumber = newLimit.numbers
         setSaving(true)
         try {
             const reversedNumbers = newLimit.include_reversed
@@ -175,9 +187,17 @@ export default function NumberLimitsModal({ round, onClose }) {
             if (error) throw error
 
             toast.success(`เพิ่มเลข${newLimit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'} ${newLimit.numbers} สำเร็จ (${newLimit.selected_bet_types.length} ประเภท)`)
-            setNewLimit(prev => ({ ...prev, numbers: '' }))
             fetchLimits()
-            setTimeout(() => numberInputRef.current?.focus(), 100)
+            // Keep number and select all for rapid continuous entry
+            setTimeout(() => {
+                if (numberInputRef.current) {
+                    numberInputRef.current.focus()
+                    if (numberInputRef.current.value === targetNumber) {
+                        numberInputRef.current.select()
+                        numberInputRef.current.setSelectionRange?.(0, 9999)
+                    }
+                }
+            }, 50)
         } catch (error) {
             console.error('Error adding limit:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -432,6 +452,15 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     placeholder="เช่น 123"
                                     value={newLimit.numbers}
                                     onChange={e => setNewLimit({ ...newLimit, numbers: e.target.value.replace(/\D/g, '') })}
+                                    onFocus={e => e.target.select()}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault()
+                                            if (!saving) {
+                                                handleAddLimit()
+                                            }
+                                        }
+                                    }}
                                 />
                             </div>
                             <div style={{ flex: '1 1 140px', minWidth: '120px' }}>
@@ -458,6 +487,14 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     placeholder="0"
                                     value={newLimit.max_amount}
                                     onChange={e => setNewLimit({ ...newLimit, max_amount: e.target.value })}
+                                    onKeyDown={e => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault()
+                                            if (!saving) {
+                                                handleAddLimit()
+                                            }
+                                        }
+                                    }}
                                 />
                             </div>
                             {newLimit.limit_type === 'limited' && (
@@ -472,6 +509,14 @@ export default function NumberLimitsModal({ round, onClose }) {
                                         max="100"
                                         value={newLimit.payout_percent}
                                         onChange={e => setNewLimit({ ...newLimit, payout_percent: e.target.value })}
+                                        onKeyDown={e => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault()
+                                                if (!saving) {
+                                                    handleAddLimit()
+                                                }
+                                            }
+                                        }}
                                     />
                                 </div>
                             )}
