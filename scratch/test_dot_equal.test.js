@@ -104,4 +104,69 @@ describe('dot-equal typo handling', () => {
             expect(parseMonthYearParam('abc')).toBeNull()
         })
     })
+
+    describe('same-digits typo handling in JS and TS', () => {
+        it('should parse 222=20*20 as 222=40 straight in both JS and TS', () => {
+            for (const parse of [parseJS, parseTS]) {
+                // Lao lotto: 222=20*20 -> 222=40 ตรง
+                const resLao = parse('222=20*20', 'lao')
+                expect(resLao).toHaveLength(1)
+                expect(resLao[0].numbers).toBe('222')
+                expect(resLao[0].amount).toBe(40)
+                expect(resLao[0].amount2).toBeNull()
+                expect(resLao[0].betType).toBe('3_top')
+                expect(resLao[0].typeLabel).toBe('ตรง')
+                expect(resLao[0].formattedLine).toBe('222=40 ตรง')
+
+                // Thai lotto: 222=20*20 -> 222=40 บน
+                const resThai = parse('222=20*20', 'thai')
+                expect(resThai).toHaveLength(1)
+                expect(resThai[0].numbers).toBe('222')
+                expect(resThai[0].amount).toBe(40)
+                expect(resThai[0].amount2).toBeNull()
+                expect(resThai[0].betType).toBe('3_top')
+                expect(resThai[0].typeLabel).toBe('บน')
+                expect(resThai[0].formattedLine).toBe('222=40 บน')
+
+                // 22=20*20 -> 22=40 บน
+                const res22 = parse('22=20*20', 'lao')
+                expect(res22).toHaveLength(1)
+                expect(res22[0].numbers).toBe('22')
+                expect(res22[0].amount).toBe(40)
+                expect(res22[0].amount2).toBeNull()
+                expect(res22[0].betType).toBe('2_top')
+                expect(res22[0].typeLabel).toBe('บน')
+                expect(res22[0].formattedLine).toBe('22=40 บน')
+            }
+        })
+
+        it('should parse 4-digit permutation expressions as คูณชุด in both JS and TS', () => {
+            const cases = [
+                { text: '3518 กลับตัวละ10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+                { text: '3518 10กลับทุกตัว', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+                { text: '3518 กลับตูละ10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+                { text: '3518 กลับประตูละ10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+                { text: '3518 10กลับทุกตู', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+                { text: '3518 10กลับทุกประตู', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+                { text: '3318 กลับตัวละ10', numbers: '3318', amount: 10, amount2: 12, line: '3318=10*12 คูณชุด' },
+                { text: '3518กลับตัวละ10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+                { text: '3518 10 กลับทุกตัว', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+            ]
+
+            for (const parse of [parseJS, parseTS]) {
+                for (const c of cases) {
+                    const res = parse(c.text, 'lao')
+                    expect(res).toHaveLength(1)
+                    expect(res[0].numbers).toBe(c.numbers)
+                    expect(res[0].amount).toBe(c.amount)
+                    expect(res[0].amount2).toBe(c.amount2)
+                    expect(res[0].betType).toBe('3_top')
+                    expect(res[0].specialType).toBe('3xPerm')
+                    expect(res[0].typeLabel).toBe('คูณชุด')
+                    expect(res[0].formattedLine).toBe(c.line)
+                }
+            }
+        })
+    })
 })
+

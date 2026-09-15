@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { FiX, FiTrash2, FiEdit2, FiPlus, FiCheck, FiRefreshCw, FiVolume2, FiVolumeX } from 'react-icons/fi'
 import { getPermutations } from '../constants/lotteryTypes'
-import { parseMultiLinePaste, get3DigitPermCount, normalizeUnicode, extractInlineContext } from '../utils/pasteParser'
+import { parseMultiLinePaste, get3DigitPermCount, normalizeUnicode, extractInlineContext, isAllSameDigits, extractBuyerNote } from '../utils/pasteParser'
 import { useDragReorder } from '../utils/useDragReorder'
 import { fetchNumberLimits, findMatchingLimit, getEffectivePayoutPercent } from '../utils/numberLimits'
 import { useModalBackButton } from '../utils/useModalBackButton'
@@ -172,41 +172,72 @@ const parseLine = (line) => {
         }
     } else if (numLen === 2) {
         // 2 digits: บน/ล่าง, ลอย, หน้า, ถ่าง, กลับ
-        // If amount2 is present, it is always a reverse bet (กลับ)
-        const isReversed = amount2 !== null || typeStr.includes('กลับ')
-        if (typeStr.includes('ล่าง') || mode === 'bottom' || mode === 'float_bottom') {
-            betType = '2_bottom'
-            if (isReversed) specialType = 'reverse'
-        } else if (typeStr.includes('หน้า')) {
-            betType = '2_front'
-            if (isReversed) specialType = 'reverse'
-        } else if (typeStr.includes('ถ่าง')) {
-            betType = '2_tang'
-            if (isReversed) specialType = 'reverse'
-        } else if (typeStr.includes('ลอย') || typeStr.includes('วิ่ง') || mode === 'float_top') {
-            betType = '2_run'
+        if (isAllSameDigits(numbers)) {
+            const isBottom = typeStr.includes('ล่าง') || mode === 'bottom' || mode === 'float_bottom'
+            if (typeStr.includes('หน้า')) {
+                betType = '2_front'
+            } else if (typeStr.includes('ถ่าง')) {
+                betType = '2_tang'
+            } else {
+                betType = isBottom ? '2_bottom' : '2_top'
+            }
+            if (amount2 !== null) {
+                amount = amount + amount2
+                amount2 = null
+                reverseAmount = null
+            }
+            specialType = null
         } else {
-            betType = '2_top'
-            if (isReversed) specialType = 'reverse'
+            // If amount2 is present, it is always a reverse bet (กลับ)
+            const isReversed = amount2 !== null || typeStr.includes('กลับ')
+            if (typeStr.includes('ล่าง') || mode === 'bottom' || mode === 'float_bottom') {
+                betType = '2_bottom'
+                if (isReversed) specialType = 'reverse'
+            } else if (typeStr.includes('หน้า')) {
+                betType = '2_front'
+                if (isReversed) specialType = 'reverse'
+            } else if (typeStr.includes('ถ่าง')) {
+                betType = '2_tang'
+                if (isReversed) specialType = 'reverse'
+            } else if (typeStr.includes('ลอย') || typeStr.includes('วิ่ง') || mode === 'float_top') {
+                betType = '2_run'
+            } else {
+                betType = '2_top'
+                if (isReversed) specialType = 'reverse'
+            }
         }
     } else if (numLen === 3) {
         // 3 digits: บน/ตรง, โต๊ด, ล่าง, เต็งโต๊ด, กลับ, คูณชุด
-        const permCount = getPermutationCount(numbers)
-        if (typeStr.includes('คูณชุด')) {
-            betType = '3_top'
-            specialType = permCount === 3 ? 'set3' : (permCount === 6 ? 'set6' : 'set' + permCount)
-        } else if (typeStr.includes('เต็งโต๊ด') || (amount2 !== null && typeStr === '' && mode !== 'reverse')) {
-            betType = '3_top'
-            specialType = 'tengTod'
-        } else if (typeStr.includes('โต๊ด') || typeStr.includes('3ตัวโต๊ด') || mode === 'float_top' || mode === 'float_bottom') {
-            betType = '3_tod'
-        } else if (typeStr.includes('กลับ') || mode === 'reverse') {
-            betType = '3_top'
-            specialType = 'reverse'
-        } else if (typeStr.includes('ล่าง') || typeStr.includes('3ตัวล่าง') || mode === 'bottom') {
-            betType = '3_bottom'
+        if (isAllSameDigits(numbers)) {
+            if (typeStr.includes('ล่าง') || typeStr.includes('3ตัวล่าง') || mode === 'bottom') {
+                betType = '3_bottom'
+            } else {
+                betType = '3_top'
+            }
+            if (amount2 !== null) {
+                amount = amount + amount2
+                amount2 = null
+                reverseAmount = null
+            }
+            specialType = null
         } else {
-            betType = '3_top'
+            const permCount = getPermutationCount(numbers)
+            if (typeStr.includes('คูณชุด')) {
+                betType = '3_top'
+                specialType = permCount === 3 ? 'set3' : (permCount === 6 ? 'set6' : 'set' + permCount)
+            } else if (typeStr.includes('เต็งโต๊ด') || (amount2 !== null && typeStr === '' && mode !== 'reverse')) {
+                betType = '3_top'
+                specialType = 'tengTod'
+            } else if (typeStr.includes('โต๊ด') || typeStr.includes('3ตัวโต๊ด') || mode === 'float_top' || mode === 'float_bottom') {
+                betType = '3_tod'
+            } else if (typeStr.includes('กลับ') || mode === 'reverse') {
+                betType = '3_top'
+                specialType = 'reverse'
+            } else if (typeStr.includes('ล่าง') || typeStr.includes('3ตัวล่าง') || mode === 'bottom') {
+                betType = '3_bottom'
+            } else {
+                betType = '3_top'
+            }
         }
     } else if (numLen === 4) {
         // 4 digits: 4ตัวชุด, ลอยแพ, คูณชุด
@@ -907,7 +938,15 @@ export default function WriteSubmissionModal({
                 buttons.push({ label: 'หลังล่าง', value: 'หลังล่าง', autoSubmit: true })
             }
         } else if (numLen === 2) {
-            if (endsWithAsterisk) {
+            if (isAllSameDigits(numbers)) {
+                if (isTop) {
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                }
+            } else if (endsWithAsterisk) {
                 // Input ends with * (e.g., "12=20*") - show all possible types that need second amount
                 if (isTop) {
                     buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true, appendAmount: amount1 })
@@ -939,7 +978,19 @@ export default function WriteSubmissionModal({
                 }
             }
         } else if (numLen === 3) {
-            if (endsWithAsterisk) {
+            if (isAllSameDigits(numbers)) {
+                if (isTop) {
+                    if (isLaoOrHanoi) {
+                        buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
+                    } else {
+                        buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    }
+                } else {
+                    if (!isLaoOrHanoi) {
+                        buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    }
+                }
+            } else if (endsWithAsterisk) {
                 // Input ends with * (e.g., "834=20*") - show เต็งโต๊ด, กลับ และ คูณชุด
                 if (isTop) {
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true, appendAmount: amount1 })
@@ -1176,31 +1227,37 @@ export default function WriteSubmissionModal({
                 return
             }
             
-            // Arrow Down - go to first button of second row (or first button if single row)
+            // Arrow Down - go to second row or next row
             if ((e.key === 'ArrowDown' || e.key === 'Tab') && hasTypeButtons) {
                 e.preventDefault()
                 let newIndex
+                const row2Start = currentTypeButtons.findIndex(b => b.row === 2)
                 if (focusedTypeIndex === -1) {
                     // Not focused yet
-                    if (currentTypeButtons.length > BUTTONS_PER_ROW) {
-                        // Has 2 rows - go to first button of second row
+                    if (row2Start > 0) {
+                        newIndex = row2Start
+                    } else if (currentTypeButtons.length > BUTTONS_PER_ROW) {
                         newIndex = BUTTONS_PER_ROW
                     } else {
-                        // Single row - go to first button
                         newIndex = 0
                     }
+                } else if (row2Start > 0) {
+                    // Row-aware navigation for explicit row-1 and row-2
+                    if (focusedTypeIndex < row2Start) {
+                        newIndex = Math.min(row2Start + focusedTypeIndex, currentTypeButtons.length - 1)
+                    } else {
+                        newIndex = Math.min(focusedTypeIndex - row2Start, row2Start - 1)
+                    }
                 } else {
-                    // Already focused - move down a row
+                    // Already focused - move down a row in grid
                     const currentRow = Math.floor(focusedTypeIndex / BUTTONS_PER_ROW)
                     const currentCol = focusedTypeIndex % BUTTONS_PER_ROW
                     const totalRows = Math.ceil(currentTypeButtons.length / BUTTONS_PER_ROW)
                     
                     if (currentRow < totalRows - 1) {
-                        // Can go down
                         const targetIndex = (currentRow + 1) * BUTTONS_PER_ROW + currentCol
                         newIndex = Math.min(targetIndex, currentTypeButtons.length - 1)
                     } else {
-                        // At bottom row - wrap to top
                         newIndex = Math.min(currentCol, currentTypeButtons.length - 1)
                     }
                 }
@@ -1215,17 +1272,26 @@ export default function WriteSubmissionModal({
                 if (focusedTypeIndex === -1) {
                     return // Not focused, do nothing
                 }
-                const currentRow = Math.floor(focusedTypeIndex / BUTTONS_PER_ROW)
-                const currentCol = focusedTypeIndex % BUTTONS_PER_ROW
-                
-                if (currentRow > 0) {
-                    // Can go up
-                    const newIndex = (currentRow - 1) * BUTTONS_PER_ROW + currentCol
-                    setFocusedTypeIndex(newIndex)
-                    typeButtonsRef.current[newIndex]?.focus()
+                const row2Start = currentTypeButtons.findIndex(b => b.row === 2)
+                if (row2Start > 0) {
+                    if (focusedTypeIndex >= row2Start) {
+                        const newIndex = Math.min(focusedTypeIndex - row2Start, row2Start - 1)
+                        setFocusedTypeIndex(newIndex)
+                        typeButtonsRef.current[newIndex]?.focus()
+                    } else {
+                        setFocusedTypeIndex(-1)
+                    }
                 } else {
-                    // At top row - exit focus
-                    setFocusedTypeIndex(-1)
+                    const currentRow = Math.floor(focusedTypeIndex / BUTTONS_PER_ROW)
+                    const currentCol = focusedTypeIndex % BUTTONS_PER_ROW
+                    
+                    if (currentRow > 0) {
+                        const newIndex = (currentRow - 1) * BUTTONS_PER_ROW + currentCol
+                        setFocusedTypeIndex(newIndex)
+                        typeButtonsRef.current[newIndex]?.focus()
+                    } else {
+                        setFocusedTypeIndex(-1)
+                    }
                 }
                 return
             }
@@ -1344,6 +1410,12 @@ export default function WriteSubmissionModal({
                 const eqIndex = input.indexOf('=')
                 // ต้องมี = ก่อน
                 if (eqIndex === -1) {
+                    playSound('error')
+                    return
+                }
+                const numbers = input.substring(0, eqIndex).trim()
+                // เลขซ้ำกันทุกตัว (เช่น 22, 222) ไม่อนุญาตให้คีย์ *
+                if (isAllSameDigits(numbers)) {
                     playSound('error')
                     return
                 }
@@ -1672,8 +1744,23 @@ export default function WriteSubmissionModal({
             let amount1 = ''
             let amount2 = ''
             let displayLine = ''
-            
-            if (hasAsterisk) {
+            if (isAllSameDigits(numbers)) {
+                let finalAmount = ''
+                if (hasAsterisk) {
+                    const amountParts = afterEq.split('*')
+                    amount1 = amountParts[0].trim()
+                    amount2 = amountParts[1] ? amountParts[1].split(/\s+/)[0].trim() : ''
+                    if (amount2 && /^\d+$/.test(amount2)) {
+                        finalAmount = (parseInt(amount1, 10) + parseInt(amount2, 10)).toString()
+                    } else {
+                        finalAmount = amount1
+                    }
+                } else {
+                    const parts = afterEq.split(/\s+/)
+                    finalAmount = parts[0] || ''
+                }
+                displayLine = `${numbers}=${finalAmount} ${type}`
+            } else if (hasAsterisk) {
                 const amountParts = afterEq.split('*')
                 amount1 = amountParts[0].trim()
                 amount2 = amountParts[1] ? amountParts[1].split(/\s+/)[0].trim() : ''
@@ -1752,7 +1839,11 @@ export default function WriteSubmissionModal({
         
         // Check if user has set a custom default for this digit count
         const userDefault = defaultTypes[numLen]
-        if (userDefault) {
+        const forbiddenSameDigits = isAllSameDigits(numbers) && (
+            ['บนกลับ', 'ล่างกลับ', 'หน้ากลับ', 'ถ่างกลับ', 'ลอย', 'เต็งโต๊ด', 'โต๊ด', 'กลับ', 'คูณชุด'].includes(userDefault) ||
+            ['2_top_rev', '2_bottom_rev', '2_front_rev', '2_spread_rev', '2_run', '3_tod', '3_straight_tod', '3_perm_from_3'].includes(userDefault)
+        )
+        if (userDefault && !forbiddenSameDigits) {
             // Check if userDefault matches current toggle state
             const isUserDefaultTop = topTypes.includes(userDefault)
             const isUserDefaultBottom = bottomTypes.includes(userDefault)
@@ -1803,6 +1894,9 @@ export default function WriteSubmissionModal({
             if (hasSecondAmount) return { error: 'เลข 1 ตัวไม่รองรับจำนวนเงิน 2 ชุด' }
             return { type: isTop ? 'ลอยบน' : 'ลอยล่าง' }
         } else if (numLen === 2) {
+            if (isAllSameDigits(numbers)) {
+                return { type: isTop ? 'บน' : 'ล่าง' }
+            }
             if (hasSecondAmount) {
                 // มี * - default เป็นกลับ
                 return { type: isTop ? 'บนกลับ' : 'ล่างกลับ' }
@@ -1810,6 +1904,9 @@ export default function WriteSubmissionModal({
                 return { type: isTop ? 'บน' : 'ล่าง' }
             }
         } else if (numLen === 3) {
+            if (isAllSameDigits(numbers)) {
+                return { type: isTop ? (isLaoOrHanoi ? 'ตรง' : 'บน') : (isLaoOrHanoi ? 'ตรง' : 'ล่าง') }
+            }
             if (hasSecondAmount) {
                 // มี * - default เป็นเต็งโต๊ด
                 if (isTop) {
@@ -1933,8 +2030,8 @@ export default function WriteSubmissionModal({
                     }
                     return
                 }
-                // เลข 1, 4, 5 ตัว - ไม่รองรับ 2 จำนวนเงิน ให้บันทึก draft ด้วย default type ทันที
-                if (numLen === 1 || numLen === 4 || numLen === 5) {
+                // เลข 1, 4, 5 ตัว หรือเลขซ้ำกันทุกตัว (เช่น 22, 222) - ไม่รองรับ 2 จำนวนเงิน ให้บันทึก draft ด้วย default type ทันที
+                if (numLen === 1 || numLen === 4 || numLen === 5 || isAllSameDigits(numbers)) {
                     const currentTypeButtons = typeButtons
                     if (currentTypeButtons.length > 0) {
                         const defaultIndex = getDefaultButtonIndex(currentTypeButtons)
@@ -1951,14 +2048,14 @@ export default function WriteSubmissionModal({
         }
 
         // Case 2.5: ถ้ามี "เลข=จำนวนเงิน*" (ลงท้ายด้วย *) กด Enter ให้ duplicate จำนวนเงินที่ 1 เป็นจำนวนเงินที่ 2
-        // ใช้ได้กับเลข 2 หลัก และ 3 หลักเท่านั้น
+        // ใช้ได้กับเลข 2 หลัก และ 3 หลักเท่านั้น (และไม่ใช่เลขซ้ำกันทุกตัว)
         if (trimmed.includes('=') && trimmed.endsWith('*')) {
             const eqIndex = trimmed.indexOf('=')
             const numbers = trimmed.substring(0, eqIndex)
             const numLen = numbers.length
             
-            // ใช้ได้กับ 2-3 หลักเท่านั้น
-            if ((numLen === 2 || numLen === 3) && /^\d+$/.test(numbers)) {
+            // ใช้ได้กับ 2-3 หลักเท่านั้น (และไม่ใช่เลขซ้ำกันทุกตัว)
+            if ((numLen === 2 || numLen === 3) && /^\d+$/.test(numbers) && !isAllSameDigits(numbers)) {
                 const afterEq = trimmed.substring(eqIndex + 1, trimmed.length - 1) // ตัด * ออก
                 if (/^\d+$/.test(afterEq) && afterEq.length > 0) {
                     playSound('click')
@@ -1996,9 +2093,18 @@ export default function WriteSubmissionModal({
                     }
                 }
                 
+                // ถ้าเลขซ้ำกันทุกตัว (เช่น 22, 222) และ lockedAmount มี * ให้รวมจำนวนเงินเป็นก้อนเดียว
+                let effectiveLockedAmount = lockedAmount
+                if (isAllSameDigits(trimmed) && lockedHasSecondAmount) {
+                    const lParts = lockedAmount.split('*')
+                    const l1 = parseInt(lParts[0].trim(), 10) || 0
+                    const l2 = parseInt(lParts[1].trim(), 10) || 0
+                    effectiveLockedAmount = (l1 + l2).toString()
+                }
+
                 // Get available type buttons by simulating the input with locked amount
                 // We need to compute buttons based on the combined input
-                const simulatedInput = `${trimmed}=${lockedAmount}`
+                const simulatedInput = `${trimmed}=${effectiveLockedAmount}`
                 const currentTypeButtons = getAvailableTypeButtonsForInput(simulatedInput)
                 let defaultType = ''
                 
@@ -2179,6 +2285,12 @@ export default function WriteSubmissionModal({
         if (parsed.length === 0) {
             setError('ไม่พบรายการเลขในข้อความ')
             return
+        }
+
+        // Auto-extract buyer note from header or footer if present
+        const buyerNote = extractBuyerNote(textToProcess, lotteryType)
+        if (buyerNote) {
+            setBillNote(buyerNote)
         }
 
         // Convert parsed entries to formatted line strings (compatible with parseLine)
@@ -2417,7 +2529,15 @@ export default function WriteSubmissionModal({
                 buttons.push({ label: 'หลังล่าง', value: 'หลังล่าง', autoSubmit: true })
             }
         } else if (numLen === 2) {
-            if (hasSecondAmount) {
+            if (isAllSameDigits(numbers)) {
+                if (isTop) {
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                }
+            } else if (hasSecondAmount) {
                 if (isTop) {
                     buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
                     buttons.push({ label: 'หน้ากลับ', value: 'หน้ากลับ', autoSubmit: true })
@@ -2440,8 +2560,20 @@ export default function WriteSubmissionModal({
                 }
             }
         } else if (numLen === 3) {
-            const permCount = getPermutationCount(numbers)
-            if (hasSecondAmount) {
+            if (isAllSameDigits(numbers)) {
+                if (isTop) {
+                    if (isLaoOrHanoi) {
+                        buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
+                    } else {
+                        buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    }
+                } else {
+                    if (!isLaoOrHanoi) {
+                        buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    }
+                }
+            } else if (hasSecondAmount) {
+                const permCount = getPermutationCount(numbers)
                 if (isTop) {
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
                     if (permCount > 1) {
@@ -2449,6 +2581,7 @@ export default function WriteSubmissionModal({
                     }
                 }
             } else {
+                const permCount = getPermutationCount(numbers)
                 if (isTop) {
                     if (isLaoOrHanoi) {
                         buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
@@ -2588,7 +2721,15 @@ export default function WriteSubmissionModal({
             }
         } else if (numLen === 2) {
             // 2 digits
-            if (endsWithAsterisk) {
+            if (isAllSameDigits(numbers)) {
+                if (isTop) {
+                    buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    buttons.push({ label: 'หน้าบน', value: 'หน้าบน', autoSubmit: true })
+                    buttons.push({ label: 'ถ่างบน', value: 'ถ่างบน', autoSubmit: true })
+                } else {
+                    buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                }
+            } else if (endsWithAsterisk) {
                 // Input ends with * (e.g., "12=20*") - show กลับ buttons
                 if (isTop) {
                     buttons.push({ label: 'บนกลับ', value: 'บนกลับ', autoSubmit: true })
@@ -2623,7 +2764,19 @@ export default function WriteSubmissionModal({
             }
         } else if (numLen === 3) {
             // 3 digits
-            if (endsWithAsterisk) {
+            if (isAllSameDigits(numbers)) {
+                if (isTop) {
+                    if (isLaoOrHanoi) {
+                        buttons.push({ label: 'ตรง', value: 'ตรง', autoSubmit: true })
+                    } else {
+                        buttons.push({ label: 'บน', value: 'บน', autoSubmit: true })
+                    }
+                } else {
+                    if (!isLaoOrHanoi) {
+                        buttons.push({ label: 'ล่าง', value: 'ล่าง', autoSubmit: true })
+                    }
+                }
+            } else if (endsWithAsterisk) {
                 // Input ends with * (e.g., "123=20*") - show เต็งโต๊ด, กลับ และ คูณชุด
                 if (isTop) {
                     buttons.push({ label: 'เต็งโต๊ด', value: 'เต็งโต๊ด', autoSubmit: true })
@@ -2807,21 +2960,40 @@ export default function WriteSubmissionModal({
                     >
                         <FiPlus />
                     </button>
-                    <input
-                        ref={noteInputRef}
-                        type="text"
-                        placeholder="บันทึกช่วยจำ"
-                        value={billNote}
-                        onChange={e => setBillNote(e.target.value)}
-                        onKeyDown={e => {
-                            if (e.key === 'Enter') {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                e.target.blur()
-                            }
-                        }}
-                        className="note-input"
-                    />
+                    <div className="note-input-wrapper">
+                        <input
+                            ref={noteInputRef}
+                            type="text"
+                            placeholder="บันทึกช่วยจำ"
+                            value={billNote}
+                            onChange={e => setBillNote(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    e.target.blur()
+                                }
+                            }}
+                            className="note-input"
+                        />
+                        {billNote && (
+                            <button
+                                type="button"
+                                className="note-clear-btn"
+                                onMouseDown={e => e.preventDefault()}
+                                onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    setBillNote('')
+                                    noteInputRef.current?.focus()
+                                }}
+                                title="เคลียร์บันทึกช่วยจำ"
+                                aria-label="เคลียร์บันทึกช่วยจำ"
+                            >
+                                <FiX />
+                            </button>
+                        )}
+                    </div>
                     <label
                         title="ชำระเงินแล้ว"
                         style={{
@@ -3114,7 +3286,7 @@ export default function WriteSubmissionModal({
 
                 {/* Type Buttons Row - moved above number pad */}
                 {!success && (
-                    <div className="type-buttons-row">
+                    <div className="type-buttons-row" data-count={typeButtons.length}>
                         {typeButtons.length > 0 ? (
                             (() => {
                                 const defaultIndex = getDefaultButtonIndex(typeButtons)
@@ -3341,11 +3513,7 @@ export default function WriteSubmissionModal({
 
                 {/* Paste Numbers Modal */}
                 {showPasteModal && (
-                    <div className="confirm-dialog-overlay" onClick={() => {
-                        setShowPasteModal(false)
-                        setPasteText('')
-                        setIsManualPasteInput(false)
-                    }}>
+                    <div className="confirm-dialog-overlay">
                         <div className="paste-modal" onClick={e => e.stopPropagation()}>
                             <div className="paste-modal-header">
                                 <h3>วางเลข</h3>
@@ -3426,29 +3594,28 @@ export default function WriteSubmissionModal({
                                     </span>
                                 </div>
                             </div>
-                            {pasteText.trim().length > 0 && (
-                                <div className="paste-modal-footer">
-                                    <button
-                                        type="button"
-                                        className="paste-btn-cancel"
-                                        onClick={() => {
-                                            setShowPasteModal(false)
-                                            setPasteText('')
-                                            setIsManualPasteInput(false)
-                                        }}
-                                    >
-                                        ยกเลิก
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="paste-btn-submit"
-                                        onClick={() => handlePasteNumbers()}
-                                        title="ตกลง หรือกด Ctrl+Enter เพื่อบันทึก"
-                                    >
-                                        <FiCheck /> ตกลง <span className="paste-submit-kbd">Ctrl+↵</span>
-                                    </button>
-                                </div>
-                            )}
+                            <div className="paste-modal-footer">
+                                <button
+                                    type="button"
+                                    className="paste-btn-cancel"
+                                    onClick={() => {
+                                        setShowPasteModal(false)
+                                        setPasteText('')
+                                        setIsManualPasteInput(false)
+                                    }}
+                                >
+                                    ยกเลิก
+                                </button>
+                                <button
+                                    type="button"
+                                    className="paste-btn-submit"
+                                    onClick={() => handlePasteNumbers()}
+                                    disabled={!pasteText.trim()}
+                                    title="ตกลง หรือกด Ctrl+Enter เพื่อบันทึก"
+                                >
+                                    <FiCheck /> ตกลง <span className="paste-submit-kbd">Ctrl+↵</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 )}

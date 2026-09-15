@@ -20,7 +20,7 @@ import {
     getUnique3DigitPermsFrom5,
     generateUUID
 } from '../../constants/lotteryTypes'
-import { parseMultiLinePaste } from '../../utils/pasteParser'
+import { parseMultiLinePaste, extractBuyerNote } from '../../utils/pasteParser'
 import { useDragReorder } from '../../utils/useDragReorder'
 import { useModalBackButton } from '../../utils/useModalBackButton'
 import { useAuth } from '../../contexts/AuthContext'
@@ -73,6 +73,7 @@ export default function WriteSubmissionModal({
     const [drafts, setDrafts] = useState([])
     const [submitting, setSubmitting] = useState(false)
     const [billNote, setBillNote] = useState('')
+    const noteInputRef = useRef(null)
     const [isPaid, setIsPaid] = useState(false)
     const [userSettings, setUserSettings] = useState(null)
     const [isReversed, setIsReversed] = useState(false) // Toggle for 2-digit reversed bets
@@ -756,6 +757,11 @@ export default function WriteSubmissionModal({
             return
         }
 
+        const buyerNote = extractBuyerNote(pasteText, round.lottery_type)
+        if (buyerNote) {
+            setBillNote(buyerNote)
+        }
+
         const isLaoOrHanoi = ['lao', 'hanoi'].includes(round.lottery_type)
         const lotteryKey = round.lottery_type
         const timestamp = new Date().toISOString()
@@ -1297,20 +1303,58 @@ export default function WriteSubmissionModal({
 
                     {/* Bill Note Input + Paid checkbox */}
                     <div className="bill-note-section" style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <input
-                            type="text"
-                            className="form-input"
-                            placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
-                            value={billNote}
-                            onChange={e => setBillNote(e.target.value)}
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault()
-                                    e.target.blur()
-                                }
-                            }}
-                            style={{ flex: 1 }}
-                        />
+                        <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+                            <input
+                                ref={noteInputRef}
+                                type="text"
+                                className="form-input"
+                                placeholder="ชื่อผู้ซื้อ / บันทึกช่วยจำ (ไม่บังคับ)"
+                                value={billNote}
+                                onChange={e => setBillNote(e.target.value)}
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault()
+                                        e.target.blur()
+                                    }
+                                }}
+                                style={{ flex: 1, paddingRight: billNote ? '2.2rem' : '0.75rem' }}
+                            />
+                            {billNote && (
+                                <button
+                                    type="button"
+                                    onMouseDown={e => e.preventDefault()}
+                                    onClick={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        setBillNote('')
+                                        noteInputRef.current?.focus()
+                                    }}
+                                    title="เคลียร์บันทึกช่วยจำ"
+                                    aria-label="เคลียร์บันทึกช่วยจำ"
+                                    style={{
+                                        position: 'absolute',
+                                        right: '8px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%)',
+                                        width: '26px',
+                                        height: '26px',
+                                        borderRadius: '50%',
+                                        border: 'none',
+                                        background: 'rgba(255, 255, 255, 0.12)',
+                                        color: 'rgba(255, 255, 255, 0.6)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'pointer',
+                                        padding: 0,
+                                        fontSize: '14px',
+                                        zIndex: 2
+                                    }}
+                                >
+                                    <FiX />
+                                </button>
+                            )}
+                        </div>
                         <label
                             title="ชำระเงินแล้ว"
                             style={{
@@ -1689,7 +1733,7 @@ export default function WriteSubmissionModal({
 
             {/* Paste Modal */}
             {showPasteModal && (
-                <div className="modal-overlay" onClick={() => { setShowPasteModal(false); setPasteText('') }} style={{ zIndex: 1001 }}>
+                <div className="modal-overlay" style={{ zIndex: 1001 }}>
                     <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '400px' }}>
                         <div className="modal-header">
                             <h3>วางเลข</h3>
@@ -1723,6 +1767,11 @@ export default function WriteSubmissionModal({
                                                 setShowPasteModal(false)
                                                 setPasteText('')
                                                 return
+                                            }
+
+                                            const buyerNote = extractBuyerNote(text, round.lottery_type)
+                                            if (buyerNote) {
+                                                setBillNote(buyerNote)
                                             }
 
                                             const lotteryKey = round.lottery_type

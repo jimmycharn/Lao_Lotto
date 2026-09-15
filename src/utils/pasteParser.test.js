@@ -278,7 +278,8 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(result[2]).toMatchObject({ numbers: '409', amount: 10, amount2: 6, betType: '3_top', specialType: 'set6' })
     
     const note = extractBuyerNote(text, 'lao')
-    expect(note).toBe('น้องโบว์')
+    // Line contains purchase amounts ("10xชุด"), so it must NOT be used as buyer note
+    expect(note).toBe('')
   })
 
   it('should parse parenthesis-separated list with trailing amount and name (e.g. 305)307)=50xชุด พี่รี)', () => {
@@ -290,7 +291,8 @@ describe('pasteParser - parseMultiLinePaste', () => {
     expect(result[1]).toMatchObject({ numbers: '307', amount: 50, amount2: 6, betType: '3_top', specialType: 'set6' })
     
     const note = extractBuyerNote(text, 'lao')
-    expect(note).toBe('พี่รี')
+    // Line contains purchase numbers ("305)307)=50xชุด"), so it must NOT be used as buyer note
+    expect(note).toBe('')
   })
 
   it('should parse colon-separated number and amount (e.g. 610:10*10 and 510:100*100)', () => {
@@ -397,10 +399,102 @@ describe('pasteParser - parseMultiLinePaste', () => {
       expect(note).toBe('')
     })
 
-    it('should extract buyer note from amount line with trailing note (e.g. 10xชุด น้องโบว์)', () => {
-      const text = '140\n418\n409\n10xชุด น้องโบว์'
+    it('should extract footer note when header line contains bet numbers (screenshot case)', () => {
+      const text = `.
+14:08 Nadear 544=700x3
+647=500
+069=400
+752=300
+973=200
+974=200
+336=200
+493=100
+392=100
+267=100
+236=100
+108=100
+689=100
+14:11 Nadear บ.ล 93=20*20
+ป้าจัด
+
+734=33*20
+บ.ล 93=30*20
+แม่
+
+734=22*10
+ป้าจัด
+14:12 Nadear 490=33*6
+ล.50 100*100
+พี่อร`
+      expect(extractBuyerNote(text, 'lao')).toBe('พี่อร')
+    })
+
+    it('should leave buyer note empty when both top and bottom contain bet numbers', () => {
+      const text = `.
+14:08 Nadear 544=700x3
+647=500
+14:12 Nadear 490=33*6
+ล.50 100*100`
+      expect(extractBuyerNote(text, 'lao')).toBe('')
+    })
+
+    it('should leave buyer note empty when bottom line has bet numbers with attached name', () => {
+      const text = `544=700x3\n647=500\nล.50 100*100 พี่อร`
+      expect(extractBuyerNote(text, 'lao')).toBe('')
+    })
+
+    it('should extract buyer note from standalone line with LINE timestamp and name', () => {
+      const textHeader = `14:08 Nadear\n544=700x3\n647=500`
+      expect(extractBuyerNote(textHeader, 'lao')).toBe('Nadear')
+
+      const textFooter = `544=700x3\n647=500\n14:15 Nadear`
+      expect(extractBuyerNote(textFooter, 'lao')).toBe('Nadear')
+    })
+
+    it('should extract buyer note from the user exact example at the footer (e.g. พี่จิต)', () => {
+      const text = `795=22*20
+476=22*20
+157=22*20
+บน  ล่าง
+46=10*10
+76=10*10
+72=10*10
+23=10*10
+74=10*10
+42=10*10
+พี่จิต`
       const note = extractBuyerNote(text, 'lao')
-      expect(note).toBe('น้องโบว์')
+      expect(note).toBe('พี่จิต')
+    })
+
+    it('should prioritize header note over footer note when both exist', () => {
+      const text = `พี่จิต
+795=22*20
+476=22*20
+157=22*20
+บน  ล่าง
+46=10*10
+น้องออย`
+      const note = extractBuyerNote(text, 'lao')
+      expect(note).toBe('พี่จิต')
+    })
+
+    it('should extract header note when preceded by a date line or lottery title', () => {
+      const textWithDate = `16/9/69
+พี่จิต
+795=22*20`
+      expect(extractBuyerNote(textWithDate, 'lao')).toBe('พี่จิต')
+
+      const textWithLottery = `หวยลาวพัฒนา
+พี่จิต
+795=22*20`
+      expect(extractBuyerNote(textWithLottery, 'lao')).toBe('พี่จิต')
+    })
+
+    it('should clean common prefixes like ผู้ส่ง:, 👤, or parentheses', () => {
+      expect(extractBuyerNote('ผู้ส่ง: พี่จิต\n795=22*20', 'lao')).toBe('พี่จิต')
+      expect(extractBuyerNote('👤 พี่จิต\n795=22*20', 'lao')).toBe('พี่จิต')
+      expect(extractBuyerNote('(พี่จิต)\n795=22*20', 'lao')).toBe('พี่จิต')
     })
   })
 
@@ -538,7 +632,7 @@ describe('pasteParser - parseMultiLinePaste', () => {
         specialType: 'reverse',
         typeLabel: 'ล่างกลับ'
       })
-      expect(extractBuyerNote(text, 'lao')).toBe('น้ำค้าง')
+      expect(extractBuyerNote(text, 'lao')).toBe('')
     })
   })
 
@@ -555,7 +649,7 @@ describe('pasteParser - parseMultiLinePaste', () => {
         specialType: 'reverse',
         typeLabel: 'กลับ'
       })
-      expect(extractBuyerNote(text, 'lao')).toBe('พี่แดง')
+      expect(extractBuyerNote(text, 'lao')).toBe('')
     })
 
     it('should parse 728 = 20(10*5) correctly', () => {
@@ -1917,10 +2011,237 @@ describe('pasteParser - parseMultiLinePaste', () => {
         amount: 50,
         amount2: 3,
         betType: '3_top',
-        specialType: 'set3'
       })
+    })
+
+    it('should parse bare numbers followed by amount with conversational suffix like 11*10ทุกตูน่ะ', () => {
+      const text = `397
+267
+350
+970
+11*10ทุกตูน่ะ`
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(4)
+      const expectedNums = ['397', '267', '350', '970']
+      expectedNums.forEach((num, idx) => {
+        expect(result[idx]).toMatchObject({
+          numbers: num,
+          amount: 11,
+          amount2: 10,
+          betType: '3_top',
+          specialType: 'tengTod',
+          typeLabel: 'เต็งโต๊ด'
+        })
+      })
+    })
+
+    it('should parse bare numbers followed by amount with conversational suffix variations (ทุกตูนะ, ทุกตัวนะ, ตัวละนะ)', () => {
+      const variations = [
+        '11*10 ทุกตูนะ',
+        '11*10ทุกตูนะ',
+        '11*10 ทุกตัวนะ',
+        '11*10ทุกตัวนะ',
+        '11*10 ตัวละนะ',
+        '11*10ตัวละนะ'
+      ]
+      for (const amountLine of variations) {
+        const text = `397\n267\n350\n970\n${amountLine}`
+        const result = parseMultiLinePaste(text, 'lao')
+        expect(result.length).toBe(4)
+        expect(result[0]).toMatchObject({
+          numbers: '397',
+          amount: 11,
+          amount2: 10,
+          typeLabel: 'เต็งโต๊ด'
+        })
+      }
+    })
+
+    it('should parse bare numbers followed by bet line with ampersand separator and trailing text like 964=22&20ทุกตุ', () => {
+      const text = `.\n264\n249\n964=22&20ทุกตุ`
+      const result = parseMultiLinePaste(text, 'lao')
+      expect(result.length).toBe(3)
+      const expectedNums = ['264', '249', '964']
+      expectedNums.forEach((num, idx) => {
+        expect(result[idx]).toMatchObject({
+          numbers: num,
+          amount: 22,
+          amount2: 20,
+          betType: '3_top',
+          specialType: 'tengTod',
+          typeLabel: 'เต็งโต๊ด'
+        })
+      })
+    })
+
+    it('should apply final bet line amount to preceding bare numbers across various amount formats (=20, =20*20, =20*ชุด, =20&20, =20+20)', () => {
+      const cases = [
+        { line: '951=20', expectedAmt1: 20, expectedAmt2: null, type: 'ตรง' },
+        { line: '951=20*20', expectedAmt1: 20, expectedAmt2: 20, type: 'เต็งโต๊ด' },
+        { line: '951=20*ชุด', expectedAmt1: 20, expectedAmt2: 6, type: 'คูณชุด' },
+        { line: '951=20&20', expectedAmt1: 20, expectedAmt2: 20, type: 'เต็งโต๊ด' },
+        { line: '951=20+20', expectedAmt1: 20, expectedAmt2: 20, type: 'เต็งโต๊ด' },
+      ]
+      for (const c of cases) {
+        const text = `123\n254\n364\n${c.line}`
+        const result = parseMultiLinePaste(text, 'lao')
+        expect(result.length).toBe(4)
+        const expectedNums = ['123', '254', '364', '951']
+        expectedNums.forEach((num, idx) => {
+          expect(result[idx].numbers).toBe(num)
+          expect(result[idx].amount).toBe(c.expectedAmt1)
+          if (c.expectedAmt2 !== null) {
+            expect(result[idx].amount2).toBe(c.expectedAmt2)
+          }
+          expect(result[idx].typeLabel).toBe(c.type)
+        })
+      }
+    })
+
+    it('should parse 459=22/20 as 459=22*20 where slash is used instead of asterisk in amount', () => {
+      const text = `934=22
+493=66*20
+705=22*20
+475=22*20
+459=22/20
+272=22*3
+674=33*20
+ข
+72=10`
+      const result = parseMultiLinePaste(text, 'lao')
+      const entry459 = result.find(r => r.numbers === '459')
+      expect(entry459).toBeDefined()
+      expect(entry459).toMatchObject({
+        numbers: '459',
+        amount: 22,
+        amount2: 20,
+        betType: '3_top',
+        specialType: 'tengTod',
+        typeLabel: 'เต็งโต๊ด'
+      })
+      // Ensure 20 did not leak as a ghost bare number
+      const ghost20 = result.find(r => r.numbers === '20')
+      expect(ghost20).toBeUndefined()
+    })
+
+    it('should parse identical digits typo 222=20*20 as 222=40 ตรง (or บน) by summing amounts', () => {
+      // Lao lotto: 222=20*20 -> 222=40 ตรง
+      const resLao = parseMultiLinePaste('222=20*20', 'lao')
+      expect(resLao).toHaveLength(1)
+      expect(resLao[0]).toMatchObject({
+        numbers: '222',
+        amount: 40,
+        amount2: null,
+        betType: '3_top',
+        typeLabel: 'ตรง',
+        formattedLine: '222=40 ตรง'
+      })
+
+      // Thai lotto: 222=20*20 -> 222=40 บน
+      const resThai = parseMultiLinePaste('222=20*20', 'thai')
+      expect(resThai).toHaveLength(1)
+      expect(resThai[0]).toMatchObject({
+        numbers: '222',
+        amount: 40,
+        amount2: null,
+        betType: '3_top',
+        typeLabel: 'บน',
+        formattedLine: '222=40 บน'
+      })
+
+      // 222=20*20 เต็งโต๊ด -> 222=40 ตรง
+      const resTengTod = parseMultiLinePaste('222=20*20 เต็งโต๊ด', 'lao')
+      expect(resTengTod).toHaveLength(1)
+      expect(resTengTod[0]).toMatchObject({
+        numbers: '222',
+        amount: 40,
+        amount2: null,
+        betType: '3_top',
+        typeLabel: 'ตรง',
+        formattedLine: '222=40 ตรง'
+      })
+
+      // 222=20*ชุด -> 222=20 ตรง
+      const resChud = parseMultiLinePaste('222=20*ชุด', 'lao')
+      expect(resChud).toHaveLength(1)
+      expect(resChud[0]).toMatchObject({
+        numbers: '222',
+        amount: 20,
+        amount2: null,
+        betType: '3_top',
+        typeLabel: 'ตรง',
+        formattedLine: '222=20 ตรง'
+      })
+
+      // 222=20 โต๊ด -> 222=20 ตรง
+      const resTod = parseMultiLinePaste('222=20 โต๊ด', 'lao')
+      expect(resTod).toHaveLength(1)
+      expect(resTod[0]).toMatchObject({
+        numbers: '222',
+        amount: 20,
+        amount2: null,
+        betType: '3_top',
+        typeLabel: 'ตรง',
+        formattedLine: '222=20 ตรง'
+      })
+
+      // 222=20 กลับ -> 222=20 ตรง
+      const resRev = parseMultiLinePaste('222=20 กลับ', 'lao')
+      expect(resRev).toHaveLength(1)
+      expect(resRev[0]).toMatchObject({
+        numbers: '222',
+        amount: 20,
+        amount2: null,
+        betType: '3_top',
+        typeLabel: 'ตรง',
+        formattedLine: '222=20 ตรง'
+      })
+
+      // 22=20*20 -> 22=40 บน
+      const res22 = parseMultiLinePaste('22=20*20', 'lao')
+      expect(res22).toHaveLength(1)
+      expect(res22[0]).toMatchObject({
+        numbers: '22',
+        amount: 40,
+        amount2: null,
+        betType: '2_top',
+        typeLabel: 'บน',
+        formattedLine: '22=40 บน'
+      })
+    })
+
+    it('should parse 4-digit permutation expressions as คูณชุด (e.g. 3518=10*24 คูณชุด and 3318=10*12 คูณชุด)', () => {
+      const cases = [
+        { text: '3518 กลับตัวละ10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 10กลับทุกตัว', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 กลับตูละ10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 กลับประตูละ10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 10กลับทุกตู', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 10กลับทุกประตู', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3318 กลับตัวละ10', numbers: '3318', amount: 10, amount2: 12, line: '3318=10*12 คูณชุด' },
+        { text: '3518กลับตัวละ10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 10 กลับทุกตัว', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 กลับทุกตัว10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 กลับทุกตู10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+        { text: '3518 กลับทุกประตู10', numbers: '3518', amount: 10, amount2: 24, line: '3518=10*24 คูณชุด' },
+      ]
+
+      for (const c of cases) {
+        const res = parseMultiLinePaste(c.text, 'lao')
+        expect(res).toHaveLength(1)
+        expect(res[0]).toMatchObject({
+          numbers: c.numbers,
+          amount: c.amount,
+          amount2: c.amount2,
+          betType: '3_top',
+          specialType: '3xPerm',
+          typeLabel: 'คูณชุด',
+          formattedLine: c.line
+        })
+      }
     })
   })
 })
+
 
 
