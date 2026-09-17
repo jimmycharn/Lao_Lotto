@@ -3896,6 +3896,7 @@ async function generateRoundSummaryFlex(
                       {
                         "type": "span",
                         "text": ` (${u.memberCode})`,
+                        "size": "xs",
                         "weight": "regular",
                         "color": "#64748b"
                       }
@@ -4132,6 +4133,7 @@ async function generateRoundSummaryFlex(
                       {
                         "type": "span",
                         "text": ` (${u.memberCode})`,
+                        "size": "xs",
                         "weight": "regular",
                         "color": "#64748b"
                       }
