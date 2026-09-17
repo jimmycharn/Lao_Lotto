@@ -121,3 +121,14 @@ export function parseMemberAndRoundDateParam(raw: string | null | undefined): Pa
   // 3. Otherwise, it's just a member param (or winning number, etc.)
   return { memberParam: trimmed, dateStr: null, rawDate: null };
 }
+
+/**
+ * Format a member name with their 5-digit member code (ID) in parentheses.
+ * e.g. "พี่แพร" + "10048" -> "พี่แพร (10048)"
+ * If member code is missing or empty, returns just the name.
+ */
+export function formatMemberNameWithCode(name: string, memberCode?: string | null): string {
+  const trimmedCode = (memberCode || '').trim();
+  return trimmedCode ? `${name} (${trimmedCode})` : name;
+}
+

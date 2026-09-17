@@ -3613,20 +3613,24 @@ async function generateRoundSummaryFlex(
 
   // Fetch profiles for users in submissions separately to avoid join errors
   const userIds = (submissions || []).map((s: any) => s.user_id).filter(Boolean);
+  if (targetUserId) {
+    userIds.push(targetUserId);
+  }
   const uniqueUserIds = [...new Set(userIds)];
-  const profilesMap: Record<string, { full_name: string; email: string }> = {};
+  const profilesMap: Record<string, { full_name: string; email: string; member_code: string }> = {};
 
   if (uniqueUserIds.length > 0) {
     const { data: profiles, error: profErr } = await supabase
       .from('profiles')
-      .select('id, full_name, email')
+      .select('id, full_name, email, member_code')
       .in('id', uniqueUserIds);
 
     if (!profErr && profiles) {
       profiles.forEach((p: any) => {
         profilesMap[p.id] = {
           full_name: p.full_name || 'ไม่ระบุชื่อ',
-          email: p.email || ''
+          email: p.email || '',
+          member_code: p.member_code || ''
         };
       });
     }
@@ -3640,6 +3644,7 @@ async function generateRoundSummaryFlex(
   interface UserSummary {
     userId: string;
     userName: string;
+    memberCode: string;
     totalBet: number;
     totalCommission: number;
     totalWin: number;
@@ -3705,10 +3710,11 @@ async function generateRoundSummaryFlex(
 
     const userId = sub.user_id;
     if (!userSummaries[userId]) {
-      const prof = profilesMap[userId] || { full_name: 'ไม่ระบุชื่อ', email: '' };
+      const prof = profilesMap[userId] || { full_name: 'ไม่ระบุชื่อ', email: '', member_code: '' };
       userSummaries[userId] = {
         userId,
         userName: prof.full_name,
+        memberCode: prof.member_code || '',
         totalBet: 0,
         totalCommission: 0,
         totalWin: 0,
@@ -3727,9 +3733,11 @@ async function generateRoundSummaryFlex(
 
   if (showOwnOnly && targetUserId) {
     if (!userSummaries[targetUserId]) {
+      const prof = profilesMap[targetUserId] || { full_name: memberProfileName, email: '', member_code: '' };
       userSummaries[targetUserId] = {
         userId: targetUserId,
         userName: memberProfileName,
+        memberCode: prof.member_code || profile?.member_code || '',
         totalBet: 0,
         totalCommission: 0,
         totalWin: 0,
@@ -3810,9 +3818,11 @@ async function generateRoundSummaryFlex(
       netColor = '#94a3b8';
     }
 
+    const memberCodeStr = u.memberCode ? ` (${u.memberCode})` : '';
+
     summaryText = showOwnOnly && targetUserId !== profile?.id 
-      ? `📊 สรุปยอดส่งของสมาชิก ${u.userName}\n`
-      : `📊 สรุปยอดส่งของคุณ ${u.userName}\n`;
+      ? `📊 สรุปยอดส่งของสมาชิก ${u.userName}${memberCodeStr}\n`
+      : `📊 สรุปยอดส่งของคุณ ${u.userName}${memberCodeStr}\n`;
     summaryText += `งวดวันที่: ${getRoundDisplayDate(activeRound, false)} (${LOTTERY_TYPE_NAMES[activeRound.lottery_type] || activeRound.lottery_type.toUpperCase()})\n`;
     summaryText += `--------------------------\n`;
     summaryText += `- ยอดส่งแทง: ฿${roundedBet.toLocaleString('th-TH')}\n`;
@@ -3873,7 +3883,7 @@ async function generateRoundSummaryFlex(
               "contents": [
                 {
                   "type": "text",
-                  "text": `คุณ ${u.userName}`,
+                  "text": `คุณ ${u.userName}${memberCodeStr}`,
                   "weight": "bold",
                   "size": "md",
                   "color": "#0f172a"
@@ -4073,7 +4083,9 @@ async function generateRoundSummaryFlex(
           netColor = '#64748b';
         }
 
-        summaryText += `${idx + 1}. คุณ ${u.userName}\n`;
+        const memberCodeStr = u.memberCode ? ` (${u.memberCode})` : '';
+
+        summaryText += `${idx + 1}. คุณ ${u.userName}${memberCodeStr}\n`;
         summaryText += `- ยอดแทง: ฿${roundedBet.toLocaleString('th-TH')} | ค่าคอม: ฿${roundedComm.toLocaleString('th-TH')} | เหลือ: ฿${roundedRemaining.toLocaleString('th-TH')}\n`;
         summaryText += `- ถูก/ยอดได้: ${isAnnounced ? `${u.winCount} ครั้ง/฿${roundedWin.toLocaleString('th-TH')}` : '-'}\n`;
         summaryText += `- สรุป: ${netLabel}\n\n`;
@@ -4092,11 +4104,12 @@ async function generateRoundSummaryFlex(
               "contents": [
                 {
                   "type": "text",
-                  "text": `คุณ ${u.userName}`,
+                  "text": `คุณ ${u.userName}${memberCodeStr}`,
                   "weight": "bold",
                   "size": "sm",
                   "color": "#0f172a",
-                  "flex": 6
+                  "flex": 7,
+                  "wrap": true
                 },
                 {
                   "type": "text",
@@ -4105,7 +4118,7 @@ async function generateRoundSummaryFlex(
                   "size": "sm",
                   "color": netColor,
                   "align": "end",
-                  "flex": 6
+                  "flex": 5
                 }
               ]
             },

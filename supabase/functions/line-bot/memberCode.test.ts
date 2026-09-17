@@ -3,7 +3,8 @@ import {
     isMemberCodeParam,
     matchMembersByCode,
     parseRoundDateParam,
-    parseMemberAndRoundDateParam
+    parseMemberAndRoundDateParam,
+    formatMemberNameWithCode
 } from './memberCode.ts'
 
 type Member = { user_id: string; member_code: string | null; name: string }
@@ -239,3 +240,18 @@ describe('parseMemberAndRoundDateParam', () => {
         expect(parseMemberAndRoundDateParam(undefined)).toBeNull()
     })
 })
+
+describe('formatMemberNameWithCode', () => {
+    it('appends 5-digit member code in parentheses after member name', () => {
+        expect(formatMemberNameWithCode('พี่แพร', '10048')).toBe('พี่แพร (10048)')
+        expect(formatMemberNameWithCode('บี พัชชา', '10050')).toBe('บี พัชชา (10050)')
+    })
+
+    it('returns name unchanged if member code is null, undefined, or empty', () => {
+        expect(formatMemberNameWithCode('พี่แพร', null)).toBe('พี่แพร')
+        expect(formatMemberNameWithCode('พี่แพร', undefined)).toBe('พี่แพร')
+        expect(formatMemberNameWithCode('พี่แพร', '')).toBe('พี่แพร')
+        expect(formatMemberNameWithCode('พี่แพร', '   ')).toBe('พี่แพร')
+    })
+})
+
