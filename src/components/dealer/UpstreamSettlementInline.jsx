@@ -12,7 +12,8 @@ import {
     FiHash,
     FiEdit2,
     FiDollarSign,
-    FiCreditCard
+    FiCreditCard,
+    FiSend
 } from 'react-icons/fi'
 import {
     calculateUpstreamInitialBalance,
@@ -29,6 +30,7 @@ import {
 } from '../../utils/crossRoundOffsetCalculator'
 import { THAI_BANKS, matchBankOption } from '../../utils/paymentNoticeHelper'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
+import PaymentNoticeModal from './PaymentNoticeModal'
 import './UpstreamSettlementInline.css'
 import './CrossRoundOffsetModal.css'
 
@@ -54,6 +56,7 @@ export default function UpstreamSettlementInline({
     const [showForm, setShowForm] = useState(false)
     const [saving, setSaving] = useState(false)
     const [deletingId, setDeletingId] = useState(null)
+    const [showPaymentNoticeModal, setShowPaymentNoticeModal] = useState(false)
 
     useEffect(() => {
         if (autoFocusPaymentBtn && paymentBtnRef.current) {
@@ -328,7 +331,7 @@ export default function UpstreamSettlementInline({
         }
     }
 
-    const upstreamName = transfer?.dealerName || 'เจ้ามือรับตีออก'
+    const upstreamName = transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName || 'เจ้ามือรับตีออก'
 
     return (
         <div className="upstream-settlement-inline-container">
@@ -396,10 +399,25 @@ export default function UpstreamSettlementInline({
                     </div>
                     <button
                         type="button"
-                        className="btn-cross-offset"
-                        onClick={() => setShowOffsetModal(true)}
+                        className="btn-payment-notice"
+                        onClick={() => setShowPaymentNoticeModal(true)}
+                        style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.45rem',
+                            background: '#10b981',
+                            color: '#ffffff',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '0.45rem 1rem',
+                            fontSize: '0.85rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+                            transition: 'all 0.15s ease'
+                        }}
                     >
-                        ⚡ บันทึกชำระเงิน
+                        <FiSend size={14} /> แจ้งชำระเงิน
                     </button>
                 </div>
             )}
@@ -410,6 +428,22 @@ export default function UpstreamSettlementInline({
                     จัดการการชำระเงินสำหรับ: <strong>{upstreamName}</strong>
                 </span>
                 <div className="upstream-settlement-btn-group">
+                    {Math.round(currentBalance) !== 0 && pastUnpaidRounds.length === 0 && (
+                        <button
+                            type="button"
+                            className="btn-upstream-settle-action btn-settle-notice"
+                            onClick={() => setShowPaymentNoticeModal(true)}
+                            title="ส่งใบแจ้งชำระเงิน / คัดลอกใบแจ้งยอดให้เจ้ามือตีออก"
+                            style={{
+                                background: 'rgba(16, 185, 129, 0.12)',
+                                color: '#10b981',
+                                border: '1px solid rgba(16, 185, 129, 0.35)',
+                                fontWeight: 600
+                            }}
+                        >
+                            <FiSend size={14} /> แจ้งชำระเงิน
+                        </button>
+                    )}
                     <button
                         ref={paymentBtnRef}
                         type="button"
@@ -1251,6 +1285,26 @@ export default function UpstreamSettlementInline({
                     availableWinnings={availableWinnings}
                     isUpstream={true}
                     upstreamDealerName={transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName}
+                />
+            )}
+
+            {showPaymentNoticeModal && (
+                <PaymentNoticeModal
+                    isOpen={showPaymentNoticeModal}
+                    onClose={() => setShowPaymentNoticeModal(false)}
+                    member={transfer}
+                    transfer={transfer}
+                    round={round}
+                    dealerId={dealerId}
+                    pastUnpaidRounds={pastUnpaidRounds}
+                    currentBalance={currentBalance}
+                    currentWinnings={totalWinnings}
+                    availableWinnings={availableWinnings}
+                    roundHistory={roundHistory}
+                    isUpstream={true}
+                    upstreamDealerName={upstreamName}
+                    upstreamDealerId={transfer?.upstream_dealer_id || null}
+                    connectionId={transfer?.connection_id || null}
                 />
             )}
         </div>

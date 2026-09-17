@@ -24,6 +24,7 @@ export default function CrossRoundOffsetModal({
     currentRound,
     member,
     dealerId,
+    cachedDealerBanks = [],
     pastUnpaidRounds = [],
     currentBalance = 0,
     currentWinnings = 0,
@@ -150,10 +151,32 @@ export default function CrossRoundOffsetModal({
     const effectiveDealerId = dealerId || member?.dealer_id || currentRound?.dealer_id || null
     const effectiveMemberUserId = member?.user_id || member?.id || member?.userId || null
 
-    const [resolvedMemberBank, setResolvedMemberBank] = useState(null)
-    const [resolvedDealerBank, setResolvedDealerBank] = useState(null)
+    // Synchronous resolution of dealer bank from cachedDealerBanks (assigned to member > default dealer bank)
+    const initialDealerBank = useMemo(() => {
+        if (!cachedDealerBanks || cachedDealerBanks.length === 0) return null
+        if (member?.assigned_bank_account_id) {
+            const assigned = cachedDealerBanks.find(b => b.id === member.assigned_bank_account_id)
+            if (assigned) return assigned
+        }
+        return cachedDealerBanks.find(b => b.is_default) || cachedDealerBanks[0] || null
+    }, [cachedDealerBanks, member?.assigned_bank_account_id])
+
+    const [resolvedMemberBank, setResolvedMemberBank] = useState(() => member?.member_bank || null)
+    const [resolvedDealerBank, setResolvedDealerBank] = useState(() => initialDealerBank)
     const isUserNotesEdited = useRef(false)
     const lastAutoNoteRef = useRef('')
+
+    useEffect(() => {
+        if (member?.member_bank && !resolvedMemberBank) {
+            setResolvedMemberBank(member.member_bank)
+        }
+    }, [member?.member_bank])
+
+    useEffect(() => {
+        if (initialDealerBank && !resolvedDealerBank) {
+            setResolvedDealerBank(initialDealerBank)
+        }
+    }, [initialDealerBank])
 
     const masterCheckboxRef = useRef(null)
 
@@ -226,7 +249,8 @@ export default function CrossRoundOffsetModal({
                         assignedBankAccountId: member?.assigned_bank_account_id || null,
                         memberBankAccountId: member?.member_bank_account_id || null,
                         isUpstream,
-                        upstreamDealerId: member?.upstream_dealer_id || null
+                        upstreamDealerId: member?.upstream_dealer_id || null,
+                        cachedDealerBanks
                     }),
                     resolvePaymentNoticeBankAccount({
                         direction: isUpstream ? 'upstream_to_dealer' : 'member_to_dealer',
@@ -236,7 +260,8 @@ export default function CrossRoundOffsetModal({
                         assignedBankAccountId: member?.assigned_bank_account_id || null,
                         memberBankAccountId: member?.member_bank_account_id || null,
                         isUpstream,
-                        upstreamDealerId: member?.upstream_dealer_id || null
+                        upstreamDealerId: member?.upstream_dealer_id || null,
+                        cachedDealerBanks
                     })
                 ])
                 if (isMounted) {
@@ -257,7 +282,8 @@ export default function CrossRoundOffsetModal({
         isUpstream,
         member?.assigned_bank_account_id,
         member?.member_bank_account_id,
-        member?.upstream_dealer_id
+        member?.upstream_dealer_id,
+        cachedDealerBanks
     ])
 
     // Determine the active bank according to current summary.direction
@@ -281,22 +307,34 @@ export default function CrossRoundOffsetModal({
             return
         }
 
-        const defaultNote = buildSettlementDefaultNote(activeBank)
+        const fallbackAccountName = member?.name || member?.full_name || ''
+        const defaultNote = buildSettlementDefaultNote(activeBank, fallbackAccountName)
         if (!isUserNotesEdited.current || customNotes === lastAutoNoteRef.current || customNotes === '') {
             setCustomNotes(defaultNote)
             lastAutoNoteRef.current = defaultNote
         }
-    }, [summary.direction, activeBank])
+    }, [summary.direction, activeBank, member?.name, member?.full_name])
 
-    // Sync sender bank default from member's profile/assigned bank
+    // Sync sender bank default based on direction:
+    // If dealer pays (dealer_to_member / dealer_to_upstream): sender is DEALER -> use resolvedDealerBank
+    // If member/upstream pays (member_to_dealer / upstream_to_dealer): sender is MEMBER / UPSTREAM -> use resolvedMemberBank
     useEffect(() => {
-        if (resolvedMemberBank?.bank_name && !isUserBankSelected.current) {
-            const matched = matchBankOption(resolvedMemberBank.bank_name, THAI_BANKS)
+        if (isUserBankSelected.current) return
+
+        let targetBankName = null
+        if (summary.direction === 'dealer_to_member' || summary.direction === 'dealer_to_upstream') {
+            targetBankName = resolvedDealerBank?.bank_name
+        } else if (summary.direction === 'member_to_dealer' || summary.direction === 'upstream_to_dealer') {
+            targetBankName = resolvedMemberBank?.bank_name
+        }
+
+        if (targetBankName) {
+            const matched = matchBankOption(targetBankName, THAI_BANKS)
             if (matched) {
                 setSenderBank(matched)
             }
         }
-    }, [resolvedMemberBank])
+    }, [summary.direction, resolvedDealerBank, resolvedMemberBank])
 
     const availableBankOptions = useMemo(() => {
         if (senderBank && !THAI_BANKS.includes(senderBank)) {
@@ -314,6 +352,7 @@ export default function CrossRoundOffsetModal({
         setMode(newMode)
         setCustomSlipAmount('') // reset custom amount so it defaults to the new mode's suggested amount
         isUserNotesEdited.current = false // reset so note updates to the new mode's default template
+        isUserBankSelected.current = false // reset so sender bank updates to the appropriate sender for the new direction
     }
 
     const toggleRound = (roundId) => {

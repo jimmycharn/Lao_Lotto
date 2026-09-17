@@ -105,6 +105,9 @@ export default function SummaryModal({ round, onClose }) {
             const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
             return (sub.prize_amount || 0) * numSets
         }
+        if (sub.prize_amount !== undefined && sub.prize_amount !== null && Number(sub.prize_amount) > 0) {
+            return Number(sub.prize_amount)
+        }
         
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)

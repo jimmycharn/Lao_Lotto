@@ -30,7 +30,12 @@ export default function PaymentNoticeModal({
     currentBalance = 0,
     currentWinnings = 0,
     availableWinnings,
-    roundHistory = []
+    roundHistory = [],
+    isUpstream = false,
+    upstreamDealerName = null,
+    upstreamDealerId = null,
+    connectionId = null,
+    transfer = null
 }) {
     if (!isOpen || typeof document === 'undefined') return null
 
@@ -47,7 +52,7 @@ export default function PaymentNoticeModal({
 
     const hasPastRounds = sortedPastRounds.length > 0
 
-    // Modes: 'current_debt' (หนี้งวดนี้), 'offset_prize_past_debt' (หักลบรางวัลกับหนี้เก่า), 'combine_all' (หักลบทั้งหมด)
+    // Modes: 'current_debt' (หนี้งวดนี้ / ยอดงวดนี้), 'offset_prize_past_debt' (หักลบรางวัลกับหนี้เก่า / ยอดเก่า), 'combine_all' (หักลบทั้งหมด)
     // Default to 'current_debt' if no past unpaid rounds, otherwise 'offset_prize_past_debt'
     const [mode, setMode] = useState(() => (
         hasPastRounds ? 'offset_prize_past_debt' : 'current_debt'
@@ -89,9 +94,11 @@ export default function PaymentNoticeModal({
     // Fetch fresh profile to ensure up-to-date line_user_id
     useEffect(() => {
         let isMounted = true
-        async function fetchMemberProfile() {
-            const memberUserId = member?.user_id || member?.id || member?.userId
-            if (!memberUserId) return
+        async function fetchProfile() {
+            const targetId = isUpstream
+                ? (upstreamDealerId || member?.upstream_dealer_id || transfer?.upstream_dealer_id)
+                : (member?.user_id || member?.id || member?.userId)
+            if (!targetId) return
 
             if (!lineUserId) {
                 setLoadingProfile(true)
@@ -100,14 +107,14 @@ export default function PaymentNoticeModal({
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('id, line_user_id, full_name')
-                    .eq('id', memberUserId)
+                    .eq('id', targetId)
                     .maybeSingle()
 
                 if (isMounted && profile?.line_user_id) {
                     setLineUserId(profile.line_user_id.trim())
                 }
             } catch (err) {
-                console.error('Error fetching member line_user_id in modal:', err)
+                console.error('Error fetching line_user_id in modal:', err)
             } finally {
                 if (isMounted) {
                     setLoadingProfile(false)
@@ -115,11 +122,11 @@ export default function PaymentNoticeModal({
             }
         }
 
-        fetchMemberProfile()
+        fetchProfile()
         return () => {
             isMounted = false
         }
-    }, [member])
+    }, [member, isUpstream, upstreamDealerId, transfer])
 
     // Reset round selection when past rounds change
     useEffect(() => {
@@ -150,9 +157,10 @@ export default function PaymentNoticeModal({
             mode,
             currentBalance,
             currentWinnings: prizeToOffset,
-            selectedPastRounds: mode === 'current_debt' ? [] : selectedPastRounds
+            selectedPastRounds: mode === 'current_debt' ? [] : selectedPastRounds,
+            isUpstream
         })
-    }, [mode, currentBalance, prizeToOffset, selectedPastRounds])
+    }, [mode, currentBalance, prizeToOffset, selectedPastRounds, isUpstream])
 
     // Resolve Bank Account whenever direction changes
     useEffect(() => {
@@ -162,12 +170,32 @@ export default function PaymentNoticeModal({
             const memberUserId = member?.user_id || member?.id || member?.userId
             const effDealerId = dealerId || member?.dealer_id || round?.dealer_id
 
+            const effUpstreamDealerId = upstreamDealerId ||
+                transfer?.upstream_dealer_id ||
+                member?.upstream_dealer_id ||
+                (isUpstream ? memberUserId : null)
+
+            const effUpstreamDealerName = upstreamDealerName ||
+                transfer?.target_dealer_name ||
+                transfer?.upstream_dealer_name ||
+                transfer?.dealerName ||
+                member?.target_dealer_name ||
+                member?.upstream_dealer_name
+
+            const effConnectionId = connectionId ||
+                transfer?.connection_id ||
+                member?.connection_id
+
             const bank = await resolvePaymentNoticeBankAccount({
                 direction: summary.direction,
                 dealerId: effDealerId,
                 memberUserId,
                 supabase,
-                assignedBankAccountId: member?.assigned_bank_account_id || null
+                assignedBankAccountId: member?.assigned_bank_account_id || null,
+                isUpstream,
+                upstreamDealerId: effUpstreamDealerId,
+                upstreamDealerName: effUpstreamDealerName,
+                connectionId: effConnectionId
             })
 
             if (isMounted) {
@@ -190,7 +218,7 @@ export default function PaymentNoticeModal({
         return () => {
             isMounted = false
         }
-    }, [summary.direction, dealerId, member, round])
+    }, [summary.direction, dealerId, member, round, isUpstream, upstreamDealerId, upstreamDealerName, connectionId, transfer])
 
     // Escape key listener
     useEffect(() => {
@@ -218,13 +246,22 @@ export default function PaymentNoticeModal({
     }
 
     // Target display metadata
-    const targetDisplayName =
-        member?.profiles?.full_name ||
-        member?.profiles?.line_display_name ||
-        member?.profiles?.email ||
-        member?.name ||
-        member?.user_name ||
-        'สมาชิก'
+    const targetDisplayName = isUpstream
+        ? (upstreamDealerName ||
+           transfer?.target_dealer_name ||
+           transfer?.upstream_dealer_name ||
+           transfer?.dealerName ||
+           member?.target_dealer_name ||
+           member?.upstream_dealer_name ||
+           member?.dealerName ||
+           member?.name ||
+           'เจ้ามือรับตีออก')
+        : (member?.profiles?.full_name ||
+           member?.profiles?.line_display_name ||
+           member?.profiles?.email ||
+           member?.name ||
+           member?.user_name ||
+           'สมาชิก')
 
     const roundDateIso = round ? (getRoundCloseDate(round) || round.round_date || '') : ''
     const lotteryType = round?.lottery_type || 'thai'
@@ -248,14 +285,15 @@ export default function PaymentNoticeModal({
             mode,
             summary,
             selectedPastRounds: mode === 'current_debt' ? [] : selectedPastRounds,
-            bankAccount: {
-                bank_name: bankAccountText || resolvedBank?.bank_name || '',
+            bankAccount: bankAccountText ? {
+                bank_name: bankAccountText,
                 bank_account: '',
                 account_name: ''
-            },
-            customNotes
+            } : resolvedBank,
+            customNotes,
+            isUpstream
         })
-    }, [targetDisplayName, roundDateIso, lotteryName, mode, summary, selectedPastRounds, bankAccountText, resolvedBank, customNotes])
+    }, [targetDisplayName, roundDateIso, lotteryName, mode, summary, selectedPastRounds, bankAccountText, resolvedBank, customNotes, isUpstream])
 
     // Copy to clipboard with multi-layer fallback (supports HTTP, mobile, iframe, and modern clipboard API)
     const handleCopyNotice = async (e) => {
@@ -372,7 +410,7 @@ export default function PaymentNoticeModal({
                 {/* Header */}
                 <div className="modal-header">
                     <h3>
-                        <FiSend color="#eab308" /> แจ้งชำระเงิน
+                        <FiSend color="#eab308" /> {isUpstream ? 'แจ้งชำระเงิน (เจ้ามือรับตีออก)' : 'แจ้งชำระเงิน'}
                     </h3>
                     <button
                         type="button"
@@ -389,11 +427,11 @@ export default function PaymentNoticeModal({
                         {/* Member and Current Prize Info */}
                         <div className="notice-box" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.84rem' }}>
                             <div>
-                                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>สมาชิก: </span>
+                                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>{isUpstream ? 'เจ้ามือรับตีออก: ' : 'สมาชิก: '}</span>
                                 <strong>{targetDisplayName}</strong>
                             </div>
                             <div>
-                                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>รางวัลงวดนี้ที่นำมาหักล้าง: </span>
+                                <span style={{ color: 'var(--color-text-muted, #94a3b8)' }}>{isUpstream ? 'ถูกรางวัลคืนงวดนี้: ' : 'รางวัลงวดนี้ที่นำมาหักล้าง: '}</span>
                                 <strong style={{ color: 'var(--color-primary, #facc15)', fontSize: '0.9rem' }}>
                                     ฿{Number(prizeToOffset).toLocaleString()}
                                 </strong>
@@ -416,13 +454,13 @@ export default function PaymentNoticeModal({
                                         checked={mode === 'current_debt'}
                                         onChange={() => setMode('current_debt')}
                                     />
-                                    <span>หนี้งวดนี้</span>
+                                    <span>{isUpstream ? 'ยอดงวดนี้' : 'หนี้งวดนี้'}</span>
                                 </div>
                                 <div
                                     className={`notice-mode-card ${mode === 'offset_prize_past_debt' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}
                                     onClick={() => hasPastRounds && setMode('offset_prize_past_debt')}
                                     style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
-                                    title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
+                                    title={!hasPastRounds ? (isUpstream ? 'ไม่มีรายการยอดค้างงวดเก่า' : 'ไม่มีรายการหนี้งวดเก่า') : ''}
                                 >
                                     <input
                                         type="checkbox"
@@ -431,13 +469,13 @@ export default function PaymentNoticeModal({
                                         disabled={!hasPastRounds}
                                         onChange={() => hasPastRounds && setMode('offset_prize_past_debt')}
                                     />
-                                    <span>หักลบรางวัลกับหนี้เก่า</span>
+                                    <span>{isUpstream ? 'หักลบรางวัลกับยอดเก่า' : 'หักลบรางวัลกับหนี้เก่า'}</span>
                                 </div>
                                 <div
                                     className={`notice-mode-card ${mode === 'combine_all' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}
                                     onClick={() => hasPastRounds && setMode('combine_all')}
                                     style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
-                                    title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
+                                    title={!hasPastRounds ? (isUpstream ? 'ไม่มีรายการยอดค้างงวดเก่า' : 'ไม่มีรายการหนี้งวดเก่า') : ''}
                                 >
                                     <input
                                         type="checkbox"
@@ -514,7 +552,7 @@ export default function PaymentNoticeModal({
                                                     <span>
                                                         งวดวันที่ <strong>{formatThaiDate(r.roundDate || getRoundCloseDate(r) || r.round_date)}</strong>
                                                         {r.lotteryType && (
-                                                            <span style={{ fontSize: '0.75rem', opacity: 0.75, marginLeft: '0.35rem' }}>
+                                                             <span style={{ fontSize: '0.75rem', opacity: 0.75, marginLeft: '0.35rem' }}>
                                                                 ({r.lotteryType === 'thai' ? 'หวยไทย' : r.lotteryType === 'lao' ? 'หวยลาว' : r.lotteryType})
                                                             </span>
                                                         )}
@@ -522,11 +560,11 @@ export default function PaymentNoticeModal({
                                                 </div>
                                                 {isDebtPositive ? (
                                                     <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                                                        ค้าง ฿{roundDebtNum.toLocaleString()}
+                                                        {isUpstream ? 'เราค้าง' : 'ค้าง'} ฿{roundDebtNum.toLocaleString()}
                                                     </span>
                                                 ) : isDebtNegative ? (
                                                     <span style={{ color: '#22c55e', fontWeight: 600 }}>
-                                                        ค้างจ่าย -฿{Math.abs(roundDebtNum).toLocaleString()}
+                                                        {isUpstream ? 'เจ้ามือค้างจ่าย' : 'ค้างจ่าย'} -฿{Math.abs(roundDebtNum).toLocaleString()}
                                                     </span>
                                                 ) : (
                                                     <span style={{ color: '#94a3b8', fontWeight: 600 }}>
@@ -549,7 +587,7 @@ export default function PaymentNoticeModal({
                         <div className="notice-box" style={{ background: 'rgba(234, 179, 8, 0.05)', borderColor: 'rgba(234, 179, 8, 0.2)' }}>
                             {mode === 'current_debt' && (
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8' }}>
-                                    <span>ยอดค้างชำระงวดปัจจุบัน:</span>
+                                    <span>{isUpstream ? 'ยอดตีออกค้างงวดปัจจุบัน:' : 'ยอดค้างชำระงวดปัจจุบัน:'}</span>
                                     <span style={{ fontWeight: 600 }}>฿{Number(summary.currentRoundDebt || 0).toLocaleString()}</span>
                                 </div>
                             )}
@@ -557,12 +595,12 @@ export default function PaymentNoticeModal({
                             {mode === 'offset_prize_past_debt' && (
                                 <>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8' }}>
-                                        <span>รวมหนี้เก่าที่เลือก:</span>
+                                        <span>{isUpstream ? 'รวมยอดค้างเก่าที่เลือก:' : 'รวมหนี้เก่าที่เลือก:'}</span>
                                         <span style={{ fontWeight: 600 }}>฿{Number(summary.selectedPastDebt || 0).toLocaleString()}</span>
                                     </div>
                                     {summary.currentRoundPrize > 0 && (
                                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                                            <span>หักลบเงินรางวัลงวดนี้:</span>
+                                            <span>{isUpstream ? 'หักลบยอดถูกรางวัลคืนงวดนี้:' : 'หักลบเงินรางวัลงวดนี้:'}</span>
                                             <span style={{ color: 'var(--color-primary, #facc15)', fontWeight: 600 }}>
                                                 -฿{Number(summary.currentRoundPrize).toLocaleString()}
                                             </span>
@@ -574,11 +612,11 @@ export default function PaymentNoticeModal({
                             {mode === 'combine_all' && (
                                 <>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8' }}>
-                                        <span>ยอดค้างงวดปัจจุบัน:</span>
+                                        <span>{isUpstream ? 'ยอดตีออกค้างงวดปัจจุบัน:' : 'ยอดค้างงวดปัจจุบัน:'}</span>
                                         <span style={{ fontWeight: 600 }}>฿{Number(summary.currentRoundDebt || 0).toLocaleString()}</span>
                                     </div>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
-                                        <span>รวมหนี้เก่าที่เลือก:</span>
+                                        <span>{isUpstream ? 'รวมยอดค้างเก่าที่เลือก:' : 'รวมหนี้เก่าที่เลือก:'}</span>
                                         <span style={{ fontWeight: 600 }}>฿{Number(summary.selectedPastDebt || 0).toLocaleString()}</span>
                                     </div>
                                 </>
@@ -586,9 +624,19 @@ export default function PaymentNoticeModal({
 
                             <div style={{ borderTop: '1px dashed rgba(255,255,255,0.1)', marginTop: '0.4rem', paddingTop: '0.4rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: '0.82rem', fontWeight: 600 }}>
-                                    {summary.direction === 'member_to_dealer' && '🟢 สมาชิกต้องโอนชำระ:'}
-                                    {summary.direction === 'dealer_to_member' && '🔴 เจ้ามือต้องโอนคืนสมาชิก:'}
-                                    {summary.direction === 'even' && '⚪ ยอดหักล้างพอดี (ไม่ต้องโอน):'}
+                                    {isUpstream ? (
+                                        <>
+                                            {summary.direction === 'dealer_to_upstream' && '🔴 เราต้องโอนให้เจ้ามือ:'}
+                                            {summary.direction === 'upstream_to_dealer' && '🟢 เจ้ามือต้องโอนคืนให้เรา:'}
+                                            {summary.direction === 'even' && '⚪ ยอดหักล้างพอดี (ไม่ต้องโอน):'}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {summary.direction === 'member_to_dealer' && '🟢 สมาชิกต้องโอนชำระ:'}
+                                            {summary.direction === 'dealer_to_member' && '🔴 เจ้ามือต้องโอนคืนสมาชิก:'}
+                                            {summary.direction === 'even' && '⚪ ยอดหักล้างพอดี (ไม่ต้องโอน):'}
+                                        </>
+                                    )}
                                 </span>
                                 <span style={{
                                     fontSize: '1.15rem',
@@ -624,7 +672,16 @@ export default function PaymentNoticeModal({
                         {/* Bank Account */}
                         <div className="notice-bank-field">
                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: '#94a3b8' }}>
-                                <FiCreditCard /> บัญชีโอนเงิน
+                                <FiCreditCard />
+                                {isUpstream ? (
+                                    summary.direction === 'dealer_to_upstream'
+                                        ? 'บัญชีโอนเงิน (บัญชีเจ้ามือตีออก)'
+                                        : summary.direction === 'upstream_to_dealer'
+                                        ? 'บัญชีรับเงิน (บัญชีของเรา)'
+                                        : 'บัญชีธนาคาร'
+                                ) : (
+                                    'บัญชีโอนเงิน'
+                                )}
                             </label>
                             <input
                                 type="text"
@@ -649,7 +706,7 @@ export default function PaymentNoticeModal({
                                 color: '#fca5a5'
                             }}>
                                 <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                    <FiAlertCircle size={15} /> สมาชิกยังไม่ได้ผูก LINE UID
+                                    <FiAlertCircle size={15} /> {isUpstream ? 'เจ้ามือยังไม่ได้ผูก LINE UID' : 'สมาชิกยังไม่ได้ผูก LINE UID'}
                                 </span>
                                 <span style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>
                                     (ใช้ปุ่มคัดลอกข้อความเพื่อส่งเอง)
@@ -678,7 +735,7 @@ export default function PaymentNoticeModal({
                                     {sendError}
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.15rem' }}>
-                                    💡 กดปุ่ม <strong>"คัดลอกข้อความ"</strong> ด้านล่างเพื่อนำไปส่งให้สมาชิกในแชทได้ทันที
+                                    💡 กดปุ่ม <strong>"คัดลอกข้อความ"</strong> ด้านล่างเพื่อนำไปส่งให้{isUpstream ? 'เจ้ามือ' : 'สมาชิก'}ในแชทได้ทันที
                                 </div>
                             </div>
                         )}
@@ -707,7 +764,7 @@ export default function PaymentNoticeModal({
                                 type="submit"
                                 className="btn-notice-send"
                                 disabled={sending || !effectiveLineUserId}
-                                title={!effectiveLineUserId ? 'สมาชิกยังไม่ได้ผูก LINE UID' : 'ส่งข้อความเข้า LINE สมาชิกผ่านบอท'}
+                                title={!effectiveLineUserId ? `${isUpstream ? 'เจ้ามือ' : 'สมาชิก'}ยังไม่ได้ผูก LINE UID` : `ส่งข้อความเข้า LINE ${isUpstream ? 'เจ้ามือ' : 'สมาชิก'}ผ่านบอท`}
                             >
                                 <FiSend size={15} />
                                 {sending ? 'กำลังส่ง...' : 'ส่งใบแจ้งชำระ'}

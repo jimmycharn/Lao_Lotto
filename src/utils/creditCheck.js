@@ -1026,6 +1026,9 @@ export async function calculateRoundProfit(dealerId, roundId) {
                 const numSets = Math.max(1, Math.floor(parseFloat(sub.amount || 0) / setPrice))
                 return parseFloat(sub.prize_amount || 0) * numSets
             }
+            if (sub.prize_amount !== undefined && sub.prize_amount !== null && Number(sub.prize_amount) > 0) {
+                return Number(sub.prize_amount)
+            }
             const amount = parseFloat(sub.amount || 0)
             const settingsKey = getSettingsKey(sub.bet_type)
             const settings = userSettingsMap[sub.user_id]?.[lotteryKey]?.[settingsKey]

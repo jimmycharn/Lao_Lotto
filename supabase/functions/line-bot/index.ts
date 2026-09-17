@@ -325,6 +325,7 @@ function parseLotteryType(input: string): string | null {
   if (clean === 'ลาว' || clean === 'หวยลาว' || clean === 'lao' || clean === 'la') return 'lao';
   if (clean === 'ฮานอย' || clean === 'หวยฮานอย' || clean === 'hanoi' || clean === 'vn') return 'hanoi';
   if (clean === 'หุ้น' || clean === 'หวยหุ้น' || clean === 'stock') return 'stock';
+  if (clean === 'ยี่กี' || clean === 'ยี่กี่' || clean === 'หวยยี่กี' || clean === 'หวยยี่กี่' || clean === 'yeekee' || clean === 'yk') return 'yeekee';
   return null;
 }
 
@@ -2863,20 +2864,12 @@ async function updatePendingDeduction(dealerId: string): Promise<void> {
 // Helper: Get Commission settings for user
 function getCommissionInfo(lotterySettings: any, betType: string, lotteryType: string) {
   const lotteryKey = lotteryType === 'lao' ? 'lao' : lotteryType === 'hanoi' ? 'hanoi' : 'thai';
-  let settingsKey = betType;
-  if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-    const LAO_BET_TYPE_MAP: Record<string, string> = {
-      '3_top': '3_straight',
-      '3_tod': '3_tod_single',
-      '4_top': '4_set'
-    };
-    settingsKey = LAO_BET_TYPE_MAP[betType] || betType;
-  }
+  const settingsKey = getBetSettingsKey(betType, lotteryKey);
 
   const betSettings = lotterySettings?.[lotteryKey]?.[settingsKey];
   if (betSettings?.commission !== undefined) {
     const isFixed = betSettings.isFixed || betSettings.isSet || betType === '4_set' || betType === '4_top';
-    return { rate: betSettings.commission, isFixed };
+    return { rate: Number(betSettings.commission), isFixed };
   }
 
   // Default fallback values
@@ -7851,7 +7844,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               'ลาว': 'lao', 'หวยลาว': 'lao', 'lao': 'lao',
               'ฮานอย': 'hanoi', 'หวยฮานอย': 'hanoi', 'hanoi': 'hanoi',
               'หุ้น': 'stock', 'หวยหุ้น': 'stock', 'stock': 'stock',
-              'ยี่กี': 'yeekee', 'หวยยี่กี': 'yeekee', 'yeekee': 'yeekee',
+              'ยี่กี': 'yeekee', 'หวยยี่กี': 'yeekee', 'ยี่กี่': 'yeekee', 'หวยยี่กี่': 'yeekee', 'yeekee': 'yeekee',
               'อื่นๆ': 'other', 'หวยอื่นๆ': 'other', 'other': 'other'
             };
 
@@ -10470,6 +10463,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 isSet: boolean;
                 winBetAmount: number;
                 winPrizeAmount: number;
+                totalSets: number;
+                winSets: number;
               }
 
               const betTypeSummaries: Record<string, BetTypeSummary> = {};
@@ -10520,12 +10515,18 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     isFixed: commInfo.isFixed,
                     isSet: commInfo.isSet,
                     winBetAmount: 0,
-                    winPrizeAmount: 0
+                    winPrizeAmount: 0,
+                    totalSets: 0,
+                    winSets: 0
                   };
                 }
 
+                const numSets = s.bet_type === '4_set' ? Math.max(1, Math.floor(amt / setPrice)) : 0;
                 betTypeSummaries[s.bet_type].amount += amt;
                 betTypeSummaries[s.bet_type].commission += comm;
+                if (s.bet_type === '4_set') {
+                  betTypeSummaries[s.bet_type].totalSets += numSets;
+                }
                 if (commInfo.rate !== undefined) {
                   betTypeSummaries[s.bet_type].rates.add(commInfo.rate);
                 }
@@ -10533,6 +10534,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 if (isWin) {
                   betTypeSummaries[s.bet_type].winBetAmount += amt;
                   betTypeSummaries[s.bet_type].winPrizeAmount += win;
+                  if (s.bet_type === '4_set') {
+                    betTypeSummaries[s.bet_type].winSets += numSets;
+                  }
                   totalWin += win;
                 }
 
@@ -10766,8 +10770,15 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   const typeName = LABELS[type] || type;
 
                   if (isAnnounced) {
-                    const winText = `ถูก ฿${roundedWinBet.toLocaleString('th-TH')}/฿${roundedWinPrize.toLocaleString('th-TH')}`;
-                    summaryText += `${typeName}: แทง ฿${roundedSum.toLocaleString('th-TH')} (${commText}) ${winText}\n`;
+                    const betText = type === '4_set'
+                      ? `แทง ${summary.totalSets.toLocaleString('th-TH')} ชุด/฿${roundedSum.toLocaleString('th-TH')}`
+                      : `แทง ฿${roundedSum.toLocaleString('th-TH')}`;
+
+                    const winText = type === '4_set'
+                      ? `ถูก ${summary.winSets.toLocaleString('th-TH')} ชุด/฿${roundedWinPrize.toLocaleString('th-TH')}`
+                      : `ถูก ฿${roundedWinBet.toLocaleString('th-TH')}/฿${roundedWinPrize.toLocaleString('th-TH')}`;
+
+                    summaryText += `${typeName}: ${betText} (${commText}) ${winText}\n`;
 
                     bubbleBodyContents.push({
                       "type": "box",
@@ -10784,16 +10795,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                               "size": "sm",
                               "color": "#333333",
                               "weight": "bold",
-                              "flex": 6
+                              "flex": 5
                             },
                             {
                               "type": "text",
-                              "text": `แทง ฿${roundedSum.toLocaleString('th-TH')}`,
+                              "text": betText,
                               "size": "sm",
                               "weight": "bold",
                               "align": "end",
                               "color": "#333333",
-                              "flex": 6
+                              "flex": 7
                             }
                           ]
                         },
@@ -10823,7 +10834,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       ]
                     });
                   } else {
-                    summaryText += `${typeName}: ฿${roundedSum.toLocaleString('th-TH')} (${commText})\n`;
+                    const unannouncedBetText = type === '4_set'
+                      ? `${summary.totalSets.toLocaleString('th-TH')} ชุด/฿${roundedSum.toLocaleString('th-TH')}`
+                      : `฿${roundedSum.toLocaleString('th-TH')}`;
+
+                    summaryText += `${typeName}: ${unannouncedBetText} (${commText})\n`;
 
                     bubbleBodyContents.push({
                       "type": "box",
@@ -10840,16 +10855,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                               "size": "sm",
                               "color": "#333333",
                               "weight": "bold",
-                              "flex": 6
+                              "flex": 5
                             },
                             {
                               "type": "text",
-                              "text": `฿${roundedSum.toLocaleString('th-TH')}`,
+                              "text": unannouncedBetText,
                               "size": "sm",
                               "weight": "bold",
                               "align": "end",
                               "color": "#333333",
-                              "flex": 6
+                              "flex": 7
                             }
                           ]
                         },
@@ -13915,7 +13930,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       cmdRow("/โพยปิด หรือ /โพยเปิด", "ปิด/เปิดการแสดงใบโพยหลังแทงเลข"),
 
                       sectionHeader("📩", "ผูกกลุ่ม (แอดมินเท่านั้น)"),
-                      cmdRow("/ขอรหัส", "ขอรหัสผูกกลุ่มใหม่ (ใช้ในแชทส่วนตัวกับบอท)"),
+                      cmdRow("/ขอรหัส [ไทย/ลาว/ฮานอย/หุ้น/ยี่กี่]", "ขอรหัสผูกกลุ่มพร้อมเลือกประเภทหวย (แชทส่วนตัว)"),
                       cmdRow("/bind [รหัส]", "ผูกกลุ่ม LINE ด้วยรหัส (ใช้ในกลุ่ม)"),
 
                       sectionHeader("❓", "อื่นๆ"),
@@ -14017,7 +14032,19 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           if (updateErr) {
             await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดทางเทคนิคในการผูกกลุ่ม กรุณาลองใหม่อีกครั้ง`);
           } else {
-            await sendLineReply(replyToken, `✅ ผูกกลุ่มสำเร็จแล้วค่ะ!\n\nเจ้ามือหลัก: ${dealerName}\nประเภทหวยหลัก: ${groupLink.lottery_type.toUpperCase()}\n\nสมาชิกที่มีสิทธิ์สามารถส่งโพยหวยได้ในกลุ่มนี้ทันทีค่ะ 🎉`);
+            const LOTTERY_DISPLAY_NAMES: Record<string, string> = {
+              thai: 'หวยไทย',
+              lao: 'หวยลาว',
+              hanoi: 'หวยฮานอย',
+              stock: 'หวยหุ้น',
+              yeekee: 'หวยยี่กี่',
+              lao_extra: 'หวยลาวพิเศษ',
+              lao_vip: 'หวยลาว VIP',
+              other: 'หวยอื่นๆ'
+            };
+            const lotteryDisplay = LOTTERY_DISPLAY_NAMES[groupLink.lottery_type] || (groupLink.lottery_type ? groupLink.lottery_type.toUpperCase() : 'หวยไทย');
+
+            await sendLineReply(replyToken, `✅ ผูกกลุ่มสำเร็จแล้วค่ะ!✅\n\nเจ้ามือ: ${dealerName}\nประเภทหวย: ${lotteryDisplay}\n\nสมาชิกที่มีสิทธิ์สามารถส่งโพยในกลุ่มนี้ได้ทันทีค่ะ 🎉`);
           }
           continue;
         }
@@ -14028,6 +14055,43 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           if (sourceType !== 'user') {
             await sendLineReply(replyToken, `⚠️ เพื่อความปลอดภัย กรุณาพิมพ์คำสั่งนี้ในแชทส่วนตัวกับบอท (1-on-1) เท่านั้นค่ะ`);
             continue;
+          }
+
+          // Determine requested lottery type and base command
+          let requestedLotteryType = 'thai';
+          let baseCmd = '/ขอรหัส';
+
+          const parts = text.trim().split(/\s+/);
+          const firstWord = parts[0].toLowerCase();
+
+          if (firstWord.startsWith('/ขอรหัสไทย') || firstWord.startsWith('/ขอรหัสผูกกลุ่มไทย')) {
+            requestedLotteryType = 'thai';
+            baseCmd = '/ขอรหัสไทย';
+          } else if (firstWord.startsWith('/ขอรหัสลาว') || firstWord.startsWith('/ขอรหัสผูกกลุ่มลาว')) {
+            requestedLotteryType = 'lao';
+            baseCmd = '/ขอรหัสลาว';
+          } else if (firstWord.startsWith('/ขอรหัสฮานอย') || firstWord.startsWith('/ขอรหัสผูกกลุ่มฮานอย')) {
+            requestedLotteryType = 'hanoi';
+            baseCmd = '/ขอรหัสฮานอย';
+          } else if (firstWord.startsWith('/ขอรหัสหุ้น') || firstWord.startsWith('/ขอรหัสผูกกลุ่มหุ้น')) {
+            requestedLotteryType = 'stock';
+            baseCmd = '/ขอรหัสหุ้น';
+          } else if (firstWord.startsWith('/ขอรหัสยี่กี่') || firstWord.startsWith('/ขอรหัสยี่กี') || firstWord.startsWith('/ขอรหัสผูกกลุ่มยี่กี่') || firstWord.startsWith('/ขอรหัสผูกกลุ่มยี่กี')) {
+            requestedLotteryType = 'yeekee';
+            baseCmd = '/ขอรหัสยี่กี่';
+          } else {
+            // Check if lottery type was specified as a separate argument (e.g. /ขอรหัส ลาว, /bindcode lao)
+            if (parts.length > 1) {
+              const parsedType = parseLotteryType(parts[1]);
+              if (parsedType) {
+                requestedLotteryType = parsedType;
+                if (parsedType === 'lao') baseCmd = '/ขอรหัสลาว';
+                else if (parsedType === 'hanoi') baseCmd = '/ขอรหัสฮานอย';
+                else if (parsedType === 'stock') baseCmd = '/ขอรหัสหุ้น';
+                else if (parsedType === 'yeekee') baseCmd = '/ขอรหัสยี่กี่';
+                else baseCmd = '/ขอรหัสไทย';
+              }
+            }
           }
 
           // 1. Get all dealer IDs this user is authorized to manage
@@ -14072,16 +14136,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             continue;
           }
 
-          // Parse argument if any
-          const parts = text.split(/\s+/);
+          // Parse dealer ID argument if any (excluding lottery type argument)
           let targetDealerId: string | null = null;
+          const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          const remainingArgs = parts.slice(1).filter(arg => !parseLotteryType(arg));
 
-          if (parts.length > 1) {
-            const arg = parts[1].trim();
-            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(arg);
-            if (isUUID) {
-              if (uniqueDealerIds.includes(arg)) {
-                targetDealerId = arg;
+          if (remainingArgs.length > 0) {
+            const potentialUuid = remainingArgs[0].trim();
+            if (uuidRegex.test(potentialUuid)) {
+              if (uniqueDealerIds.includes(potentialUuid)) {
+                targetDealerId = potentialUuid;
               } else {
                 await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการขอรหัสผูกกลุ่มสำหรับร้านค้านี้ค่ะ`);
                 continue;
@@ -14104,7 +14168,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   action: {
                     type: "message",
                     label: shopName.substring(0, 20), // LINE label limit: 20 chars
-                    text: `/ขอรหัส ${dp.id}`
+                    text: `${baseCmd} ${dp.id}`
                   }
                 };
               });
@@ -14132,9 +14196,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             .maybeSingle();
 
           if (pendingCode) {
+            // Update pending code to the newly requested lottery type if different
+            if (pendingCode.lottery_type !== requestedLotteryType) {
+              await supabase
+                .from('line_groups')
+                .update({ lottery_type: requestedLotteryType, updated_at: new Date().toISOString() })
+                .eq('id', pendingCode.id);
+            }
+
             await sendLineReply(replyToken, [
-              `คุณมีรหัสผูกกลุ่มที่ยังไม่ได้ใช้งานอยู่แล้วค่ะ\n\nสามารถนำรหัสนี้ไปพิมพ์ในห้องแชทกลุ่ม LINE ที่ต้องการผูกค่ะ\n\n*(หากต้องการรหัสใหม่ กรุณากดลบรหัสเดิมผ่านระบบหลังบ้านบนหน้าเว็บดีลเลอร์ก่อนนะคะ)*`,
-              `รหัสผูกกลุ่ม: ${pendingCode.binding_code}`,
+              `คุณมีรหัสผูกกลุ่มที่ยังไม่ได้ใช้งานอยู่แล้วค่ะ\n\nกรุณาคัดลอกรหัสและคำสั่งด้านล่าง ไปพิมพ์ในกลุ่ม LINE ที่ต้องการผูกกลุ่มแชทเข้ากับระบบค่ะ 🤖\n\n*(หากต้องการรหัสใหม่ กรุณากดลบรหัสเดิมผ่านระบบหลังบ้านบนหน้าเว็บดีลเลอร์ก่อนนะคะ)*`,
               `/bind ${pendingCode.binding_code}`
             ]);
             continue;
@@ -14148,7 +14219,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             .insert({
               line_group_id: 'pending-' + code,
               dealer_id: targetDealerId,
-              lottery_type: 'thai', // default
+              lottery_type: requestedLotteryType,
               binding_code: code,
               is_active: false
             });
@@ -14158,8 +14229,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดทางเทคนิคในการสร้างรหัสผูกกลุ่ม กรุณาลองใหม่อีกครั้ง`);
           } else {
             await sendLineReply(replyToken, [
-              `✅ สร้างรหัสผูกกลุ่มใหม่สำเร็จแล้วค่ะ!\n\nกรุณาคัดลอกรหัสและคำสั่งด้านล่าง ไปพิมพ์ในห้องแชทกลุ่ม LINE ที่ต้องการเชื่อมโยงเพื่อทำการผูกกลุ่มแชทเข้ากับระบบรับโพยของท่านค่ะ 🤖`,
-              `รหัสผูกกลุ่ม: ${code}`,
+              `✅ สร้างรหัสผูกกลุ่มใหม่สำเร็จแล้วค่ะ!✅\n\nกรุณาคัดลอกรหัสและคำสั่งด้านล่าง ไปพิมพ์ในกลุ่ม LINE ที่ต้องการผูกกลุ่มแชทเข้ากับระบบค่ะ 🤖`,
               `/bind ${code}`
             ]);
           }
@@ -17166,11 +17236,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         }
 
         // Retrieve returnExcessOnOverflow setting for the member
+        const effectiveDealerId = activeRound?.dealer_id || dealerId;
         const { data: userSettings } = await supabase
           .from('user_settings')
           .select('lottery_settings')
           .eq('user_id', profile.id)
-          .eq('dealer_id', dealerId)
+          .eq('dealer_id', effectiveDealerId)
           .maybeSingle();
 
         const returnExcess = !!userSettings?.lottery_settings?.[lotteryType]?.returnExcessOnOverflow;

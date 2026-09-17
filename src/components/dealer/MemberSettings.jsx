@@ -250,6 +250,62 @@ export default function MemberSettings({ member, onClose, isInline = false }) {
                 }, { onConflict: 'user_id, dealer_id' })
 
             if (error) throw error
+
+            // Sync commission for active/announced rounds of this dealer and member
+            try {
+                const { data: activeRounds } = await supabase
+                    .from('lottery_rounds')
+                    .select('id, lottery_type')
+                    .eq('dealer_id', user.id)
+                    .in('status', ['open', 'closed', 'announced'])
+
+                if (activeRounds && activeRounds.length > 0) {
+                    const POSITION_MAP = {
+                        'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                        'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom',
+                        '2_spread': '2_center', '2_tang': '2_center',
+                        '2_teng': '2_run', '2_have': '2_run',
+                        '2_back': '2_top', '2_front_single': '2_front'
+                    }
+                    const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+
+                    for (const r of activeRounds) {
+                        const lKey = r.lottery_type === 'lao' ? 'lao' : r.lottery_type === 'hanoi' ? 'hanoi' : r.lottery_type === 'stock' ? 'stock' : 'thai'
+                        const tabSettings = settingsToSave[lKey]
+                        if (!tabSettings) continue
+
+                        const { data: memberSubs } = await supabase
+                            .from('submissions')
+                            .select('id, bet_type, amount')
+                            .eq('round_id', r.id)
+                            .eq('user_id', member.id)
+                            .eq('is_deleted', false)
+
+                        if (memberSubs && memberSubs.length > 0) {
+                            for (const sub of memberSubs) {
+                                let sKey = POSITION_MAP[sub.bet_type] || sub.bet_type
+                                if (lKey === 'lao' || lKey === 'hanoi') {
+                                    sKey = LAO_MAP[sKey] || sKey
+                                }
+                                const bSetting = tabSettings[sKey]
+                                const amt = Number(sub.amount || 0)
+                                let commAmt = 0
+                                if (bSetting?.commission !== undefined) {
+                                    const isFixed = bSetting.isFixed || bSetting.isSet || sub.bet_type === '4_set' || sub.bet_type === '4_top'
+                                    commAmt = isFixed ? Number(bSetting.commission) : (amt * Number(bSetting.commission)) / 100
+                                } else {
+                                    const defRate = sub.bet_type === '3_top' ? 30 : (sub.bet_type === 'run_top' || sub.bet_type === 'run_bottom') ? 10 : 15
+                                    commAmt = (amt * defRate) / 100
+                                }
+                                await supabase.from('submissions').update({ commission_amount: commAmt }).eq('id', sub.id)
+                            }
+                        }
+                    }
+                }
+            } catch (syncErr) {
+                console.warn('Failed to sync active submissions commission:', syncErr)
+            }
+
             toast.success('บันทึกการตั้งค่าสำเร็จ')
             if (!isInline) onClose()
         } catch (error) {

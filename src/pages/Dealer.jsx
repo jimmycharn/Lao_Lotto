@@ -220,6 +220,9 @@ function getExpectedSubmissionPayout(sub, lotteryType, userSettings = {}, setPri
         const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
         return (sub.prize_amount || 0) * numSets
     }
+    if (sub.prize_amount !== undefined && sub.prize_amount !== null && Number(sub.prize_amount) > 0) {
+        return Number(sub.prize_amount)
+    }
     const lotteryKey = getLotteryTypeKey(lotteryType)
     const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
     const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
@@ -254,6 +257,7 @@ export default function Dealer() {
     const [members, setMembers] = useState([])
     const [pendingMembers, setPendingMembers] = useState([])
     const [blockedMembers, setBlockedMembers] = useState([])
+    const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [loading, setLoading] = useState(true)
     const [selectedRound, setSelectedRound] = useState(null)
 
@@ -292,6 +296,7 @@ export default function Dealer() {
     const [historyTypeFilter, setHistoryTypeFilter] = useState('all')
     const [expandedHistoryId, setExpandedHistoryId] = useState(null)
     const [historyDetails, setHistoryDetails] = useState({})
+    const [historyMemberSearchQuery, setHistoryMemberSearchQuery] = useState({})
     const [deleteHistoryItem, setDeleteHistoryItem] = useState(null)
     const [deletingHistory, setDeletingHistory] = useState(false)
     const [expandedMemberSettlementId, setExpandedMemberSettlementId] = useState(null)
@@ -1123,12 +1128,8 @@ export default function Dealer() {
         })
     }, [filteredRoundHistory, settlementOverview, upstreamSettingsMap])
 
-    const getHistoryCardContent = useCallback((cardIndex) => {
-        const history = filteredRoundHistory[cardIndex]
-        if (!history) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
-        const isExpanded = expandedHistoryId === history.id
-        if (!isExpanded) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
-
+    const getFilteredHistoryUsers = useCallback((history) => {
+        if (!history) return []
         const details = historyDetails[history.id]
         const userHistories = (details?.userHistories && details.userHistories.length > 0)
             ? details.userHistories
@@ -1136,6 +1137,37 @@ export default function Dealer() {
                 (history.round_id && String(uh.round_id) === String(history.round_id)) ||
                 (history.id && String(uh.round_id) === String(history.id))
             )
+        const roundSearchQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
+        if (!roundSearchQuery) return userHistories
+
+        return userHistories.filter(uh => {
+            const memberName = (uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || '').toLowerCase()
+            const lineName = (uh.profiles?.line_display_name || '').toLowerCase()
+            const email = (uh.profiles?.email || '').toLowerCase()
+            const memberInfo = members.find(m => (m.id || m.user_id) === uh.user_id)
+                || downstreamDealers?.find(m => (m.id || m.user_id) === uh.user_id)
+                || pendingMembers?.find(m => (m.id || m.user_id) === uh.user_id)
+            const extraName = (memberInfo?.full_name || memberInfo?.name || '').toLowerCase()
+            const extraLine = (memberInfo?.line_display_name || '').toLowerCase()
+            const phone = (memberInfo?.phone || memberInfo?.phone_number || uh.profiles?.phone || '').toLowerCase()
+
+            return memberName.includes(roundSearchQuery) ||
+                lineName.includes(roundSearchQuery) ||
+                email.includes(roundSearchQuery) ||
+                extraName.includes(roundSearchQuery) ||
+                extraLine.includes(roundSearchQuery) ||
+                phone.includes(roundSearchQuery)
+        })
+    }, [historyDetails, settlementOverview, historyMemberSearchQuery, members, downstreamDealers, pendingMembers])
+
+    const getHistoryCardContent = useCallback((cardIndex) => {
+        const history = filteredRoundHistory[cardIndex]
+        if (!history) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
+        const isExpanded = expandedHistoryId === history.id
+        if (!isExpanded) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
+
+        const filteredUsers = getFilteredHistoryUsers(history)
+        const details = historyDetails[history.id]
         const rawTransfers = (details?.transfers && details.transfers.length > 0)
             ? details.transfers
             : (settlementOverview?.transfers || []).filter(t =>
@@ -1156,10 +1188,10 @@ export default function Dealer() {
 
         return {
             isExpanded: true,
-            memberCount: userHistories ? userHistories.length : 0,
+            memberCount: filteredUsers ? filteredUsers.length : 0,
             upstreamCount
         }
-    }, [filteredRoundHistory, expandedHistoryId, historyDetails, settlementOverview])
+    }, [filteredRoundHistory, expandedHistoryId, getFilteredHistoryUsers, historyDetails, settlementOverview])
 
     // Smooth scroll focused keyboard target into view
     useEffect(() => {
@@ -1244,14 +1276,8 @@ export default function Dealer() {
                     toggleExpandHistory(history)
                 } else if (section === 'member') {
                     e.preventDefault()
-                    const details = historyDetails[history.id]
-                    const userHistories = (details?.userHistories && details.userHistories.length > 0)
-                        ? details.userHistories
-                        : (settlementOverview?.userHistories || []).filter(uh =>
-                            (history.round_id && String(uh.round_id) === String(history.round_id)) ||
-                            (history.id && String(uh.round_id) === String(history.id))
-                        )
-                    const uh = userHistories[rowIndex]
+                    const filteredUsers = getFilteredHistoryUsers(history)
+                    const uh = filteredUsers[rowIndex]
                     if (uh) {
                         const settlementKey = `${history.id}_${uh.user_id}`
                         if (expandedMemberSettlementId === settlementKey) {
@@ -1262,8 +1288,9 @@ export default function Dealer() {
                                 paymentBtn.click()
                                 return
                             }
+                        } else {
+                            setExpandedMemberSettlementId(settlementKey)
                         }
-                        setExpandedMemberSettlementId(settlementKey)
                     }
                 } else if (section === 'upstream') {
                     e.preventDefault()
@@ -1313,7 +1340,7 @@ export default function Dealer() {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [roundsTab, filteredRoundHistory, getHistoryCardContent, keyboardNavTarget, historyDetails, settlementOverview, deleteHistoryItem, expandedMemberSettlementId, expandedUpstreamSettlementId])
+    }, [roundsTab, filteredRoundHistory, getHistoryCardContent, getFilteredHistoryUsers, keyboardNavTarget, historyDetails, settlementOverview, deleteHistoryItem, expandedMemberSettlementId, expandedUpstreamSettlementId])
 
     const getRoundSettlementDetails = (history) => {
         if (!history) return {
@@ -1402,7 +1429,6 @@ export default function Dealer() {
     }
 
     const getRoundSettlementStatus = (history) => getRoundSettlementDetails(history).isSettled
-    const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
     const [memberSearchQuery, setMemberSearchQuery] = useState('')
     
@@ -4537,11 +4563,20 @@ export default function Dealer() {
                                                                                             groupedMap[dName] = {
                                                                                                 id: t.id || dName,
                                                                                                 dealerName: dName,
+                                                                                                target_dealer_name: t.target_dealer_name || dName,
+                                                                                                connection_id: t.connection_id || null,
+                                                                                                upstream_dealer_id: t.upstream_dealer_id || null,
                                                                                                 entriesCount: 0,
                                                                                                 amount: 0,
                                                                                                 commission_earned: 0,
                                                                                                 winnings: 0
                                                                                             }
+                                                                                        }
+                                                                                        if (!groupedMap[dName].connection_id && t.connection_id) {
+                                                                                            groupedMap[dName].connection_id = t.connection_id
+                                                                                        }
+                                                                                        if (!groupedMap[dName].upstream_dealer_id && t.upstream_dealer_id) {
+                                                                                            groupedMap[dName].upstream_dealer_id = t.upstream_dealer_id
                                                                                         }
                                                                                         const amt = Number(t.amount || 0)
                                                                                         const comm = calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type)
@@ -4569,13 +4604,108 @@ export default function Dealer() {
                                                                                         winnings: outWin
                                                                                     }] : [])
                                                                                 
+                                                                                const roundSearchQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
+                                                                                const filteredUserHistories = getFilteredHistoryUsers(history)
+
                                                                                 return (
                                                                                     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
                                                                                         {/* Member Submissions Table */}
                                                                                         <div>
-                                                                                            <h4 style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.75rem", color: "var(--color-warning)" }}>
-                                                                                                📊 รายละเอียดการส่งเลขของสมาชิกในงวดนี้
-                                                                                            </h4>
+                                                                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                                                                                                <h4 style={{ fontSize: "0.85rem", fontWeight: 600, margin: 0, color: "var(--color-warning)" }}>
+                                                                                                    📊 รายละเอียดการส่งเลขของสมาชิกในงวดนี้
+                                                                                                </h4>
+                                                                                                {userHistories.length > 0 && (
+                                                                                                    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }} onClick={e => e.stopPropagation()}>
+                                                                                                        <FiSearch style={{
+                                                                                                            position: "absolute",
+                                                                                                            left: "0.6rem",
+                                                                                                            top: "50%",
+                                                                                                            transform: "translateY(-50%)",
+                                                                                                            color: "var(--color-text-muted)",
+                                                                                                            fontSize: "0.85rem",
+                                                                                                            pointerEvents: "none"
+                                                                                                        }} />
+                                                                                                        <input
+                                                                                                            type="text"
+                                                                                                            placeholder="ค้นชื่อในงวดนี้..."
+                                                                                                            value={historyMemberSearchQuery[history.id] || ""}
+                                                                                                            onChange={e => {
+                                                                                                                const val = e.target.value
+                                                                                                                setHistoryMemberSearchQuery(prev => ({ ...prev, [history.id]: val }))
+                                                                                                            }}
+                                                                                                            onKeyDown={e => {
+                                                                                                                if (e.key === 'Enter') {
+                                                                                                                    e.preventDefault()
+                                                                                                                    e.currentTarget.blur()
+                                                                                                                    if (filteredUserHistories.length > 0) {
+                                                                                                                        const firstUh = filteredUserHistories[0]
+                                                                                                                        const targetKey = `${history.id}_${firstUh.user_id}`
+                                                                                                                        setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: 0 })
+                                                                                                                        if (expandedMemberSettlementId === targetKey) {
+                                                                                                                            const rowEl = document.querySelector(`[data-keyboard-target="card-${cardIdx}-member-0"]`)
+                                                                                                                            const inlineRow = rowEl?.nextElementSibling
+                                                                                                                            const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action') || document.querySelector('.member-settlement-inline .btn-cross-offset-action')
+                                                                                                                            if (paymentBtn) {
+                                                                                                                                paymentBtn.click()
+                                                                                                                                return
+                                                                                                                            }
+                                                                                                                        } else {
+                                                                                                                            setExpandedMemberSettlementId(targetKey)
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                } else if (e.key === 'ArrowDown') {
+                                                                                                                    e.preventDefault()
+                                                                                                                    e.currentTarget.blur()
+                                                                                                                    if (filteredUserHistories.length > 0) {
+                                                                                                                        setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: 0 })
+                                                                                                                    }
+                                                                                                                } else if (e.key === 'Escape') {
+                                                                                                                    e.preventDefault()
+                                                                                                                    setHistoryMemberSearchQuery(prev => ({ ...prev, [history.id]: '' }))
+                                                                                                                }
+                                                                                                            }}
+                                                                                                            style={{
+                                                                                                                paddingLeft: "1.85rem",
+                                                                                                                paddingRight: (historyMemberSearchQuery[history.id] || "") ? "1.8rem" : "0.65rem",
+                                                                                                                paddingTop: "0.25rem",
+                                                                                                                paddingBottom: "0.25rem",
+                                                                                                                fontSize: "0.8rem",
+                                                                                                                borderRadius: "6px",
+                                                                                                                background: "rgba(0, 0, 0, 0.35)",
+                                                                                                                border: "1px solid rgba(255, 255, 255, 0.15)",
+                                                                                                                color: "#f8fafc",
+                                                                                                                width: "180px",
+                                                                                                                maxWidth: "100%",
+                                                                                                                outline: "none"
+                                                                                                            }}
+                                                                                                        />
+                                                                                                        {(historyMemberSearchQuery[history.id] || "") && (
+                                                                                                            <button
+                                                                                                                type="button"
+                                                                                                                onClick={() => setHistoryMemberSearchQuery(prev => ({ ...prev, [history.id]: "" }))}
+                                                                                                                style={{
+                                                                                                                    position: "absolute",
+                                                                                                                    right: "0.35rem",
+                                                                                                                    top: "50%",
+                                                                                                                    transform: "translateY(-50%)",
+                                                                                                                    background: "transparent",
+                                                                                                                    border: "none",
+                                                                                                                    color: "var(--color-text-muted)",
+                                                                                                                    cursor: "pointer",
+                                                                                                                    padding: "0.15rem",
+                                                                                                                    display: "inline-flex",
+                                                                                                                    alignItems: "center",
+                                                                                                                    justifyContent: "center"
+                                                                                                                }}
+                                                                                                                title="ล้างคำค้นหา"
+                                                                                                            >
+                                                                                                                <FiX size={13} />
+                                                                                                            </button>
+                                                                                                        )}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
                                                                                             {userHistories.length === 0 ? (
                                                                                                 <div style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", padding: "0.5rem" }}>ไม่มีรายละเอียดสมาชิกบันทึกไว้สำหรับงวดนี้</div>
                                                                                             ) : (
@@ -4593,7 +4723,14 @@ export default function Dealer() {
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
-                                                                                                            {userHistories.map((uh, memberIdx) => {
+                                                                                                            {filteredUserHistories.length === 0 ? (
+                                                                                                                <tr>
+                                                                                                                    <td colSpan={7} style={{ textAlign: "center", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
+                                                                                                                        ไม่พบรายชื่อสมาชิกที่ตรงกับคำค้นหา "{roundSearchQuery}"
+                                                                                                                    </td>
+                                                                                                                </tr>
+                                                                                                            ) : (
+                                                                                                                filteredUserHistories.map((uh, memberIdx) => {
                                                                                                                 const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || "ไม่ระบุ"
                                                                                                                 const dealerProfit = (uh.total_amount || 0) - (uh.total_commission || 0) - (uh.total_winnings || 0)
                                                                                                                 const targetRoundId = history.round_id || history.id
@@ -4624,11 +4761,14 @@ export default function Dealer() {
                                                                                                                         <tr 
                                                                                                                             className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""} ${isRowFocused ? "keyboard-focused" : ""}`}
                                                                                                                             data-keyboard-target={`card-${cardIdx}-member-${memberIdx}`}
+                                                                                                                            tabIndex={-1}
                                                                                                                             style={{ 
                                                                                                                                 cursor: "pointer",
                                                                                                                                 transition: "background 0.2s ease"
                                                                                                                             }}
-                                                                                                                            onClick={() => {
+                                                                                                                            onClick={(e) => {
+                                                                                                                                if (e.target.closest('button')) return
+                                                                                                                                e.currentTarget.focus?.()
                                                                                                                                 setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: memberIdx })
                                                                                                                                 setExpandedMemberSettlementId(isExpanded ? null : settlementKey)
                                                                                                                             }}
@@ -4671,7 +4811,12 @@ export default function Dealer() {
                                                                                                                             <td className="col-settle" style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }} onClick={e => e.stopPropagation()}>
                                                                                                                                 <button
                                                                                                                                     type="button"
-                                                                                                                                    onClick={() => setExpandedMemberSettlementId(isExpanded ? null : settlementKey)}
+                                                                                                                                    onClick={(e) => {
+                                                                                                                                        e.stopPropagation()
+                                                                                                                                        e.currentTarget.blur()
+                                                                                                                                        setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: memberIdx })
+                                                                                                                                        setExpandedMemberSettlementId(isExpanded ? null : settlementKey)
+                                                                                                                                    }}
                                                                                                                                     style={{
                                                                                                                                         display: "inline-flex",
                                                                                                                                         alignItems: "center",
@@ -4701,37 +4846,46 @@ export default function Dealer() {
                                                                                                                                 style={{ background: "rgba(0, 0, 0, 0.25)" }}
                                                                                                                             >
                                                                                                                                 <td colSpan={7} className="expanded-content-cell">
-                                                                                                                                    <MemberSettlementInline
-                                                                                                                                        member={uh}
-                                                                                                                                        round={history}
-                                                                                                                                        payments={memberPayments}
-                                                                                                                                        settlementOverview={settlementOverview}
-                                                                                                                                        roundHistory={roundHistory}
-                                                                                                                                        dealerId={user?.id}
-                                                                                                                                        lotteryTypeFilter={historyTypeFilter}
-                                                                                                                                        onSavePayment={(paymentData) => handleSaveMemberPayment({
-                                                                                                                                            historyItem: history,
-                                                                                                                                            member: uh,
-                                                                                                                                            paymentData
-                                                                                                                                        })}
-                                                                                                                                        onUpdatePayment={(paymentId, paymentData) => handleUpdateMemberPayment({
-                                                                                                                                            historyItem: history,
-                                                                                                                                            paymentId,
-                                                                                                                                            paymentData
-                                                                                                                                        })}
-                                                                                                                                        onDeletePayment={(paymentId) => handleDeleteMemberPayment({
-                                                                                                                                            historyItem: history,
-                                                                                                                                            paymentId
-                                                                                                                                        })}
-                                                                                                                                        onCrossRoundOffset={handleSaveMemberCrossRoundOffset}
-                                                                                                                                        onClose={() => setExpandedMemberSettlementId(null)}
-                                                                                                                                    />
+                                                                                                                                    {(() => {
+                                                                                                                                        const memberInfo = members.find(m => (m.id || m.user_id) === uh.user_id)
+                                                                                                                                            || downstreamDealers?.find(m => (m.id || m.user_id) === uh.user_id)
+                                                                                                                                            || pendingMembers?.find(m => (m.id || m.user_id) === uh.user_id)
+                                                                                                                                        const enrichedMember = { ...(memberInfo || {}), ...uh, name: memberName }
+                                                                                                                                        return (
+                                                                                                                                            <MemberSettlementInline
+                                                                                                                                                member={enrichedMember}
+                                                                                                                                                round={history}
+                                                                                                                                                payments={memberPayments}
+                                                                                                                                                settlementOverview={settlementOverview}
+                                                                                                                                                roundHistory={roundHistory}
+                                                                                                                                                dealerId={user?.id}
+                                                                                                                                                dealerBankAccounts={dealerBankAccounts}
+                                                                                                                                                lotteryTypeFilter={historyTypeFilter}
+                                                                                                                                                onSavePayment={(paymentData) => handleSaveMemberPayment({
+                                                                                                                                                    historyItem: history,
+                                                                                                                                                    member: enrichedMember,
+                                                                                                                                                    paymentData
+                                                                                                                                                })}
+                                                                                                                                                onUpdatePayment={(paymentId, paymentData) => handleUpdateMemberPayment({
+                                                                                                                                                    historyItem: history,
+                                                                                                                                                    paymentId,
+                                                                                                                                                    paymentData
+                                                                                                                                                })}
+                                                                                                                                                onDeletePayment={(paymentId) => handleDeleteMemberPayment({
+                                                                                                                                                    historyItem: history,
+                                                                                                                                                    paymentId
+                                                                                                                                                })}
+                                                                                                                                                onCrossRoundOffset={handleSaveMemberCrossRoundOffset}
+                                                                                                                                                onClose={() => setExpandedMemberSettlementId(null)}
+                                                                                                                                            />
+                                                                                                                                        )
+                                                                                                                                    })()}
                                                                                                                                 </td>
                                                                                                                             </tr>
                                                                                                                         )}
                                                                                                                     </Fragment>
                                                                                                                 )
-                                                                                                            })}
+                                                                                                            }))}
                                                                                                         </tbody>
                                                                                                     </table>
                                                                                                 </div>

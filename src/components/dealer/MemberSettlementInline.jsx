@@ -39,6 +39,7 @@ export default function MemberSettlementInline({
     settlementOverview,
     roundHistory = [],
     dealerId,
+    dealerBankAccounts = [],
     lotteryTypeFilter = null,
     autoFocusPaymentBtn = false,
     onSavePayment,
@@ -74,42 +75,67 @@ export default function MemberSettlementInline({
     const [editSaving, setEditSaving] = useState(false)
     const editDateInputRef = useRef(null)
     const editTimeInputRef = useRef(null)
-    const [resolvedMemberBank, setResolvedMemberBank] = useState(null)
+    const [resolvedMemberBank, setResolvedMemberBank] = useState(() => member?.member_bank || null)
+    const [resolvedDealerBank, setResolvedDealerBank] = useState(() => {
+        if (!dealerBankAccounts || dealerBankAccounts.length === 0) return null
+        if (member?.assigned_bank_account_id) {
+            const assigned = dealerBankAccounts.find(b => b.id === member.assigned_bank_account_id)
+            if (assigned) return assigned
+        }
+        return dealerBankAccounts.find(b => b.is_default) || dealerBankAccounts[0] || null
+    })
 
-    // Preload member's bank account from database
+    // Preload bank accounts from database
     useEffect(() => {
         let isMounted = true
-        const loadMemberBank = async () => {
+        const loadBanks = async () => {
             try {
                 const memberUserId = member?.user_id || member?.id || member?.userId
                 const effectiveDealerId = dealerId || member?.dealer_id
                 if (!memberUserId || !effectiveDealerId || !supabase) return
 
-                const mBank = await resolvePaymentNoticeBankAccount({
-                    direction: 'dealer_to_member',
-                    dealerId: effectiveDealerId,
-                    memberUserId,
-                    supabase,
-                    assignedBankAccountId: member?.assigned_bank_account_id || null,
-                    memberBankAccountId: member?.member_bank_account_id || null
-                })
-                if (isMounted && mBank) {
-                    setResolvedMemberBank(mBank)
+                const [mBank, dBank] = await Promise.all([
+                    resolvePaymentNoticeBankAccount({
+                        direction: 'dealer_to_member',
+                        dealerId: effectiveDealerId,
+                        memberUserId,
+                        supabase,
+                        assignedBankAccountId: member?.assigned_bank_account_id || null,
+                        memberBankAccountId: member?.member_bank_account_id || null,
+                        cachedDealerBanks: dealerBankAccounts
+                    }),
+                    resolvePaymentNoticeBankAccount({
+                        direction: 'member_to_dealer',
+                        dealerId: effectiveDealerId,
+                        memberUserId,
+                        supabase,
+                        assignedBankAccountId: member?.assigned_bank_account_id || null,
+                        memberBankAccountId: member?.member_bank_account_id || null,
+                        cachedDealerBanks: dealerBankAccounts
+                    })
+                ])
+                if (isMounted) {
+                    if (mBank) setResolvedMemberBank(mBank)
+                    if (dBank) setResolvedDealerBank(dBank)
                 }
             } catch (err) {
-                console.error('Error preloading member bank in MemberSettlementInline:', err)
+                console.error('Error preloading banks in MemberSettlementInline:', err)
             }
         }
-        loadMemberBank()
+        loadBanks()
         return () => { isMounted = false }
-    }, [member?.user_id, member?.id, member?.userId, dealerId, member?.dealer_id])
+    }, [member?.user_id, member?.id, member?.userId, dealerId, member?.dealer_id, member?.assigned_bank_account_id, member?.member_bank_account_id, dealerBankAccounts])
 
-    // If edit modal is open and sender bank is empty, auto-fill from resolved member bank
+    // If edit modal is open and sender bank is empty, auto-fill from sender's bank
     useEffect(() => {
-        if (editingPayment && !editSenderBank && resolvedMemberBank?.bank_name && (editDirection === 'member_to_dealer')) {
-            setEditSenderBank(matchBankOption(resolvedMemberBank.bank_name, THAI_BANKS))
+        if (editingPayment && !editSenderBank) {
+            if (editDirection === 'member_to_dealer' && resolvedMemberBank?.bank_name) {
+                setEditSenderBank(matchBankOption(resolvedMemberBank.bank_name, THAI_BANKS))
+            } else if (editDirection === 'dealer_to_member' && resolvedDealerBank?.bank_name) {
+                setEditSenderBank(matchBankOption(resolvedDealerBank.bank_name, THAI_BANKS))
+            }
         }
-    }, [editingPayment, resolvedMemberBank, editDirection, editSenderBank])
+    }, [editingPayment, resolvedMemberBank, resolvedDealerBank, editDirection, editSenderBank])
 
     const availableEditBankOptions = useMemo(() => {
         if (editSenderBank && !THAI_BANKS.includes(editSenderBank)) {
@@ -1337,6 +1363,7 @@ export default function MemberSettlementInline({
                     currentRound={round}
                     member={{ ...member, name: memberName }}
                     dealerId={dealerId}
+                    cachedDealerBanks={dealerBankAccounts}
                     pastUnpaidRounds={pastUnpaidRounds}
                     currentBalance={currentBalance}
                     currentWinnings={totalWinnings}

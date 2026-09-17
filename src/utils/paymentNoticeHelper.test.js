@@ -391,5 +391,387 @@ describe('paymentNoticeHelper', () => {
             expect(bank.account_name).toBe('เฮียเบิ้ม')
             expect(bank.source).toBe('dealer_assigned')
         })
+
+        it('resolves upstream dealer bank account when dealer pays upstream (external connection)', async () => {
+            const mockSupabase = {
+                from: (table) => {
+                    if (table === 'dealer_upstream_connections') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    maybeSingle: async () => ({
+                                        data: { id: 'conn-ext-1', is_linked: false }
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    if (table === 'upstream_dealer_bank_accounts') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    order: () => ({
+                                        order: async () => ({
+                                            data: [
+                                                {
+                                                    bank_name: 'กสิกรไทย',
+                                                    bank_account: '111-222-333',
+                                                    account_name: 'พี่จึ๋ม อ้อมค่าย',
+                                                    is_default: true
+                                                }
+                                            ]
+                                        })
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    return {}
+                }
+            }
+
+            const bank = await resolvePaymentNoticeBankAccount({
+                direction: 'dealer_to_upstream',
+                dealerId: 'my-dealer-id',
+                connectionId: 'conn-ext-1',
+                isUpstream: true,
+                supabase: mockSupabase
+            })
+
+            expect(bank).not.toBeNull()
+            expect(bank.bank_name).toBe('กสิกรไทย')
+            expect(bank.bank_account).toBe('111-222-333')
+            expect(bank.account_name).toBe('พี่จึ๋ม อ้อมค่าย')
+            expect(bank.source).toBe('upstream_dealer_bank_accounts')
+        })
+
+        it('resolves our bank account when upstream pays dealer using my_bank_account_id', async () => {
+            const mockSupabase = {
+                from: (table) => {
+                    if (table === 'dealer_upstream_connections') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    maybeSingle: async () => ({
+                                        data: { my_bank_account_id: 'my-bank-999' }
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    if (table === 'dealer_bank_accounts') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    maybeSingle: async () => ({
+                                        data: {
+                                            id: 'my-bank-999',
+                                            bank_name: 'ไทยพาณิชย์',
+                                            bank_account: '999-888-777',
+                                            account_name: 'บัญชีร้านเรา'
+                                        }
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    return {}
+                }
+            }
+
+            const bank = await resolvePaymentNoticeBankAccount({
+                direction: 'upstream_to_dealer',
+                dealerId: 'my-dealer-id',
+                connectionId: 'conn-1',
+                isUpstream: true,
+                supabase: mockSupabase
+            })
+
+            expect(bank).not.toBeNull()
+            expect(bank.bank_name).toBe('ไทยพาณิชย์')
+            expect(bank.bank_account).toBe('999-888-777')
+            expect(bank.account_name).toBe('บัญชีร้านเรา')
+            expect(bank.source).toBe('dealer_my_bank_account')
+        })
+
+        it('resolves our default dealer bank account when upstream pays dealer without specific my_bank_account_id', async () => {
+            const mockSupabase = {
+                from: (table) => {
+                    if (table === 'dealer_upstream_connections') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    maybeSingle: async () => ({
+                                        data: { my_bank_account_id: null }
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    if (table === 'dealer_bank_accounts') {
+                        return {
+                            select: () => ({
+                                eq: () => ({
+                                    order: async () => ({
+                                        data: [
+                                            {
+                                                bank_name: 'กรุงเทพ',
+                                                bank_account: '555-666-777',
+                                                account_name: 'เจ้าของร้าน',
+                                                is_default: true
+                                            }
+                                        ]
+                                    })
+                                })
+                            })
+                        }
+                    }
+                    return {}
+                }
+            }
+
+            const bank = await resolvePaymentNoticeBankAccount({
+                direction: 'upstream_to_dealer',
+                dealerId: 'my-dealer-id',
+                connectionId: 'conn-1',
+                isUpstream: true,
+                supabase: mockSupabase
+            })
+
+            expect(bank).not.toBeNull()
+            expect(bank.bank_name).toBe('กรุงเทพ')
+            expect(bank.bank_account).toBe('555-666-777')
+            expect(bank.account_name).toBe('เจ้าของร้าน')
+            expect(bank.source).toBe('dealer_default')
+        })
+    })
+
+    describe('upstream payment notice', () => {
+        it('calculates summary when dealer owes upstream (dealer_to_upstream)', () => {
+            const summary = calculatePaymentNoticeSummary({
+                mode: 'current_debt',
+                currentBalance: 6092,
+                currentWinnings: 0,
+                selectedPastRounds: [],
+                isUpstream: true
+            })
+
+            expect(summary.netAmount).toBe(6092)
+            expect(summary.direction).toBe('dealer_to_upstream')
+            expect(summary.modeLabel).toBe('ยอดงวดนี้')
+        })
+
+        it('calculates summary when upstream owes dealer (upstream_to_dealer)', () => {
+            const summary = calculatePaymentNoticeSummary({
+                mode: 'current_debt',
+                currentBalance: -4500,
+                currentWinnings: 4500,
+                selectedPastRounds: [],
+                isUpstream: true
+            })
+
+            expect(summary.netAmount).toBe(4500)
+            expect(summary.direction).toBe('upstream_to_dealer')
+            expect(summary.modeLabel).toBe('ยอดงวดนี้')
+        })
+
+        it('calculates offset_prize_past_debt for upstream', () => {
+            // past debts = 5605, prize = 6092 -> net = 5605 - 6092 = -487 (upstream owes dealer 487)
+            const summary = calculatePaymentNoticeSummary({
+                mode: 'offset_prize_past_debt',
+                currentBalance: 0,
+                currentWinnings: 6092,
+                selectedPastRounds: [{ roundId: 'r1', debt: 5605 }],
+                isUpstream: true
+            })
+
+            expect(summary.netAmount).toBe(487)
+            expect(summary.direction).toBe('upstream_to_dealer')
+            expect(summary.modeLabel).toBe('หักลบรางวัลกับยอดเก่า')
+        })
+
+        it('formats LINE message correctly when dealer owes upstream', () => {
+            const msg = formatPaymentNoticeMessage({
+                memberName: 'พี่จึ๋ม อ้อมค่าย',
+                roundDate: '2026-09-17',
+                lotteryTypeName: 'หวยไทย',
+                mode: 'current_debt',
+                summary: {
+                    modeLabel: 'ยอดงวดนี้',
+                    netAmount: 6092,
+                    direction: 'dealer_to_upstream',
+                    currentRoundDebt: 6092,
+                    currentRoundPrize: 0,
+                    selectedPastDebt: 0
+                },
+                bankAccount: {
+                    bank_name: 'กสิกรไทย',
+                    bank_account: '111-222-333',
+                    account_name: 'พี่จึ๋ม อ้อมค่าย'
+                },
+                isUpstream: true
+            })
+
+            expect(msg).toContain('🏢 เจ้ามือรับตีออก: พี่จึ๋ม อ้อมค่าย')
+            expect(msg).toContain('📌 รูปแบบ: ยอดงวดนี้')
+            expect(msg).toContain('ประเภทหวย: หวยไทย')
+            expect(msg).toContain('- ยอดตีออก งวด 17 ก.ย. 2569: ฿6,092')
+            expect(msg).toContain('💰 รวมยอดที่ต้องโอน: ฿6,092')
+            expect(msg).toContain('🔴 ต้องโอนชำระให้กับ:  พี่จึ๋ม อ้อมค่าย')
+            expect(msg).toContain('💳 บัญชีโอนเงิน:')
+            expect(msg).toContain('กสิกรไทย 111-222-333 (พี่จึ๋ม อ้อมค่าย)')
+        })
+
+        it('formats LINE message correctly when upstream owes dealer', () => {
+            const msg = formatPaymentNoticeMessage({
+                memberName: 'พี่จึ๋ม อ้อมค่าย',
+                roundDate: '2026-09-17',
+                lotteryTypeName: 'หวยไทย',
+                mode: 'current_debt',
+                summary: {
+                    modeLabel: 'ยอดงวดนี้',
+                    netAmount: 4500,
+                    direction: 'upstream_to_dealer',
+                    currentRoundDebt: 0,
+                    currentRoundPrize: 4500,
+                    selectedPastDebt: 0
+                },
+                bankAccount: {
+                    bank_name: 'ไทยพาณิชย์',
+                    bank_account: '999-888-777',
+                    account_name: 'บัญชีร้านเรา'
+                },
+                isUpstream: true
+            })
+
+            expect(msg).toContain('🏢 เจ้ามือรับตีออก: พี่จึ๋ม อ้อมค่าย')
+            expect(msg).toContain('📌 รูปแบบ: ยอดงวดนี้')
+            expect(msg).toContain('ประเภทหวย: หวยไทย')
+            expect(msg).toContain('- ยอดถูกรางวัล งวด 17 ก.ย. 2569: ฿4,500')
+            expect(msg).toContain('💰 รวมยอดที่เจ้ามือต้องโอน: ฿4,500')
+            expect(msg).toContain('🟢 เจ้ามือโอนชำระให้กับเรา')
+            expect(msg).toContain('💳 บัญชีรับเงิน (บัญชีของเรา):')
+            expect(msg).toContain('ไทยพาณิชย์ 999-888-777 (บัญชีร้านเรา)')
+        })
+
+        it('formats LINE message matching user exact upstream template with offset_prize_past_debt and bank account', () => {
+            const msg = formatPaymentNoticeMessage({
+                memberName: 'พี่จิ้ม อ้อมค่าย',
+                roundDate: '2026-09-17',
+                lotteryTypeName: 'thai',
+                mode: 'offset_prize_past_debt',
+                summary: {
+                    modeLabel: 'หักลบรางวัลกับยอดเก่า',
+                    netAmount: 5605,
+                    direction: 'dealer_to_upstream',
+                    currentRoundDebt: 0,
+                    currentRoundPrize: 0,
+                    selectedPastDebt: 5605
+                },
+                selectedPastRounds: [
+                    { roundDate: '2026-09-01', debt: 5605, lottery_type: 'thai' }
+                ],
+                bankAccount: {
+                    bank_name: 'ไทยพาณิชย์ 9972081291'
+                },
+                isUpstream: true
+            })
+
+            expect(msg).toContain('🏢 เจ้ามือรับตีออก: พี่จิ้ม อ้อมค่าย')
+            expect(msg).toContain('📌 รูปแบบ: หักลบรางวัลกับยอดเก่า')
+            expect(msg).toContain('🎯 ประเภทหวย: หวยไทย')
+            expect(msg).toContain('----------------------------')
+            expect(msg).toContain('- ยอดตีออก งวด 1 ก.ย. 2569: ฿5,605')
+            expect(msg).toContain('----------------------------')
+            expect(msg).toContain('💰 รวมยอดที่ต้องโอน: ฿5,605')
+            expect(msg).toContain('🔴 ต้องโอนชำระให้กับ:  พี่จิ้ม อ้อมค่าย')
+            expect(msg).toContain('💳 บัญชีโอนเงิน:')
+            expect(msg).toContain('ไทยพาณิชย์ 9972081291')
+        })
+    })
+
+    describe('buildSettlementDefaultNote with fallbackAccountName', () => {
+        it('formats correctly with full bank details', () => {
+            const note = buildSettlementDefaultNote({
+                bank_name: 'ธนาคารกสิกรไทย',
+                bank_account: '123-4-56789-0',
+                account_name: 'พี่น้ำ'
+            })
+            expect(note).toBe('โอนไป กสิกรไทย 123-4-56789-0 (พี่น้ำ)')
+        })
+
+        it('formats correctly using fallbackAccountName when bank account_name is missing', () => {
+            const note = buildSettlementDefaultNote({
+                bank_name: 'ธนาคารไทยพาณิชย์',
+                bank_account: '987-6-54321-0',
+                account_name: ''
+            }, 'พี่น้ำ')
+            expect(note).toBe('โอนไป ไทยพาณิชย์ 987-6-54321-0 (พี่น้ำ)')
+        })
+
+        it('returns empty string when bank is null or empty', () => {
+            expect(buildSettlementDefaultNote(null)).toBe('')
+            expect(buildSettlementDefaultNote({})).toBe('')
+        })
+    })
+
+    describe('resolvePaymentNoticeBankAccount dealer bank resolution', () => {
+        it('resolves assigned dealer bank from cachedDealerBanks when member has assigned_bank_account_id', async () => {
+            const mockSupabase = {
+                auth: { getUser: async () => ({ data: { user: { id: 'dealer-1' } } }) }
+            }
+            const cachedBanks = [
+                { id: 'bank-default', bank_name: 'กสิกรไทย', bank_account: '111-111', is_default: true },
+                { id: 'bank-assigned', bank_name: 'กรุงไทย', bank_account: '222-222', is_default: false }
+            ]
+
+            const result = await resolvePaymentNoticeBankAccount({
+                direction: 'member_to_dealer',
+                dealerId: 'dealer-1',
+                memberUserId: 'member-1',
+                assignedBankAccountId: 'bank-assigned',
+                cachedDealerBanks: cachedBanks,
+                supabase: mockSupabase
+            })
+
+            expect(result.bank_name).toBe('กรุงไทย')
+            expect(result.bank_account).toBe('222-222')
+            expect(result.source).toBe('dealer_assigned')
+        })
+
+        it('falls back to default dealer bank when member has no assigned bank', async () => {
+            const mockSupabase = {
+                auth: {
+                    getUser: async () => ({ data: { user: { id: 'dealer-1' } } })
+                },
+                from: () => ({
+                    select: () => ({
+                        eq: () => ({
+                            eq: () => ({
+                                maybeSingle: async () => ({ data: null })
+                            })
+                        })
+                    })
+                })
+            }
+            const cachedBanks = [
+                { id: 'bank-default', bank_name: 'กสิกรไทย', bank_account: '111-111', is_default: true },
+                { id: 'bank-other', bank_name: 'กรุงเทพ', bank_account: '333-333', is_default: false }
+            ]
+
+            const result = await resolvePaymentNoticeBankAccount({
+                direction: 'member_to_dealer',
+                dealerId: 'dealer-1',
+                memberUserId: 'member-1',
+                assignedBankAccountId: null,
+                cachedDealerBanks: cachedBanks,
+                supabase: mockSupabase
+            })
+
+            expect(result.bank_name).toBe('กสิกรไทย')
+            expect(result.bank_account).toBe('111-111')
+            expect(result.source).toBe('dealer_cached')
+        })
     })
 })
+

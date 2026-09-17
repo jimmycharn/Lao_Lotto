@@ -738,6 +738,9 @@ export default function UserDashboard() {
                             const numSets = Math.max(1, Math.floor((s.amount || 0) / setPrice))
                             return sum + (s.prize_amount || 0) * numSets
                         }
+                        if (s.prize_amount !== undefined && s.prize_amount !== null && Number(s.prize_amount) > 0) {
+                            return sum + Number(s.prize_amount)
+                        }
                         // Map position bet types to pak_top/pak_bottom settings
                         const POSITION_MAP_P = {
                             'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
@@ -2898,6 +2901,9 @@ export default function UserDashboard() {
             const setPrice = round?.set_prices?.['4_top'] || 120
             const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
             return (sub.prize_amount || 0) * numSets
+        }
+        if (sub.prize_amount !== undefined && sub.prize_amount !== null && Number(sub.prize_amount) > 0) {
+            return Number(sub.prize_amount)
         }
 
         const lotteryKey = getLotteryTypeKey(round?.lottery_type)
