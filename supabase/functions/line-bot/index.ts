@@ -3630,7 +3630,7 @@ async function generateRoundSummaryFlex(
         profilesMap[p.id] = {
           full_name: p.full_name || 'ไม่ระบุชื่อ',
           email: p.email || '',
-          member_code: p.member_code || ''
+          member_code: p.member_code != null ? String(p.member_code).trim() : ''
         };
       });
     }
@@ -4248,25 +4248,39 @@ async function generateRoundSummaryFlex(
     ];
 
     if (isAnnounced) {
+      const isProfitPos = roundedTotalCombinedProfit >= 0;
       overviewBoxContents.push({
         "type": "box",
-        "layout": "horizontal",
-        "margin": "md",
+        "layout": "vertical",
+        "margin": "lg",
+        "backgroundColor": isProfitPos ? "#ecfdf5" : "#fef2f2",
+        "borderColor": isProfitPos ? "#a7f3d0" : "#fecaca",
+        "borderWidth": "light",
+        "cornerRadius": "md",
+        "paddingAll": "md",
         "contents": [
           {
-            "type": "text",
-            "text": "💰 กำไรรวมสุทธิ:",
-            "weight": "bold",
-            "size": "sm",
-            "color": "#0f172a"
-          },
-          {
-            "type": "text",
-            "text": formatSignedMoney(roundedTotalCombinedProfit),
-            "weight": "bold",
-            "size": "sm",
-            "align": "end",
-            "color": roundedTotalCombinedProfit >= 0 ? "#10b981" : "#ef4444"
+            "type": "box",
+            "layout": "horizontal",
+            "contents": [
+              {
+                "type": "text",
+                "text": "💰 กำไรรวมสุทธิ:",
+                "weight": "bold",
+                "size": "md",
+                "color": isProfitPos ? "#065f46" : "#991b1b",
+                "gravity": "center"
+              },
+              {
+                "type": "text",
+                "text": formatSignedMoney(roundedTotalCombinedProfit),
+                "weight": "bold",
+                "size": "xl",
+                "align": "end",
+                "color": isProfitPos ? "#059669" : "#dc2626",
+                "gravity": "center"
+              }
+            ]
           }
         ]
       });
