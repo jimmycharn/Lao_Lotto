@@ -308,8 +308,16 @@ function normalizeUnicode(str: string): string {
         return `${p1}=${p2}`;
     });
 
-    // Convert parenthetical multipliers like "411=100(20x5)" to "411=100*20 กลับ" (marks as reverse bet)
-    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2 กลับ');
+    // Convert parenthetical multipliers like "411=100(20x5)" or "694=500*(200×5)" to "411=100*20 กลับ" (marks as reverse bet)
+    s = s.replace(/(\d+)\s*[*×xX\-+/]?\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]+\s*(\d+)\s*\)/g, (match, p1, p2, p3) => {
+        const num2 = parseInt(p2, 10);
+        const num3 = parseInt(p3, 10);
+        let amount = p2;
+        if (num2 <= 6 && num3 > 6) {
+            amount = p3;
+        }
+        return `${p1}*${amount} กลับ`;
+    });
 
     // Convert typos like -= or =- (with optional spacing and multiple dashes) to =
     s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=');
@@ -1850,13 +1858,19 @@ function parseNumberLine(line: string, contextMode: string, isLaoOrHanoi: boolea
     if (normalizedMode) {
         effectiveContext = normalizedMode;
     }
-    // Handle parenthetical reverse shorthand: "40(10x5)" means straight=40, กลับ(reverse) per-number=10
+    // Handle parenthetical reverse shorthand: "40(10x5)" or "500*(200×5)" means straight=40/500, กลับ(reverse) per-number=10/200
     // (the trailing count is informational only; the actual permutation count is derived from the number itself)
-    const parenReverseMatch = normalized.match(/^(\d+)\s*=\s*(\d+)\s*\(\s*(\d+)\s*[xX×]\s*\d+\s*\)\s*$/);
+    const parenReverseMatch = normalized.match(/^(\d+)\s*=\s*(\d+)\s*[*×xX\-+/]?\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]+\s*(\d+)\s*\)\s*(.*)$/);
     let forcedReverseBet = false;
     if (parenReverseMatch) {
-        const [, numPart, amt1, amt2] = parenReverseMatch;
-        normalized = `${numPart}=${amt1}*${amt2}`;
+        const [, numPart, amt1, p2, p3, suffix] = parenReverseMatch;
+        const num2 = parseInt(p2, 10);
+        const num3 = parseInt(p3, 10);
+        let amt2 = p2;
+        if (num2 <= 6 && num3 > 6) {
+            amt2 = p3;
+        }
+        normalized = `${numPart}=${amt1}*${amt2}${suffix ? ' ' + suffix.trim() : ''}`;
         forcedReverseBet = true;
     }
     const isReverseBet = effectiveContext === 'reverse' || forcedReverseBet;

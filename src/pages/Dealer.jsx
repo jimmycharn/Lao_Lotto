@@ -3,7 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTheme, DASHBOARDS } from '../contexts/ThemeContext'
-import { supabase, fetchAllRows } from '../lib/supabase'
+import { supabase, fetchAllRows, createIsolatedClient } from '../lib/supabase'
 import { checkDealerCreditForBet, checkUpstreamDealerCredit, getDealerCreditSummary, updatePendingDeduction } from '../utils/creditCheck'
 import QRCode from 'react-qr-code'
 import { jsPDF } from 'jspdf'
@@ -240,7 +240,7 @@ function getMemberCommission(amount, commission) {
 // calculateTransferCommission is imported from memberSettlementCalculator
 
 export default function Dealer() {
-    const { user, profile, isDealer, isSuperAdmin, isAccountSuspended } = useAuth()
+    const { user, profile, isDealer, isSuperAdmin, isAccountSuspended, skipAuthEventRef } = useAuth()
     const { toast } = useToast()
     const { setActiveDashboard, getTheme } = useTheme()
     const [searchParams] = useSearchParams()
@@ -297,8 +297,6 @@ export default function Dealer() {
     const [expandedMemberSettlementId, setExpandedMemberSettlementId] = useState(null)
     const [expandedUpstreamSettlementId, setExpandedUpstreamSettlementId] = useState(null)
     const [keyboardNavTarget, setKeyboardNavTarget] = useState(null) // { cardIndex, section: 'header'|'member'|'upstream', rowIndex }
-    const [autoFocusPaymentMemberKey, setAutoFocusPaymentMemberKey] = useState(null)
-    const [autoFocusPaymentUpstreamKey, setAutoFocusPaymentUpstreamKey] = useState(null)
     const [settlementOverview, setSettlementOverview] = useState({
         userHistories: [],
         memberPayments: [],
@@ -1190,17 +1188,16 @@ export default function Dealer() {
         if (roundsTab !== 'history') return
 
         const handleKeyDown = (e) => {
-            // Guard: active text editing or interactive button element
+            // Guard: active text editing element
             const activeEl = document.activeElement
             const tag = activeEl?.tagName?.toLowerCase()
-            if (
+            const isTextEditing = (
                 tag === 'input' || 
                 tag === 'textarea' || 
                 tag === 'select' || 
-                tag === 'button' || 
-                activeEl?.closest('button') ||
                 activeEl?.isContentEditable
-            ) {
+            )
+            if (isTextEditing) {
                 return
             }
 
@@ -1210,6 +1207,9 @@ export default function Dealer() {
             }
 
             if (e.key === 'ArrowDown') {
+                if (tag === 'button' || activeEl?.closest('button')) {
+                    activeEl.blur()
+                }
                 e.preventDefault()
                 setKeyboardNavTarget(prev => {
                     return getNextKeyboardFocusTarget({
@@ -1219,6 +1219,9 @@ export default function Dealer() {
                     })
                 })
             } else if (e.key === 'ArrowUp') {
+                if (tag === 'button' || activeEl?.closest('button')) {
+                    activeEl.blur()
+                }
                 e.preventDefault()
                 setKeyboardNavTarget(prev => {
                     return getPrevKeyboardFocusTarget({
@@ -1228,6 +1231,9 @@ export default function Dealer() {
                     })
                 })
             } else if (e.key === 'Enter') {
+                if (tag === 'button' || activeEl?.closest('button')) {
+                    return
+                }
                 if (!keyboardNavTarget) return
                 const { cardIndex, section, rowIndex } = keyboardNavTarget
                 const history = filteredRoundHistory[cardIndex]
@@ -1251,17 +1257,13 @@ export default function Dealer() {
                         if (expandedMemberSettlementId === settlementKey) {
                             const rowEl = document.querySelector(`[data-keyboard-target="card-${cardIndex}-member-${rowIndex}"]`)
                             const inlineRow = rowEl?.nextElementSibling
-                            const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action')
+                            const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action') || document.querySelector('.member-settlement-inline .btn-cross-offset-action')
                             if (paymentBtn) {
                                 paymentBtn.click()
                                 return
                             }
                         }
                         setExpandedMemberSettlementId(settlementKey)
-                        setAutoFocusPaymentMemberKey(null)
-                        requestAnimationFrame(() => {
-                            setAutoFocusPaymentMemberKey(settlementKey)
-                        })
                     }
                 } else if (section === 'upstream') {
                     e.preventDefault()
@@ -1291,18 +1293,20 @@ export default function Dealer() {
                         if (expandedUpstreamSettlementId === settlementRowKey) {
                             const rowEl = document.querySelector(`[data-keyboard-target="card-${cardIndex}-upstream-${rowIndex}"]`)
                             const inlineRow = rowEl?.nextElementSibling
-                            const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action')
+                            const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action') || document.querySelector('.upstream-settlement-inline .btn-cross-offset-action')
                             if (paymentBtn) {
                                 paymentBtn.click()
                                 return
                             }
                         }
                         setExpandedUpstreamSettlementId(settlementRowKey)
-                        setAutoFocusPaymentUpstreamKey(null)
-                        requestAnimationFrame(() => {
-                            setAutoFocusPaymentUpstreamKey(settlementRowKey)
-                        })
                     }
+                }
+            } else if (e.key === 'Escape') {
+                if (expandedMemberSettlementId || expandedUpstreamSettlementId) {
+                    e.preventDefault()
+                    setExpandedMemberSettlementId(null)
+                    setExpandedUpstreamSettlementId(null)
                 }
             }
         }
@@ -2929,17 +2933,23 @@ export default function Dealer() {
         }
 
         setAddingMember(true)
+        if (skipAuthEventRef) skipAuthEventRef.current = true
+
         try {
             const defaultPassword = '123456'
             const loginUrl = window.location.origin + '/login'
+            const cleanEmail = addMemberForm.email.trim().toLowerCase()
 
-            // Store current dealer session before creating new user
-            const { data: currentSession } = await supabase.auth.getSession()
-            const dealerSession = currentSession?.session
+            // 1. Use isolated client so signUp does NOT touch localStorage or global auth listener
+            const authClient = createIsolatedClient()
+            if (!authClient) throw new Error('Supabase is not configured')
 
-            // Create new user with signUp
-            const { data: authData, error: authError } = await supabase.auth.signUp({
-                email: addMemberForm.email,
+            let newUserId = null
+            let isExistingUser = false
+
+            // Create new user with signUp on isolated client
+            const { data: authData, error: authError } = await authClient.auth.signUp({
+                email: cleanEmail,
                 password: defaultPassword,
                 options: {
                     data: {
@@ -2950,44 +2960,80 @@ export default function Dealer() {
                 }
             })
 
-            if (authError) throw authError
+            if (authError) {
+                if (authError.message?.includes('already registered')) {
+                    // Find existing profile
+                    const { data: existingProfile } = await supabase
+                        .from('profiles')
+                        .select('id, full_name, email')
+                        .eq('email', cleanEmail)
+                        .maybeSingle()
 
-            const newUserId = authData.user?.id
-
-            // Immediately restore dealer session FIRST
-            // signUp auto-logs in as new user, we need to switch back to dealer
-            if (dealerSession) {
-                await supabase.auth.setSession({
-                    access_token: dealerSession.access_token,
-                    refresh_token: dealerSession.refresh_token
-                })
+                    if (existingProfile) {
+                        newUserId = existingProfile.id
+                        isExistingUser = true
+                    } else {
+                        throw authError
+                    }
+                } else {
+                    throw authError
+                }
+            } else {
+                newUserId = authData?.user?.id
             }
 
             if (newUserId) {
-                // Now create membership as dealer (RLS policy: dealer_id = auth.uid())
-                const { error: membershipError } = await supabase
+                // Check if already a member with this dealer
+                const { data: existingMembership } = await supabase
                     .from('user_dealer_memberships')
-                    .insert({
-                        user_id: newUserId,
-                        dealer_id: user.id,
-                        status: 'active' // Auto-approve since dealer created them
-                    })
+                    .select('id, status')
+                    .eq('dealer_id', user.id)
+                    .eq('user_id', newUserId)
+                    .maybeSingle()
 
-                if (membershipError) {
-                    console.error('Membership error:', membershipError)
-                    toast.error('สร้าง user สำเร็จ แต่ไม่สามารถเพิ่มเป็นสมาชิกได้: ' + membershipError.message)
+                if (existingMembership) {
+                    if (existingMembership.status === 'active') {
+                        toast.error('ผู้ใช้นี้เป็นสมาชิกของคุณอยู่แล้ว')
+                        return
+                    } else if (existingMembership.status === 'blocked') {
+                        toast.error('ผู้ใช้นี้ถูกบล็อคอยู่ในระบบสมาชิกของคุณ')
+                        return
+                    } else {
+                        // Activate pending membership
+                        const { error: updateErr } = await supabase
+                            .from('user_dealer_memberships')
+                            .update({ status: 'active' })
+                            .eq('id', existingMembership.id)
+                        if (updateErr) throw updateErr
+                    }
+                } else {
+                    // Create membership as dealer (RLS policy: dealer_id = auth.uid())
+                    const { error: membershipError } = await supabase
+                        .from('user_dealer_memberships')
+                        .insert({
+                            user_id: newUserId,
+                            dealer_id: user.id,
+                            status: 'active' // Auto-approve since dealer created them
+                        })
+
+                    if (membershipError) {
+                        console.error('Membership error:', membershipError)
+                        toast.error('สร้าง user สำเร็จ แต่ไม่สามารถเพิ่มเป็นสมาชิกได้: ' + membershipError.message)
+                        return
+                    }
                 }
 
                 // Store credentials to show to dealer
                 setNewMemberCredentials({
-                    email: addMemberForm.email,
-                    password: defaultPassword,
+                    email: cleanEmail,
+                    password: isExistingUser ? '(รหัสผ่านเดิมของผู้ใช้)' : defaultPassword,
                     url: loginUrl,
                     full_name: addMemberForm.full_name
                 })
 
-                toast.success('สร้างสมาชิกใหม่สำเร็จ!')
+                toast.success(isExistingUser ? 'เพิ่มสมาชิกสำเร็จ (ผู้ใช้เดิมในระบบ)!' : 'สร้างสมาชิกใหม่สำเร็จ!')
                 setAddMemberForm({ email: '', full_name: '', phone: '' })
+                setActiveTab('members')
                 fetchData()
             }
         } catch (error) {
@@ -2998,6 +3044,7 @@ export default function Dealer() {
                 toast.error('เกิดข้อผิดพลาด: ' + error.message)
             }
         } finally {
+            if (skipAuthEventRef) skipAuthEventRef.current = false
             setAddingMember(false)
         }
     }
@@ -4661,7 +4708,6 @@ export default function Dealer() {
                                                                                                                                         settlementOverview={settlementOverview}
                                                                                                                                         roundHistory={roundHistory}
                                                                                                                                         dealerId={user?.id}
-                                                                                                                                        autoFocusPaymentBtn={autoFocusPaymentMemberKey === settlementKey}
                                                                                                                                         lotteryTypeFilter={historyTypeFilter}
                                                                                                                                         onSavePayment={(paymentData) => handleSaveMemberPayment({
                                                                                                                                             historyItem: history,
@@ -4678,10 +4724,7 @@ export default function Dealer() {
                                                                                                                                             paymentId
                                                                                                                                         })}
                                                                                                                                         onCrossRoundOffset={handleSaveMemberCrossRoundOffset}
-                                                                                                                                        onClose={() => {
-                                                                                                                                            setExpandedMemberSettlementId(null)
-                                                                                                                                            setAutoFocusPaymentMemberKey(null)
-                                                                                                                                        }}
+                                                                                                                                        onClose={() => setExpandedMemberSettlementId(null)}
                                                                                                                                     />
                                                                                                                                 </td>
                                                                                                                             </tr>
@@ -4847,11 +4890,7 @@ export default function Dealer() {
                                                                                                                                             paymentId
                                                                                                                                         })}
                                                                                                                                         onCrossRoundOffset={handleSaveUpstreamCrossRoundOffset}
-                                                                                                                                        autoFocusPaymentBtn={autoFocusPaymentUpstreamKey === settlementRowKey}
-                                                                                                                                        onClose={() => {
-                                                                                                                                            setExpandedUpstreamSettlementId(null)
-                                                                                                                                            setAutoFocusPaymentUpstreamKey(null)
-                                                                                                                                        }}
+                                                                                                                                        onClose={() => setExpandedUpstreamSettlementId(null)}
                                                                                                                                     />
                                                                                                                                 </td>
                                                                                                                             </tr>

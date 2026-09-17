@@ -362,7 +362,7 @@ export default function UpstreamSettlementInline({
                             border: `1px solid ${status.badgeBorder}`
                         }}
                     >
-                        {status.formattedText} {status.partyWhoOwes === 'dealer' ? '(เราค้างเจ้ามือ)' : (status.partyWhoOwes === 'upstream' ? '(เจ้ามือค้างเรา)' : '')}
+                        {status.formattedText}
                     </span>
                 </div>
             </div>

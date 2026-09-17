@@ -620,6 +620,30 @@ describe('pasteParser - parseMultiLinePaste', () => {
       })
     })
 
+    it('should parse 694 = 500*(200×5) and operator before parentheses correctly as กลับ', () => {
+      const cases = [
+        '694 = 500*(200×5)',
+        '694 = 500*(200*5)',
+        '694 = 500 * (200 × 5)',
+        '694 = 500*(5×200)',
+        '694 = 500(200×5)',
+        '694 = 500*200*5',
+        '694 = 500*5*200'
+      ]
+      for (const text of cases) {
+        const result = parseMultiLinePaste(text, 'lao')
+        expect(result.length).toBe(1)
+        expect(result[0]).toMatchObject({
+          numbers: '694',
+          amount: 500,
+          amount2: 200,
+          betType: '3_top',
+          specialType: 'reverse',
+          typeLabel: 'กลับ'
+        })
+      }
+    })
+
     it('should parse 47-ล่าง 50*50 correctly', () => {
       const text = '47-ล่าง 50*50 น้ำค้าง'
       const result = parseMultiLinePaste(text, 'lao')

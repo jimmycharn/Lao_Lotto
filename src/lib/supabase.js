@@ -11,6 +11,22 @@ export const supabase = supabaseUrl && supabaseAnonKey
 // Check if Supabase is configured
 export const isSupabaseConfigured = () => !!supabase
 
+/**
+ * Create an isolated Supabase client that does NOT persist session in localStorage.
+ * Used for creating new users (signUp) without overwriting or logging out the
+ * currently logged-in user's session.
+ */
+export function createIsolatedClient() {
+  if (!supabaseUrl || !supabaseAnonKey) return null
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false
+    }
+  })
+}
+
 // Role constants
 export const ROLES = {
   SUPERADMIN: 'superadmin',

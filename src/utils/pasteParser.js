@@ -259,7 +259,15 @@ export function normalizeUnicode(str) {
         }
         return `${p1}=${p2}`;
     });
-    s = s.replace(/(\d+)\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]\s*(\d+)\s*\)/g, '$1*$2 กลับ');
+    s = s.replace(/(\d+)\s*[*×xX\-+/]?\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]+\s*(\d+)\s*\)/g, (match, p1, p2, p3) => {
+        const num2 = parseInt(p2, 10);
+        const num3 = parseInt(p3, 10);
+        let amount = p2;
+        if (num2 <= 6 && num3 > 6) {
+            amount = p3;
+        }
+        return `${p1}*${amount} กลับ`;
+    });
     s = s.replace(/\s*-+\s*=/g, '=').replace(/=\s*-+\s*/g, '=');
     s = s.replace(/\s*\.+\s*=/g, '=').replace(/=\s*\.+\s*/g, '=');
     s = s.replace(/\b[1-6]\s*ตัว\s*(?!\s*ละ)/g, '');
@@ -1674,11 +1682,17 @@ function parseNumberLine(line, contextMode, isLaoOrHanoi, lotteryType, settings)
     }
     // Handle parenthetical reverse shorthand: "40(10x5)" means straight=40, กลับ(reverse) per-number=10
     // (the trailing count is informational only; the actual permutation count is derived from the number itself)
-    const parenReverseMatch = normalized.match(/^(\d+)\s*=\s*(\d+)\s*\(\s*(\d+)\s*[xX×]\s*\d+\s*\)\s*$/);
+    const parenReverseMatch = normalized.match(/^(\d+)\s*=\s*(\d+)\s*[*×xX\-+/]?\s*\(\s*(\d+)\s*[*×xX\-+/tTต\s]+\s*(\d+)\s*\)\s*(.*)$/);
     let forcedReverseBet = false;
     if (parenReverseMatch) {
-        const [, numPart, amt1, amt2] = parenReverseMatch;
-        normalized = `${numPart}=${amt1}*${amt2}`;
+        const [, numPart, amt1, p2, p3, suffix] = parenReverseMatch;
+        const num2 = parseInt(p2, 10);
+        const num3 = parseInt(p3, 10);
+        let amt2 = p2;
+        if (num2 <= 6 && num3 > 6) {
+            amt2 = p3;
+        }
+        normalized = `${numPart}=${amt1}*${amt2}${suffix ? ' ' + suffix.trim() : ''}`;
         forcedReverseBet = true;
     }
     const isReverseBet = effectiveContext === 'reverse' || forcedReverseBet;

@@ -5492,55 +5492,27 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 /* =============================================
-   SETTLED ROW (OUTSTANDING = 0) GREEN BORDER
+   HISTORY BREAKDOWN TABLE ROWS
    ============================================= */
-.history-breakdown-table tr.row-settled td {
-    border-top: 1px solid rgba(16, 185, 129, 0.4) !important;
-    border-bottom: 1px solid rgba(16, 185, 129, 0.4) !important;
-    background: rgba(16, 185, 129, 0.05);
-}
-
-.history-breakdown-table tr.row-settled td:first-child {
-    border-left: 1px solid rgba(16, 185, 129, 0.4) !important;
-}
-
-.history-breakdown-table tr.row-settled td:last-child {
-    border-right: 1px solid rgba(16, 185, 129, 0.4) !important;
-}
-
-.history-breakdown-table tr.row-settled:hover td {
-    background: rgba(16, 185, 129, 0.09);
-}
-
-/* When settled row is expanded, merge borders with expanded child row */
-.history-breakdown-table tr.row-settled.is-expanded td {
-    border-bottom: none !important;
-    background: rgba(16, 185, 129, 0.08);
-}
-
-.history-breakdown-table tr.expanded-row-settled td {
-    border-top: none !important;
-    border-bottom: 1px solid rgba(16, 185, 129, 0.4) !important;
-    border-left: 1px solid rgba(16, 185, 129, 0.4) !important;
-    border-right: 1px solid rgba(16, 185, 129, 0.4) !important;
-}
-
-/* Default non-settled rows */
-.history-breakdown-table tr.history-row:not(.row-settled) td {
+.history-breakdown-table tr.history-row td {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.history-breakdown-table tr.history-row:not(.row-settled):hover td {
+.history-breakdown-table tr.history-row:hover td {
     background: rgba(255, 255, 255, 0.03);
 }
 
-.history-breakdown-table tr.history-row.is-expanded:not(.row-settled) td {
+.history-breakdown-table tr.history-row.is-expanded td {
     border-bottom: none;
     background: rgba(99, 102, 241, 0.08);
 }
 
-.history-transfers-breakdown tr.history-row.is-expanded:not(.row-settled) td {
+.history-transfers-breakdown tr.history-row.is-expanded td {
     background: rgba(239, 68, 68, 0.08);
+}
+
+.history-breakdown-table tr.expanded-row td {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 /* Light theme overrides */
@@ -5559,37 +5531,18 @@ html.theme-light .icon-btn-sm:hover {
     color: #64748b;
 }
 
-:root.theme-light .history-breakdown-table tr.row-settled td,
-[data-theme="light"] .history-breakdown-table tr.row-settled td {
-    border-top: 1px solid rgba(16, 185, 129, 0.45) !important;
-    border-bottom: 1px solid rgba(16, 185, 129, 0.45) !important;
-    background: rgba(16, 185, 129, 0.06);
+:root.theme-light .history-breakdown-table tr.history-row td,
+[data-theme="light"] .history-breakdown-table tr.history-row td {
+    border-bottom: 1px solid #e2e8f0;
 }
 
-:root.theme-light .history-breakdown-table tr.row-settled td:first-child,
-[data-theme="light"] .history-breakdown-table tr.row-settled td:first-child {
-    border-left: 1px solid rgba(16, 185, 129, 0.45) !important;
+:root.theme-light .history-breakdown-table tr.history-row:hover td,
+[data-theme="light"] .history-breakdown-table tr.history-row:hover td {
+    background: rgba(0, 0, 0, 0.02);
 }
 
-:root.theme-light .history-breakdown-table tr.row-settled td:last-child,
-[data-theme="light"] .history-breakdown-table tr.row-settled td:last-child {
-    border-right: 1px solid rgba(16, 185, 129, 0.45) !important;
-}
-
-:root.theme-light .history-breakdown-table tr.row-settled:hover td,
-[data-theme="light"] .history-breakdown-table tr.row-settled:hover td {
-    background: rgba(16, 185, 129, 0.12);
-}
-
-:root.theme-light .history-breakdown-table tr.expanded-row-settled td,
-[data-theme="light"] .history-breakdown-table tr.expanded-row-settled td {
-    border-bottom: 1px solid rgba(16, 185, 129, 0.45) !important;
-    border-left: 1px solid rgba(16, 185, 129, 0.45) !important;
-    border-right: 1px solid rgba(16, 185, 129, 0.45) !important;
-}
-
-:root.theme-light .history-breakdown-table tr.history-row:not(.row-settled) td,
-[data-theme="light"] .history-breakdown-table tr.history-row:not(.row-settled) td {
+:root.theme-light .history-breakdown-table tr.expanded-row td,
+[data-theme="light"] .history-breakdown-table tr.expanded-row td {
     border-bottom: 1px solid #e2e8f0;
 }
 

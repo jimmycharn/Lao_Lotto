@@ -393,7 +393,7 @@ export default function MemberSettlementInline({
                             color: status.color
                         }}
                     >
-                        {status.formattedText} ({status.label})
+                        {status.formattedText}
                     </span>
                 </div>
             </div>
