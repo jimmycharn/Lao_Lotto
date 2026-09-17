@@ -3883,10 +3883,24 @@ async function generateRoundSummaryFlex(
               "contents": [
                 {
                   "type": "text",
-                  "text": `คุณ ${u.userName}${memberCodeStr}`,
-                  "weight": "bold",
                   "size": "md",
-                  "color": "#0f172a"
+                  "wrap": true,
+                  "contents": [
+                    {
+                      "type": "span",
+                      "text": `คุณ ${u.userName}`,
+                      "weight": "bold",
+                      "color": "#0f172a"
+                    },
+                    ...(u.memberCode ? [
+                      {
+                        "type": "span",
+                        "text": ` (${u.memberCode})`,
+                        "weight": "regular",
+                        "color": "#64748b"
+                      }
+                    ] : [])
+                  ]
                 },
                 {
                   "type": "separator",
@@ -4104,12 +4118,25 @@ async function generateRoundSummaryFlex(
               "contents": [
                 {
                   "type": "text",
-                  "text": `คุณ ${u.userName}${memberCodeStr}`,
-                  "weight": "bold",
                   "size": "sm",
-                  "color": "#0f172a",
                   "flex": 7,
-                  "wrap": true
+                  "wrap": true,
+                  "contents": [
+                    {
+                      "type": "span",
+                      "text": `คุณ ${u.userName}`,
+                      "weight": "bold",
+                      "color": "#0f172a"
+                    },
+                    ...(u.memberCode ? [
+                      {
+                        "type": "span",
+                        "text": ` (${u.memberCode})`,
+                        "weight": "regular",
+                        "color": "#64748b"
+                      }
+                    ] : [])
+                  ]
                 },
                 {
                   "type": "text",
