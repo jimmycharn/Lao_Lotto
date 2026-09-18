@@ -6275,4 +6275,64 @@ html.theme-light .icon-btn-sm:hover {
     }
 }
 
+/* History Round Card Member Settlement Dropdown */
+.history-member-settlement-select {
+    height: 32px;
+    padding: 0.2rem 0.6rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
+    color: var(--color-text, #ffffff);
+    cursor: pointer;
+    outline: none;
+    color-scheme: dark;
+    transition: all 0.2s ease;
+}
+
+.history-member-settlement-select:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.history-member-settlement-select:focus {
+    border-color: var(--color-primary, #d4af37);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.25);
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.history-member-settlement-select option {
+    background: #16213e;
+    color: #ffffff;
+    padding: 0.4rem;
+}
+
+:root.theme-light .history-member-settlement-select,
+[data-theme="light"] .history-member-settlement-select {
+    background: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    color-scheme: light;
+}
+
+:root.theme-light .history-member-settlement-select:hover,
+[data-theme="light"] .history-member-settlement-select:hover {
+    border-color: rgba(0, 0, 0, 0.3);
+    background: #fdfdfd;
+}
+
+:root.theme-light .history-member-settlement-select:focus,
+[data-theme="light"] .history-member-settlement-select:focus {
+    border-color: var(--color-primary, #b8960c);
+    box-shadow: 0 0 0 2px rgba(184, 150, 12, 0.2);
+    background: #ffffff;
+}
+
+:root.theme-light .history-member-settlement-select option,
+[data-theme="light"] .history-member-settlement-select option {
+    background: #ffffff;
+    color: #1a1a2e;
+}
+
+
 

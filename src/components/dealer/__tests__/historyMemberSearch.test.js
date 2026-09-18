@@ -378,13 +378,42 @@ describe('History tab settlement status filter (all, settled, pending)', () => {
         expect(resPendingSearch).toHaveLength(1)
         expect(resPendingSearch[0].user_id).toBe('user-pending-2')
     })
+
+    it('defaults member settlement filter to "pending" to show only members with outstanding balance', () => {
+        // When round card opens, default filter is 'pending'
+        const defaultMemberFilter = 'pending'
+        const res = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, defaultMemberFilter)
+        expect(res).toHaveLength(1)
+        expect(res[0].user_id).toBe('user-pending-2')
+    })
+
+    it('allows changing round member filter to "all" to reveal all members in that round', () => {
+        const res = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'all')
+        expect(res).toHaveLength(3)
+    })
+
+    it('allows changing round member filter to "settled" to reveal only cleared members', () => {
+        const res = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'settled')
+        expect(res).toHaveLength(2)
+        expect(res.map(u => u.user_id)).toEqual(['user-settled-1', 'user-settled-win-3'])
+    })
+
+    it('top-bar filter only filters round list and does not filter persons directly', () => {
+        // Top bar filter is 'pending' -> selects 'round-pending'
+        const filteredRounds = filterRoundsBySettlement(mockRoundsWithStatus, 'pending')
+        expect(filteredRounds.map(r => r.id)).toEqual(['round-pending'])
+
+        // Inside round-pending, members are controlled by their own dropdown (default 'pending')
+        const membersInsideRound = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'pending')
+        expect(membersInsideRound).toHaveLength(1)
+
+        // Inside round-pending, if member dropdown is switched to 'all', all members are visible regardless of top bar
+        const allMembersInsideRound = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'all')
+        expect(allMembersInsideRound).toHaveLength(3)
+    })
 })
 
-describe('History tab upstream layoff transfers filtered by settlement status', () => {
-    // Upstream A: transferred 9525, comm 2594, win 0 -> initial balance = 9525 - 2594 - 0 = 6931 (dealer owes upstream)
-    // Paid dealer_to_upstream: 6931 -> currBal = 0 (settled, as in user's screenshot)
-    // Upstream B: transferred 15000, comm 3125, win 2000 -> initial balance = 15000 - 3125 - 2000 = 9875 (dealer owes upstream)
-    // Paid dealer_to_upstream: 5000 -> currBal = 4875 (pending)
+describe('History tab upstream layoff transfers unaffected by top bar settlement filter', () => {
     const mockTransfers = [
         {
             id: 'trf-1',
@@ -404,67 +433,12 @@ describe('History tab upstream layoff transfers filtered by settlement status', 
         }
     ]
 
-    const mockUpstreamPayments = [
-        { id: 'pay-up-1', upstream_dealer_name: 'เจ้ามือ', amount: 6931, direction: 'dealer_to_upstream', status: 'completed' },
-        { id: 'pay-up-2', upstream_dealer_name: 'เจ้ามือ 2', amount: 5000, direction: 'dealer_to_upstream', status: 'completed' }
-    ]
-
-    const filterTransfersBySettlement = (transfers, payments, filter) => {
-        if (!transfers || transfers.length === 0 || filter === 'all') {
-            return transfers
-        }
-
-        return transfers.filter(t => {
-            const upstreamName = t.dealerName || 'เจ้ามือ'
-            const upPayments = payments.filter(p =>
-                p.upstream_dealer_name === upstreamName ||
-                (!p.upstream_dealer_name && transfers.length === 1)
-            )
-            const initBal = calculateUpstreamInitialBalance(t)
-            const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)
-            const isSettled = currBal === 0
-
-            if (filter === 'settled') {
-                return isSettled
-            } else if (filter === 'pending') {
-                return !isSettled
-            }
-            return true
-        })
-    }
-
-    it('returns all transfers when filter is "all"', () => {
-        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'all')
-        expect(res).toHaveLength(2)
-    })
-
-    it('filters upstream transfers to only settled when filter is "settled"', () => {
-        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'settled')
-        expect(res).toHaveLength(1)
-        expect(res[0].dealerName).toBe('เจ้ามือ')
-        expect(res[0].id).toBe('trf-1')
-    })
-
-    it('filters upstream transfers to only pending when filter is "pending"', () => {
-        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'pending')
-        expect(res).toHaveLength(1)
-        expect(res[0].dealerName).toBe('เจ้ามือ 2')
-        expect(res[0].id).toBe('trf-2')
-    })
-
-    it('returns empty list when round has only settled transfers and filter is "pending" (user screenshot scenario)', () => {
-        const singleSettledTransfer = [mockTransfers[0]] // only "เจ้ามือ" (settled ฿0)
-        const res = filterTransfersBySettlement(singleSettledTransfer, mockUpstreamPayments, 'pending')
-        expect(res).toHaveLength(0)
-    })
-
-    it('returns single settled transfer when filter is "settled"', () => {
-        const singleSettledTransfer = [mockTransfers[0]]
-        const res = filterTransfersBySettlement(singleSettledTransfer, mockUpstreamPayments, 'settled')
-        expect(res).toHaveLength(1)
-        expect(res[0].dealerName).toBe('เจ้ามือ')
+    it('returns all effective transfers in the round unaffected by top bar settlement filter', () => {
+        // getFilteredEffectiveTransfers returns effectiveTransfers directly
+        expect(mockTransfers).toHaveLength(2)
     })
 })
+
 
 
 

@@ -300,6 +300,7 @@ export default function Dealer() {
     const [expandedHistoryId, setExpandedHistoryId] = useState(null)
     const [historyDetails, setHistoryDetails] = useState({})
     const [historyMemberSearchQuery, setHistoryMemberSearchQuery] = useState({})
+    const [roundMemberSettlementFilter, setRoundMemberSettlementFilter] = useState({}) // { [roundId]: 'all' | 'settled' | 'pending' } (default: 'pending')
     const [deleteHistoryItem, setDeleteHistoryItem] = useState(null)
     const [deletingHistory, setDeletingHistory] = useState(false)
     const [expandedMemberSettlementId, setExpandedMemberSettlementId] = useState(null)
@@ -1323,7 +1324,9 @@ export default function Dealer() {
             })
         }
 
-        if (historySettlementFilter !== 'all') {
+        const memberSettlementFilter = roundMemberSettlementFilter[history.id] ?? 'pending'
+
+        if (memberSettlementFilter !== 'all') {
             const targetRoundId = history.round_id || history.id
             const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
                              (history.close_time ? String(history.close_time).split('T')[0] : null)
@@ -1353,9 +1356,9 @@ export default function Dealer() {
                 const currBal = calculateMemberCurrentBalance(initBal, memberPayments)
                 const isMemberSettled = currBal === 0
 
-                if (historySettlementFilter === 'settled') {
+                if (memberSettlementFilter === 'settled') {
                     return isMemberSettled
-                } else if (historySettlementFilter === 'pending') {
+                } else if (memberSettlementFilter === 'pending') {
                     return !isMemberSettled
                 }
                 return true
@@ -1363,7 +1366,7 @@ export default function Dealer() {
         }
 
         return filtered
-    }, [historyDetails, settlementOverview, historyMemberSearchQuery, historySenderSearch, historySettlementFilter, members, downstreamDealers, pendingMembers])
+    }, [historyDetails, settlementOverview, historyMemberSearchQuery, historySenderSearch, roundMemberSettlementFilter, members, downstreamDealers, pendingMembers])
 
     const getFilteredEffectiveTransfers = useCallback((history) => {
         if (!history) return []
@@ -1426,51 +1429,8 @@ export default function Dealer() {
                 winnings: outWin
             }] : [])
 
-        if (effectiveTransfers.length === 0 || historySettlementFilter === 'all') {
-            return effectiveTransfers
-        }
-
-        const targetRoundId = history.round_id || history.id
-        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
-                         (history.close_time ? String(history.close_time).split('T')[0] : null)
-        const detailsUpstreamPayments = details?.upstreamPayments || []
-        const detailsUpstreamIds = new Set(detailsUpstreamPayments.map(p => p.id).filter(Boolean))
-
-        let extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p => {
-            if (!p.id || detailsUpstreamIds.has(p.id)) return false
-            return (
-                String(p.round_id) === String(targetRoundId) ||
-                String(p.round_id) === String(history.id) ||
-                (history.round_id && String(p.round_id) === String(history.round_id))
-            )
-        })
-        if (extraUpstreamPayments.length === 0 && detailsUpstreamPayments.length === 0 && histDate) {
-            extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p =>
-                p.lottery_type === history.lottery_type && 
-                (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-            )
-        }
-
-        const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
-
-        return effectiveTransfers.filter(t => {
-            const upstreamName = t.dealerName || "เจ้ามือ"
-            const upstreamPayments = allUpstreamPayments.filter(p => 
-                p.upstream_dealer_name === upstreamName ||
-                (!p.upstream_dealer_name && effectiveTransfers.length === 1)
-            )
-            const initBal = calculateUpstreamInitialBalance(t)
-            const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
-            const isSettled = currBal === 0
-
-            if (historySettlementFilter === 'settled') {
-                return isSettled
-            } else if (historySettlementFilter === 'pending') {
-                return !isSettled
-            }
-            return true
-        })
-    }, [historyDetails, settlementOverview, upstreamSettingsMap, historySettlementFilter])
+        return effectiveTransfers
+    }, [historyDetails, settlementOverview, upstreamSettingsMap])
 
     const getHistoryCardContent = useCallback((cardIndex) => {
         const history = filteredRoundHistory[cardIndex]
@@ -4879,6 +4839,7 @@ export default function Dealer() {
                                                                                     }] : [])
                                                                                 
                                                                                 const roundSearchQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
+                                                                                const currentMemberFilter = roundMemberSettlementFilter[history.id] ?? 'pending'
                                                                                 const filteredUserHistories = getFilteredHistoryUsers(history)
                                                                                 const filteredEffectiveTransfers = getFilteredEffectiveTransfers(history)
 
@@ -4891,70 +4852,91 @@ export default function Dealer() {
                                                                                                     📊 รายละเอียดการส่งเลขของสมาชิกในงวดนี้
                                                                                                 </h4>
                                                                                                 {userHistories.length > 0 && (
-                                                                                                    <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }} onClick={e => e.stopPropagation()}>
-                                                                                                        <FiSearch style={{
-                                                                                                            position: "absolute",
-                                                                                                            left: "0.6rem",
-                                                                                                            top: "50%",
-                                                                                                            transform: "translateY(-50%)",
-                                                                                                            color: "var(--color-text-muted)",
-                                                                                                            fontSize: "0.85rem",
-                                                                                                            pointerEvents: "none"
-                                                                                                        }} />
-                                                                                                        <input
-                                                                                                            type="text"
-                                                                                                            placeholder={historySenderSearch && !historyMemberSearchQuery[history.id] ? `กรองตาม: ${historySenderSearch}` : "ค้นชื่อในงวดนี้..."}
-                                                                                                            value={historyMemberSearchQuery[history.id] || ""}
-                                                                                                            onChange={e => {
-                                                                                                                const val = e.target.value
-                                                                                                                setHistoryMemberSearchQuery(prev => ({ ...prev, [history.id]: val }))
-                                                                                                            }}
-                                                                                                            onKeyDown={e => {
-                                                                                                                if (e.key === 'Enter') {
-                                                                                                                    e.preventDefault()
-                                                                                                                    e.currentTarget.blur()
-                                                                                                                    if (filteredUserHistories.length > 0) {
-                                                                                                                        const firstUh = filteredUserHistories[0]
-                                                                                                                        const targetKey = `${history.id}_${firstUh.user_id}`
-                                                                                                                        setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: 0 })
-                                                                                                                        if (expandedMemberSettlementId === targetKey) {
-                                                                                                                            const rowEl = document.querySelector(`[data-keyboard-target="card-${cardIdx}-member-0"]`)
-                                                                                                                            const inlineRow = rowEl?.nextElementSibling
-                                                                                                                            const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action') || document.querySelector('.member-settlement-inline .btn-cross-offset-action')
-                                                                                                                            if (paymentBtn) {
-                                                                                                                                paymentBtn.click()
-                                                                                                                                return
-                                                                                                                            }
-                                                                                                                        } else {
-                                                                                                                            setExpandedMemberSettlementId(targetKey)
-                                                                                                                        }
-                                                                                                                    }
-                                                                                                                } else if (e.key === 'ArrowDown') {
-                                                                                                                    e.preventDefault()
-                                                                                                                    e.currentTarget.blur()
-                                                                                                                    if (filteredUserHistories.length > 0) {
-                                                                                                                        setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: 0 })
-                                                                                                                    }
-                                                                                                                } else if (e.key === 'Escape') {
-                                                                                                                    e.preventDefault()
-                                                                                                                    setHistoryMemberSearchQuery(prev => ({ ...prev, [history.id]: '' }))
-                                                                                                                }
-                                                                                                            }}
-                                                                                                            style={{
-                                                                                                                paddingLeft: "1.85rem",
-                                                                                                                paddingRight: (historyMemberSearchQuery[history.id] || "") ? "1.8rem" : "0.65rem",
-                                                                                                                paddingTop: "0.25rem",
-                                                                                                                paddingBottom: "0.25rem",
-                                                                                                                fontSize: "0.8rem",
-                                                                                                                borderRadius: "6px",
-                                                                                                                background: "rgba(0, 0, 0, 0.35)",
-                                                                                                                border: "1px solid rgba(255, 255, 255, 0.15)",
-                                                                                                                color: "#f8fafc",
-                                                                                                                width: "180px",
-                                                                                                                maxWidth: "100%",
-                                                                                                                outline: "none"
-                                                                                                            }}
-                                                                                                        />
+                                                                                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                                                                                                        {/* Member Settlement Filter Dropdown */}
+                                                                                                        <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }} onClick={e => e.stopPropagation()}>
+                                                                                                            <label style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                                                                                                                สถานะชำระ:
+                                                                                                            </label>
+                                                                                                            <select
+                                                                                                                className="form-control history-member-settlement-select"
+                                                                                                                value={currentMemberFilter}
+                                                                                                                onChange={e => {
+                                                                                                                    const val = e.target.value
+                                                                                                                    setRoundMemberSettlementFilter(prev => ({ ...prev, [history.id]: val }))
+                                                                                                                }}
+                                                                                                            >
+                                                                                                                <option value="all">ทั้งหมด</option>
+                                                                                                                <option value="settled">ชำระครบแล้ว</option>
+                                                                                                                <option value="pending">ยังค้างชำระ</option>
+                                                                                                            </select>
+                                                                                                        </div>
+
+                                                                                                        {/* Search Input */}
+                                                                                                        <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }} onClick={e => e.stopPropagation()}>
+                                                                                                            <FiSearch style={{
+                                                                                                                position: "absolute",
+                                                                                                                left: "0.6rem",
+                                                                                                                top: "50%",
+                                                                                                                transform: "translateY(-50%)",
+                                                                                                                color: "var(--color-text-muted)",
+                                                                                                                fontSize: "0.85rem",
+                                                                                                                pointerEvents: "none"
+                                                                                                            }} />
+                                                                                                            <input
+                                                                                                                type="text"
+                                                                                                                placeholder={historySenderSearch && !historyMemberSearchQuery[history.id] ? `กรองตาม: ${historySenderSearch}` : "ค้นชื่อในงวดนี้..."}
+                                                                                                                value={historyMemberSearchQuery[history.id] || ""}
+                                                                                                                onChange={e => {
+                                                                                                                    const val = e.target.value
+                                                                                                                    setHistoryMemberSearchQuery(prev => ({ ...prev, [history.id]: val }))
+                                                                                                                }}
+                                                                                                                onKeyDown={e => {
+                                                                                                                    if (e.key === 'Enter') {
+                                                                                                                        e.preventDefault()
+                                                                                                                        e.currentTarget.blur()
+                                                                                                                        if (filteredUserHistories.length > 0) {
+                                                                                                                            const firstUh = filteredUserHistories[0]
+                                                                                                                            const targetKey = `${history.id}_${firstUh.user_id}`
+                                                                                                                            setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: 0 })
+                                                                                                                            if (expandedMemberSettlementId === targetKey) {
+                                                                                                                                const rowEl = document.querySelector(`[data-keyboard-target="card-${cardIdx}-member-0"]`)
+                                                                                                                                const inlineRow = rowEl?.nextElementSibling
+                                                                                                                                const paymentBtn = inlineRow?.querySelector('.btn-cross-offset-action') || document.querySelector('.member-settlement-inline .btn-cross-offset-action')
+                                                                                                                                if (paymentBtn) {
+                                                                                                                                    paymentBtn.click()
+                                                                                                                                    return
+                                                                                                                                }
+                                                                                                } else {
+                                                                                                    setExpandedMemberSettlementId(targetKey)
+                                                                                                }
+                                                                                            }
+                                                                                        } else if (e.key === 'ArrowDown') {
+                                                                                            e.preventDefault()
+                                                                                            e.currentTarget.blur()
+                                                                                            if (filteredUserHistories.length > 0) {
+                                                                                                setKeyboardNavTarget({ cardIndex: cardIdx, section: 'member', rowIndex: 0 })
+                                                                                            }
+                                                                                        } else if (e.key === 'Escape') {
+                                                                                            e.preventDefault()
+                                                                                            setHistoryMemberSearchQuery(prev => ({ ...prev, [history.id]: '' }))
+                                                                                        }
+                                                                                    }}
+                                                                                    style={{
+                                                                                        paddingLeft: "1.85rem",
+                                                                                        paddingRight: (historyMemberSearchQuery[history.id] || "") ? "1.8rem" : "0.65rem",
+                                                                                        paddingTop: "0.25rem",
+                                                                                        paddingBottom: "0.25rem",
+                                                                                        fontSize: "0.8rem",
+                                                                                        borderRadius: "6px",
+                                                                                        background: "rgba(0, 0, 0, 0.35)",
+                                                                                        border: "1px solid rgba(255, 255, 255, 0.15)",
+                                                                                        color: "#f8fafc",
+                                                                                        width: "180px",
+                                                                                        maxWidth: "100%",
+                                                                                        outline: "none"
+                                                                                    }}
+                                                                                />
                                                                                                         {(historyMemberSearchQuery[history.id] || "") && (
                                                                                                             <button
                                                                                                                 type="button"
@@ -4979,8 +4961,9 @@ export default function Dealer() {
                                                                                                             </button>
                                                                                                         )}
                                                                                                     </div>
-                                                                                                )}
-                                                                                            </div>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
                                                                                             {userHistories.length === 0 ? (
                                                                                                 <div style={{ fontSize: "0.85rem", color: "var(--color-text-muted)", padding: "0.5rem" }}>ไม่มีรายละเอียดสมาชิกบันทึกไว้สำหรับงวดนี้</div>
                                                                                             ) : (
@@ -5003,7 +4986,7 @@ export default function Dealer() {
                                                                                                                     <td colSpan={7} style={{ textAlign: "center", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
                                                                                                                         {roundSearchQuery 
                                                                                                                             ? `ไม่พบรายชื่อสมาชิกที่ตรงกับคำค้นหา "${roundSearchQuery}"`
-                                                                                                                            : (historySettlementFilter === 'settled' ? 'ไม่มีสมาชิกที่ชำระครบแล้วในงวดนี้' : (historySettlementFilter === 'pending' ? 'ไม่มีสมาชิกที่ค้างชำระในงวดนี้' : 'ไม่มีข้อมูลสมาชิกในงวดนี้'))
+                                                                                                                            : (currentMemberFilter === 'settled' ? 'ไม่มีสมาชิกที่ชำระครบแล้วในงวดนี้' : (currentMemberFilter === 'pending' ? 'ไม่มีสมาชิกที่ค้างชำระในงวดนี้' : 'ไม่มีข้อมูลสมาชิกในงวดนี้'))
                                                                                                                         }
                                                                                                                     </td>
                                                                                                                 </tr>
@@ -5239,12 +5222,7 @@ export default function Dealer() {
                                                                                                             {filteredEffectiveTransfers.length === 0 ? (
                                                                                                                 <tr>
                                                                                                                     <td colSpan={7} style={{ textAlign: "center", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                                                                                                                        {historySettlementFilter === 'settled' 
-                                                                                                                            ? 'ไม่มีรายการเจ้ามือรับตีออกที่ชำระครบแล้วในงวดนี้' 
-                                                                                                                            : (historySettlementFilter === 'pending' 
-                                                                                                                                ? 'ไม่มีรายการเจ้ามือรับตีออกที่ค้างชำระในงวดนี้' 
-                                                                                                                                : 'ไม่มีรายการตีออกในงวดนี้')
-                                                                                                                        }
+                                                                                                                        ไม่มีรายการตีออกในงวดนี้
                                                                                                                     </td>
                                                                                                                 </tr>
                                                                                                             ) : (
