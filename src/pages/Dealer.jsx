@@ -294,6 +294,7 @@ export default function Dealer() {
     const [historyLoading, setHistoryLoading] = useState(false)
     const [historyMonthFilter, setHistoryMonthFilter] = useState('all')
     const [historyTypeFilter, setHistoryTypeFilter] = useState('all')
+    const [historySenderSearch, setHistorySenderSearch] = useState('')
     const [expandedHistoryId, setExpandedHistoryId] = useState(null)
     const [historyDetails, setHistoryDetails] = useState({})
     const [historyMemberSearchQuery, setHistoryMemberSearchQuery] = useState({})
@@ -1051,6 +1052,57 @@ export default function Dealer() {
     }, [roundHistory])
 
     const filteredRoundHistory = useMemo(() => {
+        const senderQuery = historySenderSearch.trim().toLowerCase()
+
+        let matchingRoundIds = null
+        if (senderQuery) {
+            matchingRoundIds = new Set()
+
+            const memberMap = new Map()
+            members.forEach(m => memberMap.set(m.id || m.user_id, m))
+            downstreamDealers?.forEach(m => memberMap.set(m.id || m.user_id, m))
+            pendingMembers?.forEach(m => memberMap.set(m.id || m.user_id, m))
+
+            const isMemberMatch = (uh) => {
+                const memberInfo = memberMap.get(uh.user_id)
+                const memberName = (uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || '').toLowerCase()
+                const lineName = (uh.profiles?.line_display_name || '').toLowerCase()
+                const email = (uh.profiles?.email || '').toLowerCase()
+                const extraName = (memberInfo?.full_name || memberInfo?.name || '').toLowerCase()
+                const extraLine = (memberInfo?.line_display_name || '').toLowerCase()
+                const memberCode = String(memberInfo?.member_code || uh.profiles?.member_code || '').toLowerCase()
+                const phone = (memberInfo?.phone || memberInfo?.phone_number || uh.profiles?.phone || '').toLowerCase()
+
+                return memberName.includes(senderQuery) ||
+                    lineName.includes(senderQuery) ||
+                    memberCode.includes(senderQuery) ||
+                    email.includes(senderQuery) ||
+                    extraName.includes(senderQuery) ||
+                    extraLine.includes(senderQuery) ||
+                    phone.includes(senderQuery)
+            }
+
+            // Check settlementOverview.userHistories
+            (settlementOverview?.userHistories || []).forEach(uh => {
+                if (isMemberMatch(uh)) {
+                    if (uh.round_id) matchingRoundIds.add(String(uh.round_id))
+                    if (uh.round_date && uh.lottery_type) matchingRoundIds.add(`${uh.lottery_type}_${uh.round_date}`)
+                }
+            })
+
+            // Also check historyDetails for any cached/fetched rounds
+            Object.entries(historyDetails).forEach(([hId, det]) => {
+                if (det?.userHistories) {
+                    det.userHistories.forEach(uh => {
+                        if (isMemberMatch(uh)) {
+                            matchingRoundIds.add(String(hId))
+                            if (uh.round_id) matchingRoundIds.add(String(uh.round_id))
+                        }
+                    })
+                }
+            })
+        }
+
         return roundHistory.filter(h => {
             if (historyMonthFilter !== 'all') {
                 const closeDate = getRoundCloseDate(h) || h.round_date || ''
@@ -1071,9 +1123,15 @@ export default function Dealer() {
             if (historyTypeFilter !== 'all') {
                 if (h.lottery_type !== historyTypeFilter) return false
             }
+            if (matchingRoundIds !== null) {
+                const hasMatch = (h.id && matchingRoundIds.has(String(h.id))) ||
+                    (h.round_id && matchingRoundIds.has(String(h.round_id))) ||
+                    (h.round_date && h.lottery_type && matchingRoundIds.has(`${h.lottery_type}_${h.round_date}`))
+                if (!hasMatch) return false
+            }
             return true
         })
-    }, [roundHistory, historyMonthFilter, historyTypeFilter])
+    }, [roundHistory, historyMonthFilter, historyTypeFilter, historySenderSearch, settlementOverview, historyDetails, members, downstreamDealers, pendingMembers])
 
     const historyTotals = useMemo(() => {
         return filteredRoundHistory.reduce((acc, h) => {
@@ -1137,7 +1195,8 @@ export default function Dealer() {
                 (history.round_id && String(uh.round_id) === String(history.round_id)) ||
                 (history.id && String(uh.round_id) === String(history.id))
             )
-        const roundSearchQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
+        const specificQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
+        const roundSearchQuery = specificQuery || (historySenderSearch || '').trim().toLowerCase()
         if (!roundSearchQuery) return userHistories
 
         return userHistories.filter(uh => {
@@ -1149,16 +1208,18 @@ export default function Dealer() {
                 || pendingMembers?.find(m => (m.id || m.user_id) === uh.user_id)
             const extraName = (memberInfo?.full_name || memberInfo?.name || '').toLowerCase()
             const extraLine = (memberInfo?.line_display_name || '').toLowerCase()
+            const memberCode = String(memberInfo?.member_code || uh.profiles?.member_code || '').toLowerCase()
             const phone = (memberInfo?.phone || memberInfo?.phone_number || uh.profiles?.phone || '').toLowerCase()
 
             return memberName.includes(roundSearchQuery) ||
                 lineName.includes(roundSearchQuery) ||
+                memberCode.includes(roundSearchQuery) ||
                 email.includes(roundSearchQuery) ||
                 extraName.includes(roundSearchQuery) ||
                 extraLine.includes(roundSearchQuery) ||
                 phone.includes(roundSearchQuery)
         })
-    }, [historyDetails, settlementOverview, historyMemberSearchQuery, members, downstreamDealers, pendingMembers])
+    }, [historyDetails, settlementOverview, historyMemberSearchQuery, historySenderSearch, members, downstreamDealers, pendingMembers])
 
     const getHistoryCardContent = useCallback((cardIndex) => {
         const history = filteredRoundHistory[cardIndex]
@@ -4186,9 +4247,9 @@ export default function Dealer() {
                                         </div>
                                     ) : (
                                         <div className="history-tab-container">
-                                            {/* Filters Bar: Month & Lottery Type */}
+                                            {/* Filters Bar: Month, Lottery Type & Sender Search */}
                                             <div className="history-filters-bar" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem', background: 'var(--color-surface)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '200px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '180px' }}>
                                                     <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>📅 เลือกเดือน:</label>
                                                     <select 
                                                         className="form-control" 
@@ -4202,7 +4263,7 @@ export default function Dealer() {
                                                         ))}
                                                     </select>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '200px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '180px' }}>
                                                     <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>🎯 ประเภทหวย:</label>
                                                     <select 
                                                         className="form-control" 
@@ -4216,15 +4277,64 @@ export default function Dealer() {
                                                         ))}
                                                     </select>
                                                 </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1.2, minWidth: '220px' }}>
+                                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>👤 ผู้ส่งเลข:</label>
+                                                    <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+                                                        <FiSearch style={{
+                                                            position: 'absolute',
+                                                            left: '0.6rem',
+                                                            color: 'var(--color-text-muted)',
+                                                            fontSize: '0.85rem',
+                                                            pointerEvents: 'none'
+                                                        }} />
+                                                        <input 
+                                                            type="text" 
+                                                            className="form-control" 
+                                                            style={{
+                                                                padding: '0.4rem 1.8rem 0.4rem 1.8rem',
+                                                                fontSize: '0.85rem',
+                                                                borderRadius: '6px',
+                                                                width: '100%'
+                                                            }}
+                                                            placeholder="ค้นชื่อ, ชื่อไลน์, รหัส 5 ตัว..."
+                                                            value={historySenderSearch}
+                                                            onChange={e => setHistorySenderSearch(e.target.value)}
+                                                        />
+                                                        {historySenderSearch && (
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => setHistorySenderSearch('')}
+                                                                style={{
+                                                                    position: 'absolute',
+                                                                    right: '0.5rem',
+                                                                    background: 'none',
+                                                                    border: 'none',
+                                                                    color: 'var(--color-text-muted)',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '0.85rem',
+                                                                    padding: 0
+                                                                }}
+                                                                title="ล้างคำค้นหา"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </div>
 
                                             {/* Aggregated Profit / Stats Summary Box */}
                                             <div className="history-summary-stats-container" style={{ display: "flex", flexDirection: "column", gap: "0.75rem", marginBottom: "1rem" }}>
                                                 {/* Header Bar: Selected Count & Net Profit */}
                                                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255, 193, 7, 0.08)", padding: "0.75rem 1.25rem", borderRadius: "10px", border: "1px solid rgba(255, 193, 7, 0.2)", flexWrap: "wrap", gap: "0.5rem" }}>
-                                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
                                                         <span style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>จำนวนงวดที่เลือก:</span>
                                                         <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--color-warning)" }}>{filteredRoundHistory.length} งวด</span>
+                                                        {historySenderSearch && (
+                                                            <span style={{ fontSize: "0.75rem", background: "rgba(255, 193, 7, 0.15)", color: "var(--color-warning)", padding: "0.15rem 0.5rem", borderRadius: "12px", marginLeft: "0.25rem" }}>
+                                                                กรองผู้ส่ง: {historySenderSearch}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                                                         <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>💵 กำไรสุทธิ:</span>
@@ -4288,7 +4398,20 @@ export default function Dealer() {
                                             {/* History Cards List */}
                                             {filteredRoundHistory.length === 0 ? (
                                                 <div className="empty-state card" style={{ padding: '2rem', textAlign: 'center' }}>
-                                                    <p style={{ color: 'var(--color-text-muted)' }}>ไม่พบประวัติหวยที่ตรงกับเงื่อนไขการค้นหา</p>
+                                                    <p style={{ color: 'var(--color-text-muted)', marginBottom: historySenderSearch ? '0.75rem' : 0 }}>
+                                                        {historySenderSearch 
+                                                            ? `ไม่พบประวัติงวดหวยที่ "${historySenderSearch}" ส่งเลข`
+                                                            : 'ไม่พบประวัติหวยที่ตรงกับเงื่อนไขการค้นหา'}
+                                                    </p>
+                                                    {historySenderSearch && (
+                                                        <button 
+                                                            className="btn btn-secondary" 
+                                                            style={{ fontSize: '0.8rem', padding: '0.35rem 0.85rem' }}
+                                                            onClick={() => setHistorySenderSearch('')}
+                                                        >
+                                                            ล้างคำค้นหาผู้ส่งเลข
+                                                        </button>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <div className="history-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -4628,7 +4751,7 @@ export default function Dealer() {
                                                                                                         }} />
                                                                                                         <input
                                                                                                             type="text"
-                                                                                                            placeholder="ค้นชื่อในงวดนี้..."
+                                                                                                            placeholder={historySenderSearch && !historyMemberSearchQuery[history.id] ? `กรองตาม: ${historySenderSearch}` : "ค้นชื่อในงวดนี้..."}
                                                                                                             value={historyMemberSearchQuery[history.id] || ""}
                                                                                                             onChange={e => {
                                                                                                                 const val = e.target.value
