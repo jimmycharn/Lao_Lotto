@@ -4304,13 +4304,12 @@ export default function Dealer() {
                                         </div>
                                     ) : (
                                         <div className="history-tab-container">
-                                            {/* Filters Bar: Month, Lottery Type & Sender Search */}
-                                            <div className="history-filters-bar" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '1rem', background: 'var(--color-surface)', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid var(--color-border)' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '180px' }}>
-                                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>📅 เลือกเดือน:</label>
+                                            {/* Filters Bar: Month, Lottery Type, Settlement Status & Sender Search */}
+                                            <div className="history-filters-bar">
+                                                <div className="history-filter-item">
+                                                    <label>📅 เลือกเดือน:</label>
                                                     <select 
                                                         className="form-control" 
-                                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', borderRadius: '6px' }}
                                                         value={historyMonthFilter} 
                                                         onChange={e => setHistoryMonthFilter(e.target.value)}
                                                     >
@@ -4320,11 +4319,10 @@ export default function Dealer() {
                                                         ))}
                                                     </select>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '180px' }}>
-                                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>🎯 ประเภทหวย:</label>
+                                                <div className="history-filter-item">
+                                                    <label>🎯 ประเภทหวย:</label>
                                                     <select 
                                                         className="form-control" 
-                                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', borderRadius: '6px' }}
                                                         value={historyTypeFilter} 
                                                         onChange={e => setHistoryTypeFilter(e.target.value)}
                                                     >
@@ -4334,11 +4332,10 @@ export default function Dealer() {
                                                         ))}
                                                     </select>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '180px' }}>
-                                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>💳 สถานะชำระ:</label>
+                                                <div className="history-filter-item">
+                                                    <label>💳 สถานะชำระ:</label>
                                                     <select 
                                                         className="form-control" 
-                                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', borderRadius: '6px' }}
                                                         value={historySettlementFilter} 
                                                         onChange={e => setHistorySettlementFilter(e.target.value)}
                                                     >
@@ -4347,25 +4344,13 @@ export default function Dealer() {
                                                         <option value="pending">ยังค้างชำระ</option>
                                                     </select>
                                                 </div>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1.2, minWidth: '220px' }}>
-                                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>👤 ผู้ส่งเลข:</label>
-                                                    <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
-                                                        <FiSearch style={{
-                                                            position: 'absolute',
-                                                            left: '0.6rem',
-                                                            color: 'var(--color-text-muted)',
-                                                            fontSize: '0.85rem',
-                                                            pointerEvents: 'none'
-                                                        }} />
+                                                <div className="history-filter-item search-item">
+                                                    <label>👤 ผู้ส่งเลข:</label>
+                                                    <div className="history-search-wrapper">
+                                                        <FiSearch className="history-search-icon" />
                                                         <input 
                                                             type="text" 
-                                                            className="form-control" 
-                                                            style={{
-                                                                padding: '0.4rem 1.8rem 0.4rem 1.8rem',
-                                                                fontSize: '0.85rem',
-                                                                borderRadius: '6px',
-                                                                width: '100%'
-                                                            }}
+                                                            className="form-control history-search-input" 
                                                             placeholder="ค้นชื่อ, ชื่อไลน์, รหัส 5 ตัว..."
                                                             value={historySenderSearch}
                                                             onChange={e => setHistorySenderSearch(e.target.value)}
@@ -4373,17 +4358,8 @@ export default function Dealer() {
                                                         {historySenderSearch && (
                                                             <button 
                                                                 type="button"
+                                                                className="history-search-clear-btn"
                                                                 onClick={() => setHistorySenderSearch('')}
-                                                                style={{
-                                                                    position: 'absolute',
-                                                                    right: '0.5rem',
-                                                                    background: 'none',
-                                                                    border: 'none',
-                                                                    color: 'var(--color-text-muted)',
-                                                                    cursor: 'pointer',
-                                                                    fontSize: '0.85rem',
-                                                                    padding: 0
-                                                                }}
                                                                 title="ล้างคำค้นหา"
                                                             >
                                                                 ✕
