@@ -1,4 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
+import {
+    calculateMemberInitialBalance,
+    calculateMemberCurrentBalance
+} from '../../../utils/memberSettlementCalculator'
 
 describe('History tab round member submissions search filter logic', () => {
     const mockUserHistories = [
@@ -231,4 +235,147 @@ describe('History tab round cards filtered by sender/member search', () => {
         expect(rounds).toHaveLength(0)
     })
 })
+
+describe('History tab settlement status filter (all, settled, pending)', () => {
+    // 1. Round filtering test
+    const mockRoundsWithStatus = [
+        { id: 'round-settled', lottery_type: 'thai', total_entries: 50, total_amount: 10000 },
+        { id: 'round-pending', lottery_type: 'lao', total_entries: 30, total_amount: 5000 },
+        { id: 'round-no-activity', lottery_type: 'hanoi', total_entries: 0, total_amount: 0, transferred_amount: 0 }
+    ]
+
+    const mockSettlementDetailsMap = {
+        'round-settled': { isSettled: true, hasActivity: true },
+        'round-pending': { isSettled: false, hasActivity: true },
+        'round-no-activity': { isSettled: false, hasActivity: false }
+    }
+
+    const filterRoundsBySettlement = (rounds, filter) => {
+        return rounds.filter(h => {
+            if (filter === 'settled') {
+                const sDetails = mockSettlementDetailsMap[h.id]
+                if (!sDetails?.isSettled) return false
+            } else if (filter === 'pending') {
+                const sDetails = mockSettlementDetailsMap[h.id]
+                const hasActivity = sDetails?.hasActivity ||
+                    (Number(h.total_entries || 0) > 0) ||
+                    (Number(h.total_amount || 0) > 0) ||
+                    (Number(h.transferred_amount || 0) > 0)
+                if (sDetails?.isSettled || !hasActivity) return false
+            }
+            return true
+        })
+    }
+
+    it('returns all rounds when filter is "all"', () => {
+        const res = filterRoundsBySettlement(mockRoundsWithStatus, 'all')
+        expect(res).toHaveLength(3)
+    })
+
+    it('returns only settled rounds when filter is "settled"', () => {
+        const res = filterRoundsBySettlement(mockRoundsWithStatus, 'settled')
+        expect(res).toHaveLength(1)
+        expect(res[0].id).toBe('round-settled')
+    })
+
+    it('returns only pending rounds with activity when filter is "pending"', () => {
+        const res = filterRoundsBySettlement(mockRoundsWithStatus, 'pending')
+        expect(res).toHaveLength(1)
+        expect(res[0].id).toBe('round-pending')
+    })
+
+    // 2. Member filtering within a round test
+    const mockUserHistoriesForRound = [
+        {
+            user_id: 'user-settled-1',
+            total_amount: 1000,
+            total_commission: 100,
+            total_winnings: 0,
+            profiles: { full_name: 'สมาชิก จ่ายครบแล้ว' }
+        },
+        {
+            user_id: 'user-pending-2',
+            total_amount: 2000,
+            total_commission: 200,
+            total_winnings: 0,
+            profiles: { full_name: 'สมาชิก ยังค้างจ่าย' }
+        },
+        {
+            user_id: 'user-settled-win-3',
+            total_amount: 500,
+            total_commission: 50,
+            total_winnings: 1000,
+            profiles: { full_name: 'สมาชิก ถูกรางวัลเคลียร์แล้ว' }
+        }
+    ]
+
+    // Payments:
+    // user-settled-1 owes 900, paid 900 -> currBal = 0
+    // user-pending-2 owes 1800, paid 1000 -> currBal = 800 (pending)
+    // user-settled-win-3: dealer owes 550, dealer paid 550 -> currBal = 0
+    const mockPayments = [
+        { user_id: 'user-settled-1', amount: 900, direction: 'member_to_dealer', status: 'completed' },
+        { user_id: 'user-pending-2', amount: 1000, direction: 'member_to_dealer', status: 'completed' },
+        { user_id: 'user-settled-win-3', amount: 550, direction: 'dealer_to_member', status: 'completed' }
+    ]
+
+    const filterMembersBySettlement = (users, payments, filter, query = '') => {
+        let filtered = users
+        if (query) {
+            filtered = filtered.filter(u => u.profiles.full_name.includes(query))
+        }
+
+        if (filter !== 'all') {
+            filtered = filtered.filter(uh => {
+                const memberPayments = payments.filter(p => p.user_id === uh.user_id)
+                const initBal = calculateMemberInitialBalance(uh)
+                const currBal = calculateMemberCurrentBalance(initBal, memberPayments)
+                const isMemberSettled = currBal === 0
+
+                if (filter === 'settled') {
+                    return isMemberSettled
+                } else if (filter === 'pending') {
+                    return !isMemberSettled
+                }
+                return true
+            })
+        }
+
+        return filtered
+    }
+
+    it('returns all members when member filter is "all"', () => {
+        const res = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'all')
+        expect(res).toHaveLength(3)
+    })
+
+    it('filters members to only those fully settled (currBal === 0)', () => {
+        const res = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'settled')
+        expect(res).toHaveLength(2)
+        expect(res.map(u => u.user_id)).toEqual(['user-settled-1', 'user-settled-win-3'])
+    })
+
+    it('filters members to only those with pending balance (currBal !== 0)', () => {
+        const res = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'pending')
+        expect(res).toHaveLength(1)
+        expect(res[0].user_id).toBe('user-pending-2')
+    })
+
+    it('correctly combines text search with settlement status filter', () => {
+        // Search "จ่ายครบแล้ว" + filter "settled" -> matches 1
+        const resSettled = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'settled', 'จ่ายครบแล้ว')
+        expect(resSettled).toHaveLength(1)
+        expect(resSettled[0].user_id).toBe('user-settled-1')
+
+        // Search "จ่ายครบแล้ว" + filter "pending" -> matches 0
+        const resPending = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'pending', 'จ่ายครบแล้ว')
+        expect(resPending).toHaveLength(0)
+
+        // Search "ค้าง" + filter "pending" -> matches 1
+        const resPendingSearch = filterMembersBySettlement(mockUserHistoriesForRound, mockPayments, 'pending', 'ค้าง')
+        expect(resPendingSearch).toHaveLength(1)
+        expect(resPendingSearch[0].user_id).toBe('user-pending-2')
+    })
+})
+
 

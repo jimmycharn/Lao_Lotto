@@ -295,6 +295,7 @@ export default function Dealer() {
     const [historyLoading, setHistoryLoading] = useState(false)
     const [historyMonthFilter, setHistoryMonthFilter] = useState('all')
     const [historyTypeFilter, setHistoryTypeFilter] = useState('all')
+    const [historySettlementFilter, setHistorySettlementFilter] = useState('all') // 'all' | 'settled' | 'pending'
     const [historySenderSearch, setHistorySenderSearch] = useState('')
     const [expandedHistoryId, setExpandedHistoryId] = useState(null)
     const [historyDetails, setHistoryDetails] = useState({})
@@ -1052,6 +1053,94 @@ export default function Dealer() {
         return Array.from(typeSet)
     }, [roundHistory])
 
+    const getRoundSettlementDetails = useCallback((history) => {
+        if (!history) return {
+            isSettled: false,
+            netOutstanding: 0,
+            memberOwesDealer: 0,
+            dealerOwesMember: 0,
+            dealerOwesUpstream: 0,
+            upstreamOwesDealer: 0,
+            hasActivity: false
+        }
+        const targetRoundId = history.round_id || history.id
+        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
+                         (history.close_time ? String(history.close_time).split('T')[0] : null)
+        const details = historyDetails[history.id]
+
+        let uHist = []
+        let mPay = []
+        let trf = []
+        let upPay = []
+
+        if (details?.loaded) {
+            uHist = details.userHistories || []
+            mPay = details.payments || []
+            trf = details.transfers || []
+            upPay = details.upstreamPayments || []
+        }
+
+        // Fallback to settlementOverview if not loaded or empty
+        if (uHist.length === 0) {
+            if (targetRoundId || history.round_id || history.id) {
+                uHist = (settlementOverview?.userHistories || []).filter(uh =>
+                    (targetRoundId && String(uh.round_id) === String(targetRoundId)) ||
+                    (history.round_id && String(uh.round_id) === String(history.round_id)) ||
+                    (history.id && String(uh.round_id) === String(history.id))
+                )
+            }
+            if (uHist.length === 0 && histDate) {
+                uHist = (settlementOverview?.userHistories || []).filter(uh =>
+                    uh.lottery_type === history.lottery_type && 
+                    (uh.round_date ? String(uh.round_date).split('T')[0] : null) === histDate
+                )
+            }
+        }
+
+        if (mPay.length === 0) {
+            mPay = (settlementOverview?.memberPayments || []).filter(p =>
+                String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
+            )
+            if (mPay.length === 0 && histDate) {
+                mPay = (settlementOverview?.memberPayments || []).filter(p =>
+                    p.lottery_type === history.lottery_type && 
+                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+                )
+            }
+        }
+
+        if (trf.length === 0) {
+            trf = (settlementOverview?.transfers || []).filter(t =>
+                (targetRoundId && String(t.round_id) === String(targetRoundId)) || 
+                (history.round_id && String(t.round_id) === String(history.round_id)) ||
+                (history.id && String(t.round_id) === String(history.id))
+            )
+        }
+
+        if (upPay.length === 0) {
+            upPay = (settlementOverview?.upstreamPayments || []).filter(p =>
+                String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
+            )
+            if (upPay.length === 0 && histDate) {
+                upPay = (settlementOverview?.upstreamPayments || []).filter(p =>
+                    p.lottery_type === history.lottery_type && 
+                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+                )
+            }
+        }
+
+        return calculateRoundOutstandingDetails({
+            history,
+            userHistories: uHist,
+            memberPayments: mPay,
+            transfers: trf,
+            upstreamPayments: upPay,
+            upstreamSettings: upstreamSettingsMap
+        })
+    }, [historyDetails, settlementOverview, upstreamSettingsMap])
+
+    const getRoundSettlementStatus = useCallback((history) => getRoundSettlementDetails(history).isSettled, [getRoundSettlementDetails])
+
     const filteredRoundHistory = useMemo(() => {
         const senderQuery = historySenderSearch.trim().toLowerCase()
 
@@ -1130,9 +1219,20 @@ export default function Dealer() {
                     (h.round_date && h.lottery_type && matchingRoundIds.has(`${h.lottery_type}_${h.round_date}`))
                 if (!hasMatch) return false
             }
+            if (historySettlementFilter === 'settled') {
+                const sDetails = getRoundSettlementDetails(h)
+                if (!sDetails.isSettled) return false
+            } else if (historySettlementFilter === 'pending') {
+                const sDetails = getRoundSettlementDetails(h)
+                const hasActivity = sDetails.hasActivity ||
+                    (Number(h.total_entries || 0) > 0) ||
+                    (Number(h.total_amount || 0) > 0) ||
+                    (Number(h.transferred_amount || 0) > 0)
+                if (sDetails.isSettled || !hasActivity) return false
+            }
             return true
         })
-    }, [roundHistory, historyMonthFilter, historyTypeFilter, historySenderSearch, settlementOverview, historyDetails, members, downstreamDealers, pendingMembers])
+    }, [roundHistory, historyMonthFilter, historyTypeFilter, historySenderSearch, historySettlementFilter, settlementOverview, historyDetails, members, downstreamDealers, pendingMembers, getRoundSettlementDetails])
 
     const historyTotals = useMemo(() => {
         return filteredRoundHistory.reduce((acc, h) => {
@@ -1198,29 +1298,72 @@ export default function Dealer() {
             )
         const specificQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
         const roundSearchQuery = specificQuery || (historySenderSearch || '').trim().toLowerCase()
-        if (!roundSearchQuery) return userHistories
 
-        return userHistories.filter(uh => {
-            const memberName = (uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || '').toLowerCase()
-            const lineName = (uh.profiles?.line_display_name || '').toLowerCase()
-            const email = (uh.profiles?.email || '').toLowerCase()
-            const memberInfo = members.find(m => (m.id || m.user_id) === uh.user_id)
-                || downstreamDealers?.find(m => (m.id || m.user_id) === uh.user_id)
-                || pendingMembers?.find(m => (m.id || m.user_id) === uh.user_id)
-            const extraName = (memberInfo?.full_name || memberInfo?.name || '').toLowerCase()
-            const extraLine = (memberInfo?.line_display_name || '').toLowerCase()
-            const memberCode = String(memberInfo?.member_code || uh.profiles?.member_code || '').toLowerCase()
-            const phone = (memberInfo?.phone || memberInfo?.phone_number || uh.profiles?.phone || '').toLowerCase()
+        let filtered = userHistories
+        if (roundSearchQuery) {
+            filtered = filtered.filter(uh => {
+                const memberName = (uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || '').toLowerCase()
+                const lineName = (uh.profiles?.line_display_name || '').toLowerCase()
+                const email = (uh.profiles?.email || '').toLowerCase()
+                const memberInfo = members.find(m => (m.id || m.user_id) === uh.user_id)
+                    || downstreamDealers?.find(m => (m.id || m.user_id) === uh.user_id)
+                    || pendingMembers?.find(m => (m.id || m.user_id) === uh.user_id)
+                const extraName = (memberInfo?.full_name || memberInfo?.name || '').toLowerCase()
+                const extraLine = (memberInfo?.line_display_name || '').toLowerCase()
+                const memberCode = String(memberInfo?.member_code || uh.profiles?.member_code || '').toLowerCase()
+                const phone = (memberInfo?.phone || memberInfo?.phone_number || uh.profiles?.phone || '').toLowerCase()
 
-            return memberName.includes(roundSearchQuery) ||
-                lineName.includes(roundSearchQuery) ||
-                memberCode.includes(roundSearchQuery) ||
-                email.includes(roundSearchQuery) ||
-                extraName.includes(roundSearchQuery) ||
-                extraLine.includes(roundSearchQuery) ||
-                phone.includes(roundSearchQuery)
-        })
-    }, [historyDetails, settlementOverview, historyMemberSearchQuery, historySenderSearch, members, downstreamDealers, pendingMembers])
+                return memberName.includes(roundSearchQuery) ||
+                    lineName.includes(roundSearchQuery) ||
+                    memberCode.includes(roundSearchQuery) ||
+                    email.includes(roundSearchQuery) ||
+                    extraName.includes(roundSearchQuery) ||
+                    extraLine.includes(roundSearchQuery) ||
+                    phone.includes(roundSearchQuery)
+            })
+        }
+
+        if (historySettlementFilter !== 'all') {
+            const targetRoundId = history.round_id || history.id
+            const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
+                             (history.close_time ? String(history.close_time).split('T')[0] : null)
+            const detailsPayments = details?.payments || []
+            const detailsPaymentIds = new Set(detailsPayments.map(p => p.id).filter(Boolean))
+
+            let extraPayments = (settlementOverview?.memberPayments || []).filter(p => {
+                if (!p.id || detailsPaymentIds.has(p.id)) return false
+                return (
+                    String(p.round_id) === String(targetRoundId) ||
+                    String(p.round_id) === String(history.id) ||
+                    (history.round_id && String(p.round_id) === String(history.round_id))
+                )
+            })
+            if (extraPayments.length === 0 && detailsPayments.length === 0 && histDate) {
+                extraPayments = (settlementOverview?.memberPayments || []).filter(p =>
+                    p.lottery_type === history.lottery_type && 
+                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+                )
+            }
+
+            const allRoundPayments = [...detailsPayments, ...extraPayments]
+
+            filtered = filtered.filter(uh => {
+                const memberPayments = allRoundPayments.filter(p => p.user_id === uh.user_id)
+                const initBal = calculateMemberInitialBalance(uh)
+                const currBal = calculateMemberCurrentBalance(initBal, memberPayments)
+                const isMemberSettled = currBal === 0
+
+                if (historySettlementFilter === 'settled') {
+                    return isMemberSettled
+                } else if (historySettlementFilter === 'pending') {
+                    return !isMemberSettled
+                }
+                return true
+            })
+        }
+
+        return filtered
+    }, [historyDetails, settlementOverview, historyMemberSearchQuery, historySenderSearch, historySettlementFilter, members, downstreamDealers, pendingMembers])
 
     const getHistoryCardContent = useCallback((cardIndex) => {
         const history = filteredRoundHistory[cardIndex]
@@ -1404,93 +1547,6 @@ export default function Dealer() {
         return () => window.removeEventListener('keydown', handleKeyDown)
     }, [roundsTab, filteredRoundHistory, getHistoryCardContent, getFilteredHistoryUsers, keyboardNavTarget, historyDetails, settlementOverview, deleteHistoryItem, expandedMemberSettlementId, expandedUpstreamSettlementId])
 
-    const getRoundSettlementDetails = (history) => {
-        if (!history) return {
-            isSettled: false,
-            netOutstanding: 0,
-            memberOwesDealer: 0,
-            dealerOwesMember: 0,
-            dealerOwesUpstream: 0,
-            upstreamOwesDealer: 0,
-            hasActivity: false
-        }
-        const targetRoundId = history.round_id || history.id
-        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
-                         (history.close_time ? String(history.close_time).split('T')[0] : null)
-        const details = historyDetails[history.id]
-
-        let uHist = []
-        let mPay = []
-        let trf = []
-        let upPay = []
-
-        if (details?.loaded) {
-            uHist = details.userHistories || []
-            mPay = details.payments || []
-            trf = details.transfers || []
-            upPay = details.upstreamPayments || []
-        }
-
-        // Fallback to settlementOverview if not loaded or empty
-        if (uHist.length === 0) {
-            if (targetRoundId || history.round_id || history.id) {
-                uHist = settlementOverview.userHistories.filter(uh =>
-                    (targetRoundId && String(uh.round_id) === String(targetRoundId)) ||
-                    (history.round_id && String(uh.round_id) === String(history.round_id)) ||
-                    (history.id && String(uh.round_id) === String(history.id))
-                )
-            }
-            if (uHist.length === 0 && histDate) {
-                uHist = settlementOverview.userHistories.filter(uh =>
-                    uh.lottery_type === history.lottery_type && 
-                    (uh.round_date ? String(uh.round_date).split('T')[0] : null) === histDate
-                )
-            }
-        }
-
-        if (mPay.length === 0) {
-            mPay = settlementOverview.memberPayments.filter(p =>
-                String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
-            )
-            if (mPay.length === 0 && histDate) {
-                mPay = settlementOverview.memberPayments.filter(p =>
-                    p.lottery_type === history.lottery_type && 
-                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-                )
-            }
-        }
-
-        if (trf.length === 0) {
-            trf = settlementOverview.transfers.filter(t =>
-                (targetRoundId && String(t.round_id) === String(targetRoundId)) || 
-                (history.round_id && String(t.round_id) === String(history.round_id)) ||
-                (history.id && String(t.round_id) === String(history.id))
-            )
-        }
-
-        if (upPay.length === 0) {
-            upPay = settlementOverview.upstreamPayments.filter(p =>
-                String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
-            )
-            if (upPay.length === 0 && histDate) {
-                upPay = settlementOverview.upstreamPayments.filter(p =>
-                    p.lottery_type === history.lottery_type && 
-                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-                )
-            }
-        }
-
-        return calculateRoundOutstandingDetails({
-            history,
-            userHistories: uHist,
-            memberPayments: mPay,
-            transfers: trf,
-            upstreamPayments: upPay,
-            upstreamSettings: upstreamSettingsMap
-        })
-    }
-
-    const getRoundSettlementStatus = (history) => getRoundSettlementDetails(history).isSettled
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
     const [memberSearchQuery, setMemberSearchQuery] = useState('')
     
@@ -4278,6 +4334,19 @@ export default function Dealer() {
                                                         ))}
                                                     </select>
                                                 </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '180px' }}>
+                                                    <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>💳 สถานะชำระ:</label>
+                                                    <select 
+                                                        className="form-control" 
+                                                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem', borderRadius: '6px' }}
+                                                        value={historySettlementFilter} 
+                                                        onChange={e => setHistorySettlementFilter(e.target.value)}
+                                                    >
+                                                        <option value="all">ทั้งหมด</option>
+                                                        <option value="settled">ชำระครบแล้ว</option>
+                                                        <option value="pending">ยังค้างชำระ</option>
+                                                    </select>
+                                                </div>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1.2, minWidth: '220px' }}>
                                                     <label style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>👤 ผู้ส่งเลข:</label>
                                                     <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
@@ -4331,6 +4400,39 @@ export default function Dealer() {
                                                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
                                                         <span style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>จำนวนงวดที่เลือก:</span>
                                                         <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--color-warning)" }}>{filteredRoundHistory.length} งวด</span>
+                                                        {historySettlementFilter !== 'all' && (
+                                                            <span style={{
+                                                                fontSize: "0.75rem",
+                                                                background: historySettlementFilter === 'settled' ? "rgba(16, 185, 129, 0.15)" : "rgba(245, 158, 11, 0.15)",
+                                                                color: historySettlementFilter === 'settled' ? "var(--color-success, #10b981)" : "var(--color-warning, #f59e0b)",
+                                                                border: `1px solid ${historySettlementFilter === 'settled' ? "rgba(16, 185, 129, 0.3)" : "rgba(245, 158, 11, 0.3)"}`,
+                                                                padding: "0.15rem 0.5rem",
+                                                                borderRadius: "12px",
+                                                                marginLeft: "0.25rem",
+                                                                display: "inline-flex",
+                                                                alignItems: "center",
+                                                                gap: "0.25rem"
+                                                            }}>
+                                                                สถานะ: {historySettlementFilter === 'settled' ? 'ชำระครบแล้ว' : 'ยังค้างชำระ'}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setHistorySettlementFilter('all')}
+                                                                    style={{
+                                                                        background: 'none',
+                                                                        border: 'none',
+                                                                        color: 'inherit',
+                                                                        cursor: 'pointer',
+                                                                        padding: 0,
+                                                                        marginLeft: '2px',
+                                                                        fontSize: '0.75rem',
+                                                                        lineHeight: 1
+                                                                    }}
+                                                                    title="ล้างตัวกรองสถานะ"
+                                                                >
+                                                                    ✕
+                                                                </button>
+                                                            </span>
+                                                        )}
                                                         {historySenderSearch && (
                                                             <span style={{ fontSize: "0.75rem", background: "rgba(255, 193, 7, 0.15)", color: "var(--color-warning)", padding: "0.15rem 0.5rem", borderRadius: "12px", marginLeft: "0.25rem" }}>
                                                                 กรองผู้ส่ง: {historySenderSearch}
@@ -4850,7 +4952,10 @@ export default function Dealer() {
                                                                                                             {filteredUserHistories.length === 0 ? (
                                                                                                                 <tr>
                                                                                                                     <td colSpan={7} style={{ textAlign: "center", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                                                                                                                        ไม่พบรายชื่อสมาชิกที่ตรงกับคำค้นหา "{roundSearchQuery}"
+                                                                                                                        {roundSearchQuery 
+                                                                                                                            ? `ไม่พบรายชื่อสมาชิกที่ตรงกับคำค้นหา "${roundSearchQuery}"`
+                                                                                                                            : (historySettlementFilter === 'settled' ? 'ไม่มีสมาชิกที่ชำระครบแล้วในงวดนี้' : (historySettlementFilter === 'pending' ? 'ไม่มีสมาชิกที่ค้างชำระในงวดนี้' : 'ไม่มีข้อมูลสมาชิกในงวดนี้'))
+                                                                                                                        }
                                                                                                                     </td>
                                                                                                                 </tr>
                                                                                                             ) : (
