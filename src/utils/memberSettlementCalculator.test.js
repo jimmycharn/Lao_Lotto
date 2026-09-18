@@ -4,6 +4,8 @@ import {
     calculateMemberCurrentBalance,
     getMemberSettlementStatus,
     getPaymentPresetAmount,
+    isPrizePayment,
+    calculateMemberPrizePaid,
     calculateUpstreamInitialBalance,
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
@@ -87,6 +89,28 @@ describe('memberSettlementCalculator', () => {
 
         // For prize payout only, preset is winnings amount
         expect(getPaymentPresetAmount(uh, [], 'prize_payout', 'dealer_to_member')).toBe(1400)
+    })
+
+    it('identifies prize payments correctly via isPrizePayment', () => {
+        expect(isPrizePayment(null)).toBe(false)
+        expect(isPrizePayment(undefined)).toBe(false)
+        expect(isPrizePayment({ payment_type: 'prize_payout', amount: 500 })).toBe(true)
+        expect(isPrizePayment({ payment_type: 'net_settlement', amount: 500 })).toBe(false)
+        expect(isPrizePayment({ direction: 'dealer_to_member', amount: 1000 })).toBe(true)
+        expect(isPrizePayment({ direction: 'member_to_dealer', notes: 'จ่ายเงินถูกรางวัล', amount: 1000 })).toBe(true)
+        expect(isPrizePayment({ direction: 'member_to_dealer', notes: 'โอนปกติ', amount: 1000 })).toBe(false)
+    })
+
+    it('calculates total prize paid via calculateMemberPrizePaid', () => {
+        expect(calculateMemberPrizePaid([])).toBe(0)
+        expect(calculateMemberPrizePaid(null)).toBe(0)
+
+        const payments = [
+            { payment_type: 'prize_payout', amount: 3000 },
+            { payment_type: 'net_settlement', amount: 1000 },
+            { direction: 'dealer_to_member', amount: 3050, notes: 'จ่ายเงินถูกรางวัลงวดนี้' }
+        ]
+        expect(calculateMemberPrizePaid(payments)).toBe(6050)
     })
 })
 

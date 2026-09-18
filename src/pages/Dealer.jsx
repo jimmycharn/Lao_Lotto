@@ -87,6 +87,7 @@ import {
     calculateMemberInitialBalance,
     calculateMemberCurrentBalance,
     getMemberSettlementStatus,
+    calculateMemberPrizePaid,
     calculateUpstreamInitialBalance,
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
@@ -4871,6 +4872,10 @@ export default function Dealer() {
 
                                                                                                                 const allRoundPayments = [...detailsPayments, ...extraPayments]
                                                                                                                 const memberPayments = allRoundPayments.filter(p => p.user_id === uh.user_id)
+                                                                                                                const memberWinnings = Math.round(uh.total_winnings || 0)
+                                                                                                                const prizePaid = calculateMemberPrizePaid(memberPayments)
+                                                                                                                const isPrizeFullyPaid = memberWinnings > 0 && prizePaid >= memberWinnings
+                                                                                                                const isPrizePartiallyPaid = memberWinnings > 0 && prizePaid > 0 && prizePaid < memberWinnings
                                                                                                                 const initBal = calculateMemberInitialBalance(uh)
                                                                                                                 const currBal = calculateMemberCurrentBalance(initBal, memberPayments)
                                                                                                                 const settlementStatus = getMemberSettlementStatus(currBal)
@@ -4927,7 +4932,49 @@ export default function Dealer() {
                                                                                                                             <td className="col-entries" style={{ padding: "0.55rem 0.4rem", textAlign: "center", whiteSpace: "nowrap" }}>{uh.total_entries}</td>
                                                                                                                             <td className="col-amount" style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>฿{(uh.total_amount || 0).toLocaleString()}</td>
                                                                                                                             <td className="col-comm" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-warning)", whiteSpace: "nowrap" }}>฿{Math.round(uh.total_commission || 0).toLocaleString()}</td>
-                                                                                                                            <td className="col-win" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-danger)", whiteSpace: "nowrap" }}>฿{(uh.total_winnings || 0).toLocaleString()}</td>
+                                                                                                                            <td className="col-win" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-danger)", whiteSpace: "nowrap" }}>
+                                                                                                                                {(() => {
+                                                                                                                                    if (memberWinnings <= 0) {
+                                                                                                                                        return <span style={{ color: "var(--color-text-muted)" }}>฿0</span>
+                                                                                                                                    }
+                                                                                                                                    if (isPrizeFullyPaid) {
+                                                                                                                                        return (
+                                                                                                                                            <span 
+                                                                                                                                                style={{ 
+                                                                                                                                                    textDecoration: "line-through", 
+                                                                                                                                                    textDecorationThickness: "1.5px",
+                                                                                                                                                    color: "var(--color-danger)", 
+                                                                                                                                                    opacity: 0.65 
+                                                                                                                                                }}
+                                                                                                                                                title={`ชำระเงินรางวัลครบแล้ว (฿${prizePaid.toLocaleString()})`}
+                                                                                                                                            >
+                                                                                                                                                ฿{memberWinnings.toLocaleString()}
+                                                                                                                                            </span>
+                                                                                                                                        )
+                                                                                                                                    }
+                                                                                                                                    if (isPrizePartiallyPaid) {
+                                                                                                                                        return (
+                                                                                                                                            <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.25 }}>
+                                                                                                                                                <span style={{ color: "var(--color-danger)", fontWeight: 600 }}>
+                                                                                                                                                    ฿{memberWinnings.toLocaleString()}
+                                                                                                                                                </span>
+                                                                                                                                                <span 
+                                                                                                                                                    style={{ 
+                                                                                                                                                        fontSize: "0.72rem", 
+                                                                                                                                                        color: "var(--color-warning, #f59e0b)", 
+                                                                                                                                                        fontWeight: 600,
+                                                                                                                                                        whiteSpace: "nowrap" 
+                                                                                                                                                    }}
+                                                                                                                                                    title={`ชำระแล้ว ฿${prizePaid.toLocaleString()} / ค้างจ่ายอีก ฿${(memberWinnings - prizePaid).toLocaleString()}`}
+                                                                                                                                                >
+                                                                                                                                                    (จ่ายแล้ว ฿{prizePaid.toLocaleString()})
+                                                                                                                                                </span>
+                                                                                                                                            </div>
+                                                                                                                                        )
+                                                                                                                                    }
+                                                                                                                                    return <span style={{ color: "var(--color-danger)" }}>฿{memberWinnings.toLocaleString()}</span>
+                                                                                                                                })()}
+                                                                                                                            </td>
                                                                                                                             <td className="col-profit" style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: dealerProfit >= 0 ? "var(--color-success)" : "var(--color-danger)", whiteSpace: "nowrap" }}>
                                                                                                                                 {dealerProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(dealerProfit)).toLocaleString()}
                                                                                                                             </td>

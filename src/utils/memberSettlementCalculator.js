@@ -84,15 +84,35 @@ export function getMemberSettlementStatus(currentBalance) {
 }
 
 /**
+ * Checks if a payment record is specifically a prize payout to member
+ */
+export function isPrizePayment(p) {
+    if (!p) return false
+    if (p.payment_type === 'prize_payout') return true
+    if (p.payment_type === 'net_settlement') return false
+    if (p.notes && (p.notes.includes('รางวัล') || p.notes.includes('prize') || p.notes.includes('ถูกรางวัล'))) return true
+    if (p.direction === 'dealer_to_member') return true
+    return false
+}
+
+/**
+ * Calculates total prize amount already paid out to the member in a round
+ */
+export function calculateMemberPrizePaid(payments = []) {
+    if (!Array.isArray(payments) || payments.length === 0) return 0
+    return payments
+        .filter(isPrizePayment)
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+}
+
+/**
  * Calculates preset amount for payment form
  */
 export function getPaymentPresetAmount(memberHistory, payments = [], paymentType = 'net_settlement', direction = 'member_to_dealer') {
     if (paymentType === 'prize_payout') {
         const totalWinnings = Number(memberHistory?.total_winnings || 0)
         // Check how much prize was already paid
-        const prizePaid = payments
-            .filter(p => p.payment_type === 'prize_payout')
-            .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        const prizePaid = calculateMemberPrizePaid(payments)
         return Math.max(0, Math.round(totalWinnings - prizePaid))
     }
 

@@ -19,7 +19,8 @@ import {
     calculateMemberInitialBalance,
     calculateMemberCurrentBalance,
     getMemberSettlementStatus,
-    getPaymentPresetAmount
+    getPaymentPresetAmount,
+    calculateMemberPrizePaid
 } from '../../utils/memberSettlementCalculator'
 import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes, formatThaiDate } from '../../utils/crossRoundOffsetCalculator'
 import { supabase } from '../../lib/supabase'
@@ -169,10 +170,11 @@ export default function MemberSettlementInline({
 
     // Prize already paid in current round
     const prizePaid = useMemo(() => {
-        return payments
-            .filter(p => p.direction === 'dealer_to_member' || p.payment_type === 'prize_payout')
-            .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        return calculateMemberPrizePaid(payments)
     }, [payments])
+
+    const isPrizeFullyPaid = totalWinnings > 0 && prizePaid >= totalWinnings
+    const isPrizePartiallyPaid = totalWinnings > 0 && prizePaid > 0 && prizePaid < totalWinnings
 
     // Available prize from current round that can be used for cross-round offset
     const availableWinnings = Math.max(0, Math.round(totalWinnings - prizePaid))
@@ -399,9 +401,31 @@ export default function MemberSettlementInline({
                 </div>
                 <div className="settlement-summary-item">
                     <span className="label">เงินถูกรางวัล</span>
-                    <span className="value" style={{ color: totalWinnings > 0 ? 'var(--color-danger)' : 'inherit' }}>
+                    <span 
+                        className="value" 
+                        style={{ 
+                            color: totalWinnings > 0 ? 'var(--color-danger)' : 'inherit',
+                            textDecoration: isPrizeFullyPaid ? 'line-through' : 'none',
+                            textDecorationThickness: isPrizeFullyPaid ? '1.5px' : 'auto',
+                            opacity: isPrizeFullyPaid ? 0.65 : 1
+                        }}
+                        title={isPrizeFullyPaid ? `ชำระเงินรางวัลครบแล้ว (฿${prizePaid.toLocaleString()})` : undefined}
+                    >
                         ฿{totalWinnings.toLocaleString()}
                     </span>
+                    {isPrizePartiallyPaid && (
+                        <span 
+                            style={{ 
+                                fontSize: '0.75rem', 
+                                color: 'var(--color-warning, #f59e0b)', 
+                                fontWeight: 600,
+                                marginTop: '0.15rem' 
+                            }}
+                            title={`ชำระแล้ว ฿${prizePaid.toLocaleString()} / ค้างจ่ายอีก ฿${(totalWinnings - prizePaid).toLocaleString()}`}
+                        >
+                            (จ่ายแล้ว ฿{prizePaid.toLocaleString()})
+                        </span>
+                    )}
                 </div>
                 <div className="settlement-summary-item">
                     <span className="label">ชำระแล้ว (ผู้ส่ง / เจ้ามือ)</span>
