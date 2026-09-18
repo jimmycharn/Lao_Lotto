@@ -1365,13 +1365,8 @@ export default function Dealer() {
         return filtered
     }, [historyDetails, settlementOverview, historyMemberSearchQuery, historySenderSearch, historySettlementFilter, members, downstreamDealers, pendingMembers])
 
-    const getHistoryCardContent = useCallback((cardIndex) => {
-        const history = filteredRoundHistory[cardIndex]
-        if (!history) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
-        const isExpanded = expandedHistoryId === history.id
-        if (!isExpanded) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
-
-        const filteredUsers = getFilteredHistoryUsers(history)
+    const getFilteredEffectiveTransfers = useCallback((history) => {
+        if (!history) return []
         const details = historyDetails[history.id]
         const rawTransfers = (details?.transfers && details.transfers.length > 0)
             ? details.transfers
@@ -1379,24 +1374,119 @@ export default function Dealer() {
                 (history.round_id && String(t.round_id) === String(history.round_id)) ||
                 (history.id && String(t.round_id) === String(history.id))
             )
+
         const groupedMap = {}
         if (rawTransfers && rawTransfers.length > 0) {
             rawTransfers.forEach(t => {
                 const dName = t.upstream_dealer?.full_name || t.target_dealer_name || "เจ้ามือ"
                 if (!groupedMap[dName]) {
-                    groupedMap[dName] = true
+                    groupedMap[dName] = {
+                        id: t.id || dName,
+                        dealerName: dName,
+                        target_dealer_name: t.target_dealer_name || dName,
+                        connection_id: t.connection_id || null,
+                        upstream_dealer_id: t.upstream_dealer_id || null,
+                        entriesCount: 0,
+                        amount: 0,
+                        commission_earned: 0,
+                        winnings: 0
+                    }
                 }
+                if (!groupedMap[dName].connection_id && t.connection_id) {
+                    groupedMap[dName].connection_id = t.connection_id
+                }
+                if (!groupedMap[dName].upstream_dealer_id && t.upstream_dealer_id) {
+                    groupedMap[dName].upstream_dealer_id = t.upstream_dealer_id
+                }
+                const amt = Number(t.amount || 0)
+                const comm = calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type)
+                const win = Number(t.winnings || 0)
+
+                groupedMap[dName].entriesCount += 1
+                groupedMap[dName].amount += amt
+                groupedMap[dName].commission_earned += comm
+                groupedMap[dName].winnings += win
             })
         }
+
         const outAmt = Number(history.transferred_amount || 0)
-        const upstreamCount = Object.keys(groupedMap).length > 0 ? Object.keys(groupedMap).length : (outAmt > 0 ? 1 : 0)
+        const outComm = Number(history.upstream_commission || 0) > 0 
+            ? Number(history.upstream_commission) 
+            : Math.round(outAmt * (25 / 120))
+        const outWin = Number(history.upstream_winnings || 0)
+
+        const effectiveTransfers = Object.values(groupedMap).length > 0
+            ? Object.values(groupedMap)
+            : (outAmt > 0 ? [{
+                id: "archived_transfer_" + history.id,
+                dealerName: "เจ้ามือ (สรุปในประวัติ)",
+                entriesCount: "-",
+                amount: outAmt,
+                commission_earned: outComm,
+                winnings: outWin
+            }] : [])
+
+        if (effectiveTransfers.length === 0 || historySettlementFilter === 'all') {
+            return effectiveTransfers
+        }
+
+        const targetRoundId = history.round_id || history.id
+        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
+                         (history.close_time ? String(history.close_time).split('T')[0] : null)
+        const detailsUpstreamPayments = details?.upstreamPayments || []
+        const detailsUpstreamIds = new Set(detailsUpstreamPayments.map(p => p.id).filter(Boolean))
+
+        let extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p => {
+            if (!p.id || detailsUpstreamIds.has(p.id)) return false
+            return (
+                String(p.round_id) === String(targetRoundId) ||
+                String(p.round_id) === String(history.id) ||
+                (history.round_id && String(p.round_id) === String(history.round_id))
+            )
+        })
+        if (extraUpstreamPayments.length === 0 && detailsUpstreamPayments.length === 0 && histDate) {
+            extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p =>
+                p.lottery_type === history.lottery_type && 
+                (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+            )
+        }
+
+        const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
+
+        return effectiveTransfers.filter(t => {
+            const upstreamName = t.dealerName || "เจ้ามือ"
+            const upstreamPayments = allUpstreamPayments.filter(p => 
+                p.upstream_dealer_name === upstreamName ||
+                (!p.upstream_dealer_name && effectiveTransfers.length === 1)
+            )
+            const initBal = calculateUpstreamInitialBalance(t)
+            const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
+            const isSettled = currBal === 0
+
+            if (historySettlementFilter === 'settled') {
+                return isSettled
+            } else if (historySettlementFilter === 'pending') {
+                return !isSettled
+            }
+            return true
+        })
+    }, [historyDetails, settlementOverview, upstreamSettingsMap, historySettlementFilter])
+
+    const getHistoryCardContent = useCallback((cardIndex) => {
+        const history = filteredRoundHistory[cardIndex]
+        if (!history) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
+        const isExpanded = expandedHistoryId === history.id
+        if (!isExpanded) return { isExpanded: false, memberCount: 0, upstreamCount: 0 }
+
+        const filteredUsers = getFilteredHistoryUsers(history)
+        const filteredTransfers = getFilteredEffectiveTransfers(history)
 
         return {
             isExpanded: true,
             memberCount: filteredUsers ? filteredUsers.length : 0,
-            upstreamCount
+            upstreamCount: filteredTransfers ? filteredTransfers.length : 0
         }
-    }, [filteredRoundHistory, expandedHistoryId, getFilteredHistoryUsers, historyDetails, settlementOverview])
+    }, [filteredRoundHistory, expandedHistoryId, getFilteredHistoryUsers, getFilteredEffectiveTransfers])
 
     // Smooth scroll focused keyboard target into view
     useEffect(() => {
@@ -1499,27 +1589,9 @@ export default function Dealer() {
                     }
                 } else if (section === 'upstream') {
                     e.preventDefault()
-                    const details = historyDetails[history.id]
-                    const rawTransfers = (details?.transfers && details.transfers.length > 0)
-                        ? details.transfers
-                        : (settlementOverview?.transfers || []).filter(t =>
-                            (history.round_id && String(t.round_id) === String(history.round_id)) ||
-                            (history.id && String(t.round_id) === String(history.id))
-                        )
-                    const groupedMap = {}
-                    if (rawTransfers && rawTransfers.length > 0) {
-                        rawTransfers.forEach(t => {
-                            const dName = t.upstream_dealer?.full_name || t.target_dealer_name || "เจ้ามือ"
-                            if (!groupedMap[dName]) {
-                                groupedMap[dName] = dName
-                            }
-                        })
-                    }
-                    const outAmt = Number(history.transferred_amount || 0)
-                    const effectiveTransferNames = Object.keys(groupedMap).length > 0 
-                        ? Object.keys(groupedMap) 
-                        : (outAmt > 0 ? ["เจ้ามือ (สรุปในประวัติ)"] : [])
-                    const upstreamName = effectiveTransferNames[rowIndex]
+                    const filteredTransfers = getFilteredEffectiveTransfers(history)
+                    const t = filteredTransfers[rowIndex]
+                    const upstreamName = t?.dealerName
                     if (upstreamName) {
                         const settlementRowKey = `${history.id}_${upstreamName}`
                         if (expandedUpstreamSettlementId === settlementRowKey) {
@@ -1545,7 +1617,7 @@ export default function Dealer() {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [roundsTab, filteredRoundHistory, getHistoryCardContent, getFilteredHistoryUsers, keyboardNavTarget, historyDetails, settlementOverview, deleteHistoryItem, expandedMemberSettlementId, expandedUpstreamSettlementId])
+    }, [roundsTab, filteredRoundHistory, getHistoryCardContent, getFilteredHistoryUsers, getFilteredEffectiveTransfers, keyboardNavTarget, historyDetails, settlementOverview, deleteHistoryItem, expandedMemberSettlementId, expandedUpstreamSettlementId])
 
     const [memberTypeFilter, setMemberTypeFilter] = useState('all') // 'all' | 'member' | 'dealer'
     const [memberSearchQuery, setMemberSearchQuery] = useState('')
@@ -4808,6 +4880,7 @@ export default function Dealer() {
                                                                                 
                                                                                 const roundSearchQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
                                                                                 const filteredUserHistories = getFilteredHistoryUsers(history)
+                                                                                const filteredEffectiveTransfers = getFilteredEffectiveTransfers(history)
 
                                                                                 return (
                                                                                     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
@@ -5163,146 +5236,169 @@ export default function Dealer() {
                                                                                                             </tr>
                                                                                                         </thead>
                                                                                                         <tbody>
-                                                                                                            {effectiveTransfers.map((t, upIdx) => {
-                                                                                                                const upstreamName = t.dealerName || "เจ้ามือ"
-                                                                                                                const entriesCount = t.entriesCount !== undefined ? t.entriesCount : "-"
-                                                                                                                const tProfit = -(t.amount || 0) + (t.commission_earned || 0) + (t.winnings || 0)
-                                                                                                                const targetRoundId = history.round_id || history.id
-                                                                                                                const detailsUpstreamPayments = details?.upstreamPayments || []
-                                                                                                                const detailsUpstreamIds = new Set(detailsUpstreamPayments.map(p => p.id).filter(Boolean))
+                                                                                                            {filteredEffectiveTransfers.length === 0 ? (
+                                                                                                                <tr>
+                                                                                                                    <td colSpan={7} style={{ textAlign: "center", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
+                                                                                                                        {historySettlementFilter === 'settled' 
+                                                                                                                            ? 'ไม่มีรายการเจ้ามือรับตีออกที่ชำระครบแล้วในงวดนี้' 
+                                                                                                                            : (historySettlementFilter === 'pending' 
+                                                                                                                                ? 'ไม่มีรายการเจ้ามือรับตีออกที่ค้างชำระในงวดนี้' 
+                                                                                                                                : 'ไม่มีรายการตีออกในงวดนี้')
+                                                                                                                        }
+                                                                                                                    </td>
+                                                                                                                </tr>
+                                                                                                            ) : (
+                                                                                                                filteredEffectiveTransfers.map((t, upIdx) => {
+                                                                                                                    const upstreamName = t.dealerName || "เจ้ามือ"
+                                                                                                                    const entriesCount = t.entriesCount !== undefined ? t.entriesCount : "-"
+                                                                                                                    const tProfit = -(t.amount || 0) + (t.commission_earned || 0) + (t.winnings || 0)
+                                                                                                                    const targetRoundId = history.round_id || history.id
+                                                                                                                    const detailsUpstreamPayments = details?.upstreamPayments || []
+                                                                                                                    const detailsUpstreamIds = new Set(detailsUpstreamPayments.map(p => p.id).filter(Boolean))
 
-                                                                                                                const extraUpstreamPayments = (settlementOverview.upstreamPayments || []).filter(p => {
-                                                                                                                    if (!p.id || detailsUpstreamIds.has(p.id)) return false
-                                                                                                                    return (
-                                                                                                                        String(p.round_id) === String(targetRoundId) ||
-                                                                                                                        String(p.round_id) === String(history.id) ||
-                                                                                                                        (history.round_id && String(p.round_id) === String(history.round_id))
+                                                                                                                    const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
+                                                                                                                                     (history.close_time ? String(history.close_time).split('T')[0] : null)
+                                                                                                                    let extraUpstreamPayments = (settlementOverview.upstreamPayments || []).filter(p => {
+                                                                                                                        if (!p.id || detailsUpstreamIds.has(p.id)) return false
+                                                                                                                        return (
+                                                                                                                            String(p.round_id) === String(targetRoundId) ||
+                                                                                                                            String(p.round_id) === String(history.id) ||
+                                                                                                                            (history.round_id && String(p.round_id) === String(history.round_id))
+                                                                                                                        )
+                                                                                                                    })
+                                                                                                                    if (extraUpstreamPayments.length === 0 && detailsUpstreamPayments.length === 0 && histDate) {
+                                                                                                                        extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p =>
+                                                                                                                            p.lottery_type === history.lottery_type && 
+                                                                                                                            (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+                                                                                                                        )
+                                                                                                                    }
+
+                                                                                                                    const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
+                                                                                                                    const upstreamPayments = allUpstreamPayments.filter(p => 
+                                                                                                                        p.upstream_dealer_name === upstreamName ||
+                                                                                                                        (!p.upstream_dealer_name && effectiveTransfers.length === 1)
                                                                                                                     )
-                                                                                                                })
+                                                                                                                    const initBal = calculateUpstreamInitialBalance(t)
+                                                                                                                    const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
+                                                                                                                    const settlementStatus = getUpstreamSettlementStatus(currBal)
+                                                                                                                    const settlementRowKey = `${history.id}_${upstreamName}`
+                                                                                                                    const isExpanded = expandedUpstreamSettlementId === settlementRowKey
+                                                                                                                    const isSettled = Boolean(settlementStatus.isSettled)
+                                                                                                                    const isRowFocused = keyboardNavTarget?.cardIndex === cardIdx && keyboardNavTarget?.section === 'upstream' && keyboardNavTarget?.rowIndex === upIdx
 
-                                                                                                                const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
-                                                                                                                const upstreamPayments = allUpstreamPayments.filter(p => p.upstream_dealer_name === upstreamName)
-                                                                                                                const initBal = calculateUpstreamInitialBalance(t)
-                                                                                                                const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
-                                                                                                                const settlementStatus = getUpstreamSettlementStatus(currBal)
-                                                                                                                const settlementRowKey = `${history.id}_${upstreamName}`
-                                                                                                                const isExpanded = expandedUpstreamSettlementId === settlementRowKey
-                                                                                                                const isSettled = Boolean(settlementStatus.isSettled)
-                                                                                                                const isRowFocused = keyboardNavTarget?.cardIndex === cardIdx && keyboardNavTarget?.section === 'upstream' && keyboardNavTarget?.rowIndex === upIdx
-
-                                                                                                                return (
-                                                                                                                    <Fragment key={t.id || upstreamName}>
-                                                                                                                        <tr 
-                                                                                                                            className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""} ${isRowFocused ? "keyboard-focused" : ""}`}
-                                                                                                                            data-keyboard-target={`card-${cardIdx}-upstream-${upIdx}`}
-                                                                                                                            style={{ 
-                                                                                                                                cursor: "pointer",
-                                                                                                                                transition: "background 0.2s ease"
-                                                                                                                            }}
-                                                                                                                            onClick={() => {
-                                                                                                                                setKeyboardNavTarget({ cardIndex: cardIdx, section: 'upstream', rowIndex: upIdx })
-                                                                                                                                setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)
-                                                                                                                            }}
-                                                                                                                        >
-                                                                                                                            <td className="col-member" style={{ padding: "0.55rem 0.65rem", fontWeight: 600, whiteSpace: "nowrap" }}>
-                                                                                                                                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
-                                                                                                                                    <span style={{ fontSize: "0.75rem", color: isSettled ? "var(--color-success, #10b981)" : "#ef4444", opacity: 0.8 }}>
-                                                                                                                                        {isExpanded ? "▼" : "▶"}
-                                                                                                                                    </span>
-                                                                                                                                    {upstreamName}
-                                                                                                                                    {isSettled && (
-                                                                                                                                        <span 
-                                                                                                                                            title="เคลียร์ยอดครบแล้ว (ยอดค้าง = 0)"
-                                                                                                                                            style={{ 
-                                                                                                                                                display: "inline-flex", 
-                                                                                                                                                alignItems: "center", 
-                                                                                                                                                justifyContent: "center",
-                                                                                                                                                width: "15px",
-                                                                                                                                                height: "15px",
-                                                                                                                                                borderRadius: "50%",
-                                                                                                                                                background: "rgba(16, 185, 129, 0.18)",
-                                                                                                                                                color: "var(--color-success, #10b981)",
-                                                                                                                                                fontSize: "0.65rem",
-                                                                                                                                                fontWeight: "bold",
-                                                                                                                                                flexShrink: 0
-                                                                                                                                            }}
-                                                                                                                                        >
-                                                                                                                                            ✓
-                                                                                                                                        </span>
-                                                                                                                                    )}
-                                                                                                                                </span>
-                                                                                                                            </td>
-                                                                                                                            <td className="col-entries" style={{ padding: "0.55rem 0.4rem", textAlign: "center", whiteSpace: "nowrap" }}>{entriesCount}</td>
-                                                                                                                            <td className="col-amount" style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: "#ef4444", whiteSpace: "nowrap" }}>-฿{(t.amount || 0).toLocaleString()}</td>
-                                                                                                                            <td className="col-comm" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>+฿{Math.round(t.commission_earned || 0).toLocaleString()}</td>
-                                                                                                                            <td className="col-win" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>+฿{(t.winnings || 0).toLocaleString()}</td>
-                                                                                                                            <td className="col-profit" style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: tProfit >= 0 ? "var(--color-success)" : "#ef4444", whiteSpace: "nowrap" }}>
-                                                                                                                                {tProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(tProfit)).toLocaleString()}
-                                                                                                                            </td>
-                                                                                                                            <td className="col-settle" style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }} onClick={e => e.stopPropagation()}>
-                                                                                                                                <button
-                                                                                                                                    type="button"
-                                                                                                                                    onClick={() => setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)}
-                                                                                                                                    style={{
-                                                                                                                                        display: "inline-flex",
-                                                                                                                                        alignItems: "center",
-                                                                                                                                        gap: "0.35rem",
-                                                                                                                                        padding: "0.25rem 0.65rem",
-                                                                                                                                        borderRadius: "9999px",
-                                                                                                                                        fontSize: "0.78rem",
-                                                                                                                                        fontWeight: 600,
-                                                                                                                                        cursor: "pointer",
-                                                                                                                                        border: `1px solid ${settlementStatus.badgeBorder}`,
-                                                                                                                                        background: settlementStatus.badgeBg,
-                                                                                                                                        color: settlementStatus.color,
-                                                                                                                                        transition: "all 0.15s ease"
-                                                                                                                                    }}
-                                                                                                                                    title="คลิกเพื่อบันทึกหรือดูรายการชำระเงินกับเจ้ามือ"
-                                                                                                                                >
-                                                                                                                                    <span>{settlementStatus.formattedText}</span>
-                                                                                                                                    <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>
-                                                                                                                                        {isExpanded ? "▲" : "▼"}
-                                                                                                                                    </span>
-                                                                                                                                </button>
-                                                                                                                            </td>
-                                                                                                                        </tr>
-                                                                                                                        {isExpanded && (
+                                                                                                                    return (
+                                                                                                                        <Fragment key={t.id || upstreamName}>
                                                                                                                             <tr 
-                                                                                                                                className={`expanded-row ${isSettled ? "expanded-row-settled" : ""}`}
-                                                                                                                                style={{ background: "rgba(0, 0, 0, 0.25)" }}
+                                                                                                                                className={`history-row ${isSettled ? "row-settled" : ""} ${isExpanded ? "is-expanded" : ""} ${isRowFocused ? "keyboard-focused" : ""}`}
+                                                                                                                                data-keyboard-target={`card-${cardIdx}-upstream-${upIdx}`}
+                                                                                                                                style={{ 
+                                                                                                                                    cursor: "pointer",
+                                                                                                                                    transition: "background 0.2s ease"
+                                                                                                                                }}
+                                                                                                                                onClick={() => {
+                                                                                                                                    setKeyboardNavTarget({ cardIndex: cardIdx, section: 'upstream', rowIndex: upIdx })
+                                                                                                                                    setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)
+                                                                                                                                }}
                                                                                                                             >
-                                                                                                                                <td colSpan={7} className="expanded-content-cell">
-                                                                                                                                    <UpstreamSettlementInline
-                                                                                                                                        transfer={t}
-                                                                                                                                        round={history}
-                                                                                                                                        payments={upstreamPayments}
-                                                                                                                                        settlementOverview={settlementOverview}
-                                                                                                                                        roundHistory={roundHistory}
-                                                                                                                                        dealerId={user?.id}
-                                                                                                                                        lotteryTypeFilter={historyTypeFilter}
-                                                                                                                                        onSavePayment={(paymentData) => handleSaveUpstreamPayment({
-                                                                                                                                            historyItem: history,
-                                                                                                                                            transfer: t,
-                                                                                                                                            paymentData
-                                                                                                                                        })}
-                                                                                                                                        onUpdatePayment={(paymentId, paymentData) => handleUpdateUpstreamPayment({
-                                                                                                                                            historyItem: history,
-                                                                                                                                            paymentId,
-                                                                                                                                            paymentData
-                                                                                                                                        })}
-                                                                                                                                        onDeletePayment={(paymentId) => handleDeleteUpstreamPayment({
-                                                                                                                                            historyItem: history,
-                                                                                                                                            paymentId
-                                                                                                                                        })}
-                                                                                                                                        onCrossRoundOffset={handleSaveUpstreamCrossRoundOffset}
-                                                                                                                                        onClose={() => setExpandedUpstreamSettlementId(null)}
-                                                                                                                                    />
+                                                                                                                                <td className="col-member" style={{ padding: "0.55rem 0.65rem", fontWeight: 600, whiteSpace: "nowrap" }}>
+                                                                                                                                    <span style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}>
+                                                                                                                                        <span style={{ fontSize: "0.75rem", color: isSettled ? "var(--color-success, #10b981)" : "#ef4444", opacity: 0.8 }}>
+                                                                                                                                            {isExpanded ? "▼" : "▶"}
+                                                                                                                                        </span>
+                                                                                                                                        {upstreamName}
+                                                                                                                                        {isSettled && (
+                                                                                                                                            <span 
+                                                                                                                                                title="เคลียร์ยอดครบแล้ว (ยอดค้าง = 0)"
+                                                                                                                                                style={{ 
+                                                                                                                                                    display: "inline-flex", 
+                                                                                                                                                    alignItems: "center", 
+                                                                                                                                                    justifyContent: "center",
+                                                                                                                                                    width: "15px",
+                                                                                                                                                    height: "15px",
+                                                                                                                                                    borderRadius: "50%",
+                                                                                                                                                    background: "rgba(16, 185, 129, 0.18)",
+                                                                                                                                                    color: "var(--color-success, #10b981)",
+                                                                                                                                                    fontSize: "0.65rem",
+                                                                                                                                                    fontWeight: "bold",
+                                                                                                                                                    flexShrink: 0
+                                                                                                                                                }}
+                                                                                                                                            >
+                                                                                                                                                ✓
+                                                                                                                                            </span>
+                                                                                                                                        )}
+                                                                                                                                    </span>
+                                                                                                                                </td>
+                                                                                                                                <td className="col-entries" style={{ padding: "0.55rem 0.4rem", textAlign: "center", whiteSpace: "nowrap" }}>{entriesCount}</td>
+                                                                                                                                <td className="col-amount" style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: "#ef4444", whiteSpace: "nowrap" }}>-฿{(t.amount || 0).toLocaleString()}</td>
+                                                                                                                                <td className="col-comm" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>+฿{Math.round(t.commission_earned || 0).toLocaleString()}</td>
+                                                                                                                                <td className="col-win" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>+฿{(t.winnings || 0).toLocaleString()}</td>
+                                                                                                                                <td className="col-profit" style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: tProfit >= 0 ? "var(--color-success)" : "#ef4444", whiteSpace: "nowrap" }}>
+                                                                                                                                    {tProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(tProfit)).toLocaleString()}
+                                                                                                                                </td>
+                                                                                                                                <td className="col-settle" style={{ padding: "0.55rem 0.65rem", textAlign: "center", whiteSpace: "nowrap" }} onClick={e => e.stopPropagation()}>
+                                                                                                                                    <button
+                                                                                                                                        type="button"
+                                                                                                                                        onClick={() => setExpandedUpstreamSettlementId(isExpanded ? null : settlementRowKey)}
+                                                                                                                                        style={{
+                                                                                                                                            display: "inline-flex",
+                                                                                                                                            alignItems: "center",
+                                                                                                                                            gap: "0.35rem",
+                                                                                                                                            padding: "0.25rem 0.65rem",
+                                                                                                                                            borderRadius: "9999px",
+                                                                                                                                            fontSize: "0.78rem",
+                                                                                                                                            fontWeight: 600,
+                                                                                                                                            cursor: "pointer",
+                                                                                                                                            border: `1px solid ${settlementStatus.badgeBorder}`,
+                                                                                                                                            background: settlementStatus.badgeBg,
+                                                                                                                                            color: settlementStatus.color,
+                                                                                                                                            transition: "all 0.15s ease"
+                                                                                                                                        }}
+                                                                                                                                        title="คลิกเพื่อบันทึกหรือดูรายการชำระเงินกับเจ้ามือ"
+                                                                                                                                    >
+                                                                                                                                        <span>{settlementStatus.formattedText}</span>
+                                                                                                                                        <span style={{ fontSize: "0.7rem", opacity: 0.8 }}>
+                                                                                                                                            {isExpanded ? "▲" : "▼"}
+                                                                                                                                        </span>
+                                                                                                                                    </button>
                                                                                                                                 </td>
                                                                                                                             </tr>
-                                                                                                                        )}
-                                                                                                                    </Fragment>
-                                                                                                                )
-                                                                                                            })}
+                                                                                                                            {isExpanded && (
+                                                                                                                                <tr 
+                                                                                                                                    className={`expanded-row ${isSettled ? "expanded-row-settled" : ""}`}
+                                                                                                                                    style={{ background: "rgba(0, 0, 0, 0.25)" }}
+                                                                                                                                >
+                                                                                                                                    <td colSpan={7} className="expanded-content-cell">
+                                                                                                                                        <UpstreamSettlementInline
+                                                                                                                                            transfer={t}
+                                                                                                                                            round={history}
+                                                                                                                                            payments={upstreamPayments}
+                                                                                                                                            settlementOverview={settlementOverview}
+                                                                                                                                            roundHistory={roundHistory}
+                                                                                                                                            dealerId={user?.id}
+                                                                                                                                            lotteryTypeFilter={historyTypeFilter}
+                                                                                                                                            onSavePayment={(paymentData) => handleSaveUpstreamPayment({
+                                                                                                                                                historyItem: history,
+                                                                                                                                                transfer: t,
+                                                                                                                                                paymentData
+                                                                                                                                            })}
+                                                                                                                                            onUpdatePayment={(paymentId, paymentData) => handleUpdateUpstreamPayment({
+                                                                                                                                                historyItem: history,
+                                                                                                                                                paymentId,
+                                                                                                                                                paymentData
+                                                                                                                                            })}
+                                                                                                                                            onDeletePayment={(paymentId) => handleDeleteUpstreamPayment({
+                                                                                                                                                historyItem: history,
+                                                                                                                                                paymentId
+                                                                                                                                            })}
+                                                                                                                                            onCrossRoundOffset={handleSaveUpstreamCrossRoundOffset}
+                                                                                                                                            onClose={() => setExpandedUpstreamSettlementId(null)}
+                                                                                                                                        />
+                                                                                                                                    </td>
+                                                                                                                                </tr>
+                                                                                                                            )}
+                                                                                                                        </Fragment>
+                                                                                                                    )
+                                                                                                                }))}
                                                                                                         </tbody>
                                                                                                     </table>
                                                                                                 </div>

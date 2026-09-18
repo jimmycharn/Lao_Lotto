@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
     calculateMemberInitialBalance,
-    calculateMemberCurrentBalance
+    calculateMemberCurrentBalance,
+    calculateUpstreamInitialBalance,
+    calculateUpstreamCurrentBalance
 } from '../../../utils/memberSettlementCalculator'
 
 describe('History tab round member submissions search filter logic', () => {
@@ -377,5 +379,92 @@ describe('History tab settlement status filter (all, settled, pending)', () => {
         expect(resPendingSearch[0].user_id).toBe('user-pending-2')
     })
 })
+
+describe('History tab upstream layoff transfers filtered by settlement status', () => {
+    // Upstream A: transferred 9525, comm 2594, win 0 -> initial balance = 9525 - 2594 - 0 = 6931 (dealer owes upstream)
+    // Paid dealer_to_upstream: 6931 -> currBal = 0 (settled, as in user's screenshot)
+    // Upstream B: transferred 15000, comm 3125, win 2000 -> initial balance = 15000 - 3125 - 2000 = 9875 (dealer owes upstream)
+    // Paid dealer_to_upstream: 5000 -> currBal = 4875 (pending)
+    const mockTransfers = [
+        {
+            id: 'trf-1',
+            dealerName: 'เจ้ามือ',
+            entriesCount: 52,
+            amount: 9525,
+            commission_earned: 2594,
+            winnings: 0
+        },
+        {
+            id: 'trf-2',
+            dealerName: 'เจ้ามือ 2',
+            entriesCount: 80,
+            amount: 15000,
+            commission_earned: 3125,
+            winnings: 2000
+        }
+    ]
+
+    const mockUpstreamPayments = [
+        { id: 'pay-up-1', upstream_dealer_name: 'เจ้ามือ', amount: 6931, direction: 'dealer_to_upstream', status: 'completed' },
+        { id: 'pay-up-2', upstream_dealer_name: 'เจ้ามือ 2', amount: 5000, direction: 'dealer_to_upstream', status: 'completed' }
+    ]
+
+    const filterTransfersBySettlement = (transfers, payments, filter) => {
+        if (!transfers || transfers.length === 0 || filter === 'all') {
+            return transfers
+        }
+
+        return transfers.filter(t => {
+            const upstreamName = t.dealerName || 'เจ้ามือ'
+            const upPayments = payments.filter(p =>
+                p.upstream_dealer_name === upstreamName ||
+                (!p.upstream_dealer_name && transfers.length === 1)
+            )
+            const initBal = calculateUpstreamInitialBalance(t)
+            const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)
+            const isSettled = currBal === 0
+
+            if (filter === 'settled') {
+                return isSettled
+            } else if (filter === 'pending') {
+                return !isSettled
+            }
+            return true
+        })
+    }
+
+    it('returns all transfers when filter is "all"', () => {
+        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'all')
+        expect(res).toHaveLength(2)
+    })
+
+    it('filters upstream transfers to only settled when filter is "settled"', () => {
+        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'settled')
+        expect(res).toHaveLength(1)
+        expect(res[0].dealerName).toBe('เจ้ามือ')
+        expect(res[0].id).toBe('trf-1')
+    })
+
+    it('filters upstream transfers to only pending when filter is "pending"', () => {
+        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'pending')
+        expect(res).toHaveLength(1)
+        expect(res[0].dealerName).toBe('เจ้ามือ 2')
+        expect(res[0].id).toBe('trf-2')
+    })
+
+    it('returns empty list when round has only settled transfers and filter is "pending" (user screenshot scenario)', () => {
+        const singleSettledTransfer = [mockTransfers[0]] // only "เจ้ามือ" (settled ฿0)
+        const res = filterTransfersBySettlement(singleSettledTransfer, mockUpstreamPayments, 'pending')
+        expect(res).toHaveLength(0)
+    })
+
+    it('returns single settled transfer when filter is "settled"', () => {
+        const singleSettledTransfer = [mockTransfers[0]]
+        const res = filterTransfersBySettlement(singleSettledTransfer, mockUpstreamPayments, 'settled')
+        expect(res).toHaveLength(1)
+        expect(res[0].dealerName).toBe('เจ้ามือ')
+    })
+})
+
 
 
