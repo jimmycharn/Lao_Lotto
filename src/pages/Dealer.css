@@ -6110,6 +6110,32 @@ html.theme-light .icon-btn-sm:hover {
     height: 38px;
     box-sizing: border-box;
     cursor: pointer;
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--color-text, #ffffff);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
+    outline: none;
+    color-scheme: dark;
+    transition: all 0.2s ease;
+}
+
+.history-filter-item select.form-control:hover,
+.history-filter-item .history-search-input:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.45);
+}
+
+.history-filter-item select.form-control:focus,
+.history-filter-item .history-search-input:focus {
+    border-color: var(--color-primary, #d4af37);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.25);
+    background: rgba(0, 0, 0, 0.5);
+    outline: none;
+}
+
+.history-filter-item select.form-control option {
+    background: #16213e;
+    color: #ffffff;
+    padding: 0.4rem;
 }
 
 .history-filter-item .history-search-wrapper {
@@ -6132,29 +6158,95 @@ html.theme-light .icon-btn-sm:hover {
 .history-filter-item .history-search-input {
     width: 100%;
     height: 38px;
-    padding: 0.4rem 1.8rem 0.4rem 1.8rem;
+    padding: 0.4rem 1.8rem 0.4rem 2rem;
     font-size: 0.85rem;
     border-radius: 6px;
     box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.35);
+    color: var(--color-text, #ffffff);
+    border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
+    outline: none;
+    transition: all 0.2s ease;
+}
+
+.history-filter-item .history-search-input::placeholder {
+    color: var(--color-text-muted, #94a3b8);
+    opacity: 0.75;
 }
 
 .history-filter-item .history-search-clear-btn {
     position: absolute;
     right: 0.5rem;
-    background: none;
+    background: rgba(255, 255, 255, 0.1);
     border: none;
-    color: var(--color-text-muted);
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    color: var(--color-text-muted, #94a3b8);
     cursor: pointer;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     padding: 0;
     line-height: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.15s ease;
 }
 
 .history-filter-item .history-search-clear-btn:hover {
-    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+/* Light theme overrides for history filter bar */
+:root.theme-light .history-filter-item select.form-control,
+[data-theme="light"] .history-filter-item select.form-control,
+:root.theme-light .history-filter-item .history-search-input,
+[data-theme="light"] .history-filter-item .history-search-input {
+    background: #ffffff;
+    color: #1a1a2e;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    color-scheme: light;
+}
+
+:root.theme-light .history-filter-item select.form-control:hover,
+[data-theme="light"] .history-filter-item select.form-control:hover,
+:root.theme-light .history-filter-item .history-search-input:hover,
+[data-theme="light"] .history-filter-item .history-search-input:hover {
+    border-color: rgba(0, 0, 0, 0.3);
+    background: #fdfdfd;
+}
+
+:root.theme-light .history-filter-item select.form-control:focus,
+[data-theme="light"] .history-filter-item select.form-control:focus,
+:root.theme-light .history-filter-item .history-search-input:focus,
+[data-theme="light"] .history-filter-item .history-search-input:focus {
+    border-color: var(--color-primary, #b8960c);
+    box-shadow: 0 0 0 2px rgba(184, 150, 12, 0.2);
+    background: #ffffff;
+}
+
+:root.theme-light .history-filter-item select.form-control option,
+[data-theme="light"] .history-filter-item select.form-control option {
+    background: #ffffff;
+    color: #1a1a2e;
+}
+
+:root.theme-light .history-filter-item .history-search-input::placeholder,
+[data-theme="light"] .history-filter-item .history-search-input::placeholder {
+    color: #8c8c9c;
+}
+
+:root.theme-light .history-filter-item .history-search-clear-btn,
+[data-theme="light"] .history-filter-item .history-search-clear-btn {
+    background: rgba(0, 0, 0, 0.08);
+    color: #6c6c7c;
+}
+
+:root.theme-light .history-filter-item .history-search-clear-btn:hover,
+[data-theme="light"] .history-filter-item .history-search-clear-btn:hover {
+    background: rgba(0, 0, 0, 0.15);
+    color: #1a1a2e;
 }
 
 @media (max-width: 768px) {
