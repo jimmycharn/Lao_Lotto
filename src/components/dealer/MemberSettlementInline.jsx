@@ -416,9 +416,9 @@ export default function MemberSettlementInline({
                     {isPrizePartiallyPaid && (
                         <span 
                             style={{ 
-                                fontSize: '0.75rem', 
+                                fontSize: '0.68rem', 
                                 color: 'var(--color-warning, #f59e0b)', 
-                                fontWeight: 600,
+                                fontWeight: 'normal',
                                 marginTop: '0.15rem' 
                             }}
                             title={`ชำระแล้ว ฿${prizePaid.toLocaleString()} / ค้างจ่ายอีก ฿${(totalWinnings - prizePaid).toLocaleString()}`}

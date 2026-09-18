@@ -4960,9 +4960,9 @@ export default function Dealer() {
                                                                                                                                                 </span>
                                                                                                                                                 <span 
                                                                                                                                                     style={{ 
-                                                                                                                                                        fontSize: "0.72rem", 
+                                                                                                                                                        fontSize: "0.65rem", 
                                                                                                                                                         color: "var(--color-warning, #f59e0b)", 
-                                                                                                                                                        fontWeight: 600,
+                                                                                                                                                        fontWeight: "normal",
                                                                                                                                                         whiteSpace: "nowrap" 
                                                                                                                                                     }}
                                                                                                                                                     title={`ชำระแล้ว ฿${prizePaid.toLocaleString()} / ค้างจ่ายอีก ฿${(memberWinnings - prizePaid).toLocaleString()}`}
