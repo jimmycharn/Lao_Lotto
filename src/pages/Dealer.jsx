@@ -4874,14 +4874,14 @@ export default function Dealer() {
                                                                                                                 const memberPayments = allRoundPayments.filter(p => p.user_id === uh.user_id)
                                                                                                                 const memberWinnings = Math.round(uh.total_winnings || 0)
                                                                                                                 const prizePaid = calculateMemberPrizePaid(memberPayments)
-                                                                                                                const isPrizeFullyPaid = memberWinnings > 0 && prizePaid >= memberWinnings
-                                                                                                                const isPrizePartiallyPaid = memberWinnings > 0 && prizePaid > 0 && prizePaid < memberWinnings
                                                                                                                 const initBal = calculateMemberInitialBalance(uh)
                                                                                                                 const currBal = calculateMemberCurrentBalance(initBal, memberPayments)
                                                                                                                 const settlementStatus = getMemberSettlementStatus(currBal)
                                                                                                                 const settlementKey = `${history.id}_${uh.user_id}`
                                                                                                                 const isExpanded = expandedMemberSettlementId === settlementKey
                                                                                                                 const isSettled = Boolean(settlementStatus.isSettled)
+                                                                                                                const isPrizeFullyPaid = memberWinnings > 0 && (prizePaid >= memberWinnings || isSettled)
+                                                                                                                const isPrizePartiallyPaid = memberWinnings > 0 && !isSettled && prizePaid > 0 && prizePaid < memberWinnings
                                                                                                                 const isRowFocused = keyboardNavTarget?.cardIndex === cardIdx && keyboardNavTarget?.section === 'member' && keyboardNavTarget?.rowIndex === memberIdx
 
                                                                                                                 return (
@@ -4946,7 +4946,7 @@ export default function Dealer() {
                                                                                                                                                     color: "var(--color-danger)", 
                                                                                                                                                     opacity: 0.65 
                                                                                                                                                 }}
-                                                                                                                                                title={`ชำระเงินรางวัลครบแล้ว (฿${prizePaid.toLocaleString()})`}
+                                                                                                                                                title={isSettled ? `เคลียร์ยอดครบแล้ว (รวมเงินรางวัล ฿${memberWinnings.toLocaleString()})` : `ชำระเงินรางวัลครบแล้ว (฿${prizePaid.toLocaleString()})`}
                                                                                                                                             >
                                                                                                                                                 ฿{memberWinnings.toLocaleString()}
                                                                                                                                             </span>

@@ -173,8 +173,8 @@ export default function MemberSettlementInline({
         return calculateMemberPrizePaid(payments)
     }, [payments])
 
-    const isPrizeFullyPaid = totalWinnings > 0 && prizePaid >= totalWinnings
-    const isPrizePartiallyPaid = totalWinnings > 0 && prizePaid > 0 && prizePaid < totalWinnings
+    const isPrizeFullyPaid = totalWinnings > 0 && (prizePaid >= totalWinnings || Boolean(status.isSettled))
+    const isPrizePartiallyPaid = totalWinnings > 0 && !status.isSettled && prizePaid > 0 && prizePaid < totalWinnings
 
     // Available prize from current round that can be used for cross-round offset
     const availableWinnings = Math.max(0, Math.round(totalWinnings - prizePaid))
@@ -409,7 +409,7 @@ export default function MemberSettlementInline({
                             textDecorationThickness: isPrizeFullyPaid ? '1.5px' : 'auto',
                             opacity: isPrizeFullyPaid ? 0.65 : 1
                         }}
-                        title={isPrizeFullyPaid ? `ชำระเงินรางวัลครบแล้ว (฿${prizePaid.toLocaleString()})` : undefined}
+                        title={isPrizeFullyPaid ? (status.isSettled ? `เคลียร์ยอดครบแล้ว (รวมเงินรางวัล ฿${totalWinnings.toLocaleString()})` : `ชำระเงินรางวัลครบแล้ว (฿${prizePaid.toLocaleString()})`) : undefined}
                     >
                         ฿{totalWinnings.toLocaleString()}
                     </span>
