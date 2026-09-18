@@ -286,6 +286,13 @@ describe('History tab settlement status filter (all, settled, pending)', () => {
         expect(res[0].id).toBe('round-pending')
     })
 
+    it('defaults top-bar round settlement filter to "pending" to show only rounds with unsettled balances', () => {
+        const defaultFilter = 'pending'
+        const res = filterRoundsBySettlement(mockRoundsWithStatus, defaultFilter)
+        expect(res).toHaveLength(1)
+        expect(res[0].id).toBe('round-pending')
+    })
+
     // 2. Member filtering within a round test
     const mockUserHistoriesForRound = [
         {

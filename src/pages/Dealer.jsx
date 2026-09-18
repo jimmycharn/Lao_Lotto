@@ -295,7 +295,7 @@ export default function Dealer() {
     const [historyLoading, setHistoryLoading] = useState(false)
     const [historyMonthFilter, setHistoryMonthFilter] = useState('all')
     const [historyTypeFilter, setHistoryTypeFilter] = useState('all')
-    const [historySettlementFilter, setHistorySettlementFilter] = useState('all') // 'all' | 'settled' | 'pending'
+    const [historySettlementFilter, setHistorySettlementFilter] = useState('pending') // 'all' | 'settled' | 'pending' (default: 'pending')
     const [historySenderSearch, setHistorySenderSearch] = useState('')
     const [expandedHistoryId, setExpandedHistoryId] = useState(null)
     const [historyDetails, setHistoryDetails] = useState({})
