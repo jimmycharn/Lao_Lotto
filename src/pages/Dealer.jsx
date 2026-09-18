@@ -1429,8 +1429,52 @@ export default function Dealer() {
                 winnings: outWin
             }] : [])
 
-        return effectiveTransfers
-    }, [historyDetails, settlementOverview, upstreamSettingsMap])
+        const roundFilter = roundMemberSettlementFilter[history.id] ?? 'pending'
+        if (effectiveTransfers.length === 0 || roundFilter === 'all') {
+            return effectiveTransfers
+        }
+
+        const targetRoundId = history.round_id || history.id
+        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
+                         (history.close_time ? String(history.close_time).split('T')[0] : null)
+        const detailsUpstreamPayments = details?.upstreamPayments || []
+        const detailsUpstreamIds = new Set(detailsUpstreamPayments.map(p => p.id).filter(Boolean))
+
+        let extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p => {
+            if (!p.id || detailsUpstreamIds.has(p.id)) return false
+            return (
+                String(p.round_id) === String(targetRoundId) ||
+                String(p.round_id) === String(history.id) ||
+                (history.round_id && String(p.round_id) === String(history.round_id))
+            )
+        })
+        if (extraUpstreamPayments.length === 0 && detailsUpstreamPayments.length === 0 && histDate) {
+            extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p =>
+                p.lottery_type === history.lottery_type && 
+                (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+            )
+        }
+
+        const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
+
+        return effectiveTransfers.filter(t => {
+            const upstreamName = t.dealerName || "เจ้ามือ"
+            const upstreamPayments = allUpstreamPayments.filter(p => 
+                p.upstream_dealer_name === upstreamName ||
+                (!p.upstream_dealer_name && effectiveTransfers.length === 1)
+            )
+            const initBal = calculateUpstreamInitialBalance(t)
+            const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
+            const isSettled = currBal === 0
+
+            if (roundFilter === 'settled') {
+                return isSettled
+            } else if (roundFilter === 'pending') {
+                return !isSettled
+            }
+            return true
+        })
+    }, [historyDetails, settlementOverview, upstreamSettingsMap, roundMemberSettlementFilter])
 
     const getHistoryCardContent = useCallback((cardIndex) => {
         const history = filteredRoundHistory[cardIndex]
@@ -5202,9 +5246,28 @@ export default function Dealer() {
                                                                                         {/* Outgoing Layoff Bet Transfers Table */}
                                                                                         {effectiveTransfers.length > 0 && (
                                                                                             <div>
-                                                                                                <h4 style={{ fontSize: "0.85rem", fontWeight: 600, marginBottom: "0.75rem", color: "#ef4444" }}>
-                                                                                                    🚀 รายละเอียดการตีออกให้เจ้ามือในงวดนี้
-                                                                                                </h4>
+                                                                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                                                                                                    <h4 style={{ fontSize: "0.85rem", fontWeight: 600, margin: 0, color: "#ef4444" }}>
+                                                                                                        🚀 รายละเอียดการตีออกให้เจ้ามือในงวดนี้
+                                                                                                    </h4>
+                                                                                                    <div style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem" }} onClick={e => e.stopPropagation()}>
+                                                                                                        <label style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+                                                                                                            สถานะชำระ:
+                                                                                                        </label>
+                                                                                                        <select
+                                                                                                            className="form-control history-member-settlement-select"
+                                                                                                            value={currentMemberFilter}
+                                                                                                            onChange={e => {
+                                                                                                                const val = e.target.value
+                                                                                                                setRoundMemberSettlementFilter(prev => ({ ...prev, [history.id]: val }))
+                                                                                                            }}
+                                                                                                        >
+                                                                                                            <option value="all">ทั้งหมด</option>
+                                                                                                            <option value="settled">ชำระครบแล้ว</option>
+                                                                                                            <option value="pending">ยังค้างชำระ</option>
+                                                                                                        </select>
+                                                                                                    </div>
+                                                                                                </div>
                                                                                                 <div className="history-transfers-breakdown" style={{ overflowX: "auto" }}>
                                                                                                     <table className="history-breakdown-table" style={{ width: "100%", fontSize: "0.85rem", borderCollapse: "collapse" }}>
                                                                                                         <thead>
@@ -5222,7 +5285,12 @@ export default function Dealer() {
                                                                                                             {filteredEffectiveTransfers.length === 0 ? (
                                                                                                                 <tr>
                                                                                                                     <td colSpan={7} style={{ textAlign: "center", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                                                                                                                        ไม่มีรายการตีออกในงวดนี้
+                                                                                                                        {currentMemberFilter === 'settled' 
+                                                                                                                            ? 'ไม่มีรายการเจ้ามือรับตีออกที่ชำระครบแล้วในงวดนี้' 
+                                                                                                                            : (currentMemberFilter === 'pending' 
+                                                                                                                                ? 'ไม่มีรายการเจ้ามือรับตีออกที่ค้างชำระในงวดนี้' 
+                                                                                                                                : 'ไม่มีรายการตีออกในงวดนี้')
+                                                                                                                        }
                                                                                                                     </td>
                                                                                                                 </tr>
                                                                                                             ) : (

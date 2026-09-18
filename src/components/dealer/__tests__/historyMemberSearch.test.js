@@ -420,29 +420,63 @@ describe('History tab settlement status filter (all, settled, pending)', () => {
     })
 })
 
-describe('History tab upstream layoff transfers unaffected by top bar settlement filter', () => {
+describe('History tab upstream layoff transfers filtered by round card settlement status', () => {
     const mockTransfers = [
         {
-            id: 'trf-1',
-            dealerName: 'เจ้ามือ',
+            id: 'trf-settled',
+            dealerName: 'เจ้ามือเคลียร์แล้ว',
             entriesCount: 52,
-            amount: 9525,
-            commission_earned: 2594,
+            amount: 10000,
+            commission_earned: 2500,
             winnings: 0
         },
         {
-            id: 'trf-2',
-            dealerName: 'เจ้ามือ 2',
+            id: 'trf-pending',
+            dealerName: 'เจ้ามือค้างชำระ',
             entriesCount: 80,
             amount: 15000,
-            commission_earned: 3125,
-            winnings: 2000
+            commission_earned: 3000,
+            winnings: 0
         }
     ]
 
-    it('returns all effective transfers in the round unaffected by top bar settlement filter', () => {
-        // getFilteredEffectiveTransfers returns effectiveTransfers directly
-        expect(mockTransfers).toHaveLength(2)
+    // Payments:
+    // trf-settled: net = 10000 - 2500 - 0 = 7500 (dealer owes upstream 7500). Paid 7500 -> currBal = 0 (settled)
+    // trf-pending: net = 15000 - 3000 - 0 = 12000. Paid 5000 -> currBal = 7000 (pending)
+    const mockUpstreamPayments = [
+        { upstream_dealer_name: 'เจ้ามือเคลียร์แล้ว', amount: 7500, direction: 'dealer_to_upstream', status: 'completed' },
+        { upstream_dealer_name: 'เจ้ามือค้างชำระ', amount: 5000, direction: 'dealer_to_upstream', status: 'completed' }
+    ]
+
+    const filterTransfersBySettlement = (transfers, payments, filter) => {
+        if (filter === 'all') return transfers
+        return transfers.filter(t => {
+            const upPayments = payments.filter(p => p.upstream_dealer_name === t.dealerName)
+            const initBal = calculateUpstreamInitialBalance(t)
+            const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)
+            const isSettled = currBal === 0
+
+            if (filter === 'settled') return isSettled
+            if (filter === 'pending') return !isSettled
+            return true
+        })
+    }
+
+    it('filters upstream transfers by round settlement status: pending (default)', () => {
+        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'pending')
+        expect(res).toHaveLength(1)
+        expect(res[0].id).toBe('trf-pending')
+    })
+
+    it('filters upstream transfers by round settlement status: settled', () => {
+        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'settled')
+        expect(res).toHaveLength(1)
+        expect(res[0].id).toBe('trf-settled')
+    })
+
+    it('returns all upstream transfers when round filter is all', () => {
+        const res = filterTransfersBySettlement(mockTransfers, mockUpstreamPayments, 'all')
+        expect(res).toHaveLength(2)
     })
 })
 
