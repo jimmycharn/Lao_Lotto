@@ -78,6 +78,8 @@ import MemberAccordionItem from '../components/dealer/MemberAccordionItem'
 import MemberSettlementInline from '../components/dealer/MemberSettlementInline'
 import UpstreamSettlementInline from '../components/dealer/UpstreamSettlementInline'
 import UpstreamDealersTab from '../components/dealer/UpstreamDealersTab'
+import DealerBottomNav from '../components/dealer/DealerBottomNav'
+import DealerSubTabsNav from '../components/dealer/DealerSubTabsNav'
 import { getRoundCloseDate } from '../utils/crossRoundOffsetCalculator'
 import {
     getNextKeyboardFocusTarget,
@@ -254,6 +256,34 @@ export default function Dealer() {
         setActiveDashboard(DASHBOARDS.DEALER)
     }, [setActiveDashboard])
     const [activeTab, setActiveTab] = useState('rounds')
+    const [lastMemberSubTab, setLastMemberSubTab] = useState('members')
+    const [lastBotSubTab, setLastBotSubTab] = useState('lineBot')
+
+    useEffect(() => {
+        if (activeTab === 'members' || activeTab === 'upstreamDealers') {
+            setLastMemberSubTab(activeTab)
+        } else if (activeTab === 'lineBot' || activeTab === 'automation') {
+            setLastBotSubTab(activeTab)
+        }
+    }, [activeTab])
+
+    const currentNavGroup = useMemo(() => {
+        if (activeTab === 'members' || activeTab === 'upstreamDealers') return 'members'
+        if (activeTab === 'lineBot' || activeTab === 'automation') return 'lineBot'
+        if (activeTab === 'referral') return 'referral'
+        if (activeTab === 'profile') return 'profile'
+        return 'rounds'
+    }, [activeTab])
+
+    const handleBottomNavSelect = useCallback((tabId) => {
+        if (tabId === 'members') {
+            setActiveTab(lastMemberSubTab || 'members')
+        } else if (tabId === 'lineBot') {
+            setActiveTab(lastBotSubTab || 'lineBot')
+        } else {
+            setActiveTab(tabId)
+        }
+    }, [lastMemberSubTab, lastBotSubTab])
     const [rounds, setRounds] = useState([])
     const [members, setMembers] = useState([])
     const [pendingMembers, setPendingMembers] = useState([])
@@ -4275,54 +4305,75 @@ export default function Dealer() {
                     </div>
                 )}
 
-                {/* Tabs */}
+                {/* Tabs (Desktop Grouping) */}
                 <div className="dealer-tabs">
+                    {/* 1. งวดหวย */}
                     <button
                         className={`tab-btn ${activeTab === 'rounds' ? 'active' : ''}`}
                         onClick={() => setActiveTab('rounds')}
                     >
                         <FiCalendar /> งวดหวย
                     </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'members' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('members')}
-                    >
-                        <FiUsers /> สมาชิก ({members.length + downstreamDealers.filter(d => d.membership_status === 'active').length})
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'upstreamDealers' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('upstreamDealers')}
-                    >
-                        <FiSend /> เจ้ามือตีออก ({upstreamDealers.length})
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'lineBot' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('lineBot')}
-                    >
-                        <FiMessageSquare /> จัดการ LINE Bot
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'automation' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('automation')}
-                    >
-                        <FiSettings /> ตั้งค่าออโตเมชัน
-                    </button>
-                    <button
-                        className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('profile')}
-                    >
-                        <FiUser /> โปรไฟล์
-                    </button>
+
+                    {/* 2. สมาชิก & เจ้ามือตีออก */}
+                    <div className="dealer-tab-group">
+                        <button
+                            className={`tab-btn ${activeTab === 'members' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('members')}
+                        >
+                            <FiUsers /> สมาชิก ({members.length + downstreamDealers.filter(d => d.membership_status === 'active').length})
+                        </button>
+                        <button
+                            className={`tab-btn ${activeTab === 'upstreamDealers' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('upstreamDealers')}
+                        >
+                            <FiSend /> เจ้ามือตีออก ({upstreamDealers.length})
+                        </button>
+                    </div>
+
+                    {/* 3. จัดการ LINE Bot & ตั้งค่าออโตเมชัน */}
+                    <div className="dealer-tab-group">
+                        <button
+                            className={`tab-btn ${activeTab === 'lineBot' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('lineBot')}
+                        >
+                            <FiMessageSquare /> จัดการ LINE Bot
+                        </button>
+                        <button
+                            className={`tab-btn ${activeTab === 'automation' ? 'active' : ''}`}
+                            onClick={() => setActiveTab('automation')}
+                        >
+                            <FiSettings /> ตั้งค่าออโตเมชัน
+                        </button>
+                    </div>
+
+                    {/* 4. แนะนำเจ้ามือ (Affiliate) */}
                     <button
                         className={`tab-btn ${activeTab === 'referral' ? 'active' : ''}`}
                         onClick={() => setActiveTab('referral')}
                     >
                         <FiShare2 /> แนะนำเจ้ามือ (Affiliate)
                     </button>
+
+                    {/* 5. โปรไฟล์ */}
+                    <button
+                        className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
+                        onClick={() => setActiveTab('profile')}
+                    >
+                        <FiUser /> โปรไฟล์
+                    </button>
                 </div>
 
                 {/* Tab Content */}
                 <div className="dealer-content">
+                    {/* In-page Sub-Tabs for Members and LINE Bot groups */}
+                    <DealerSubTabsNav
+                        currentGroup={currentNavGroup}
+                        activeTab={activeTab}
+                        onSelectSubTab={(subTab) => setActiveTab(subTab)}
+                        membersCount={members.length + downstreamDealers.filter(d => d.membership_status === 'active').length}
+                        upstreamCount={upstreamDealers.length}
+                    />
                     {activeTab === 'rounds' && (() => {
                         // Filter rounds based on selected tab
                         const openRounds = rounds.filter(r => isRoundOpen(r))
@@ -5960,6 +6011,14 @@ export default function Dealer() {
                     )}
                 </div>
             </div>
+
+            {/* Mobile Floating Bottom Navigation Bar */}
+            <DealerBottomNav
+                activeTab={activeTab}
+                onSelectTab={handleBottomNavSelect}
+                membersCount={members.length + downstreamDealers.filter(d => d.membership_status === 'active').length}
+                upstreamCount={upstreamDealers.length}
+            />
 
             {/* Delete History Item Modal */}
             {deleteHistoryItem && (
