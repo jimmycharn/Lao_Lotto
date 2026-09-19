@@ -15,8 +15,8 @@ describe('DealerBottomNav', () => {
             />
         )
         expect(html).toContain('งวดหวย')
-        expect(html).toContain('สมาชิก')
-        expect(html).toContain('LINE Bot')
+        expect(html).toContain('บุคลากร')
+        expect(html).toContain('ตั้งค่า')
         expect(html).toContain('แนะนำ')
         expect(html).toContain('โปรไฟล์')
     })
@@ -34,7 +34,7 @@ describe('DealerBottomNav', () => {
         expect(html).toContain('งวดหวย')
     })
 
-    it('highlights สมาชิก when activeTab is upstreamDealers', () => {
+    it('highlights บุคลากร when activeTab is upstreamDealers', () => {
         const html = renderToString(
             <DealerBottomNav
                 activeTab="upstreamDealers"
@@ -44,10 +44,10 @@ describe('DealerBottomNav', () => {
             />
         )
         expect(html).toContain('dealer-bottom-nav-item active')
-        expect(html).toContain('สมาชิก')
+        expect(html).toContain('บุคลากร')
     })
 
-    it('displays total members badge count on สมาชิก item', () => {
+    it('displays total members badge count on บุคลากร item', () => {
         const html = renderToString(
             <DealerBottomNav
                 activeTab="rounds"

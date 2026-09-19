@@ -2,7 +2,7 @@ import React from 'react'
 import {
     FiCalendar,
     FiUsers,
-    FiMessageSquare,
+    FiSettings,
     FiShare2,
     FiUser
 } from 'react-icons/fi'
@@ -14,7 +14,7 @@ export default function DealerBottomNav({
     upstreamCount = 0
 }) {
     const isMembersActive = activeTab === 'members' || activeTab === 'upstreamDealers'
-    const isLineBotActive = activeTab === 'lineBot' || activeTab === 'automation'
+    const isSettingsActive = activeTab === 'lineBot' || activeTab === 'automation'
     const totalMembers = (Number(membersCount) || 0) + (Number(upstreamCount) || 0)
 
     const navItems = [
@@ -26,16 +26,16 @@ export default function DealerBottomNav({
         },
         {
             id: 'members',
-            label: 'สมาชิก',
+            label: 'บุคลากร',
             icon: FiUsers,
             isActive: isMembersActive,
             badge: totalMembers > 0 ? totalMembers : null
         },
         {
             id: 'lineBot',
-            label: 'LINE Bot',
-            icon: FiMessageSquare,
-            isActive: isLineBotActive
+            label: 'ตั้งค่า',
+            icon: FiSettings,
+            isActive: isSettingsActive
         },
         {
             id: 'referral',

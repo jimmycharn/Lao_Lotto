@@ -4305,7 +4305,7 @@ export default function Dealer() {
                     </div>
                 )}
 
-                {/* Tabs (Desktop Grouping) */}
+                {/* Tabs (5 Main Sections) */}
                 <div className="dealer-tabs">
                     {/* 1. งวดหวย */}
                     <button
@@ -4315,44 +4315,28 @@ export default function Dealer() {
                         <FiCalendar /> งวดหวย
                     </button>
 
-                    {/* 2. สมาชิก & เจ้ามือตีออก */}
-                    <div className="dealer-tab-group">
-                        <button
-                            className={`tab-btn ${activeTab === 'members' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('members')}
-                        >
-                            <FiUsers /> สมาชิก ({members.length + downstreamDealers.filter(d => d.membership_status === 'active').length})
-                        </button>
-                        <button
-                            className={`tab-btn ${activeTab === 'upstreamDealers' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('upstreamDealers')}
-                        >
-                            <FiSend /> เจ้ามือตีออก ({upstreamDealers.length})
-                        </button>
-                    </div>
+                    {/* 2. บุคลากร (สมาชิก + เจ้ามือตีออก) */}
+                    <button
+                        className={`tab-btn ${currentNavGroup === 'members' ? 'active' : ''}`}
+                        onClick={() => handleBottomNavSelect('members')}
+                    >
+                        <FiUsers /> บุคลากร ({members.length + downstreamDealers.filter(d => d.membership_status === 'active').length + upstreamDealers.length})
+                    </button>
 
-                    {/* 3. จัดการ LINE Bot & ตั้งค่าออโตเมชัน */}
-                    <div className="dealer-tab-group">
-                        <button
-                            className={`tab-btn ${activeTab === 'lineBot' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('lineBot')}
-                        >
-                            <FiMessageSquare /> จัดการ LINE Bot
-                        </button>
-                        <button
-                            className={`tab-btn ${activeTab === 'automation' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('automation')}
-                        >
-                            <FiSettings /> ตั้งค่าออโตเมชัน
-                        </button>
-                    </div>
+                    {/* 3. ตั้งค่า (LINE Bot + ออโตเมชัน) */}
+                    <button
+                        className={`tab-btn ${currentNavGroup === 'lineBot' ? 'active' : ''}`}
+                        onClick={() => handleBottomNavSelect('lineBot')}
+                    >
+                        <FiSettings /> ตั้งค่า
+                    </button>
 
-                    {/* 4. แนะนำเจ้ามือ (Affiliate) */}
+                    {/* 4. แนะนำ */}
                     <button
                         className={`tab-btn ${activeTab === 'referral' ? 'active' : ''}`}
                         onClick={() => setActiveTab('referral')}
                     >
-                        <FiShare2 /> แนะนำเจ้ามือ (Affiliate)
+                        <FiShare2 /> แนะนำ
                     </button>
 
                     {/* 5. โปรไฟล์ */}
