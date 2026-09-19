@@ -80,24 +80,26 @@ export default function Navbar() {
                     <div className="navbar-brand">
                         <Link to="/" className="navbar-logo">
                             <img src="/logo.png" alt="Big Lotto" className="logo-image" />
-                            <span className="logo-text">
-                                <span className="logo-lao">Big</span>
-                                <span className="logo-lotto">Lotto</span>
-                            </span>
-                        </Link>
-                        {user && (
-                            <div className="brand-user-info">
-                                <span className="brand-user-name">
-                                    {profile?.full_name || user.email}
+                            <div className="brand-text-col">
+                                <span className="logo-text">
+                                    <span className="logo-lao">Big</span>
+                                    <span className="logo-lotto">Lotto</span>
                                 </span>
-                                {profile?.role && (
-                                    <span className={`brand-role-badge role-${profile.role}`}>
-                                        {profile.role === 'superadmin' ? 'Admin' :
-                                            profile.role === 'dealer' ? 'เจ้ามือ' : 'สมาชิก'}
-                                    </span>
+                                {user && (
+                                    <div className="brand-user-info">
+                                        <span className="brand-user-name">
+                                            {profile?.full_name || user.email}
+                                        </span>
+                                        {profile?.role && (
+                                            <span className={`brand-role-badge role-${profile.role}`}>
+                                                {profile.role === 'superadmin' ? 'Admin' :
+                                                    profile.role === 'dealer' ? 'เจ้ามือ' : 'สมาชิก'}
+                                            </span>
+                                        )}
+                                    </div>
                                 )}
                             </div>
-                        )}
+                        </Link>
                     </div>
 
                     {/* Desktop Nav */}
@@ -155,24 +157,27 @@ export default function Navbar() {
                         )}
                     </div>
 
-                    {/* Theme Toggle Button */}
-                    <button
-                        className="theme-toggle-btn"
-                        onClick={handleThemeToggle}
-                        aria-label="Toggle theme"
-                        title={isDarkTheme ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
-                    >
-                        {isDarkTheme ? <FiSun /> : <FiMoon />}
-                    </button>
+                    {/* Right Actions: Theme Toggle & Mobile Menu */}
+                    <div className="navbar-actions">
+                        {/* Theme Toggle Button */}
+                        <button
+                            className="theme-toggle-btn"
+                            onClick={handleThemeToggle}
+                            aria-label="Toggle theme"
+                            title={isDarkTheme ? 'เปลี่ยนเป็นธีมสว่าง' : 'เปลี่ยนเป็นธีมมืด'}
+                        >
+                            {isDarkTheme ? <FiSun /> : <FiMoon />}
+                        </button>
 
-                    {/* Mobile Menu Button */}
-                    <button
-                        className="mobile-menu-btn"
-                        onClick={() => setIsOpen(!isOpen)}
-                        aria-label="Toggle menu"
-                    >
-                        {isOpen ? <FiX /> : <FiMenu />}
-                    </button>
+                        {/* Mobile Menu Button */}
+                        <button
+                            className="mobile-menu-btn"
+                            onClick={() => setIsOpen(!isOpen)}
+                            aria-label="Toggle menu"
+                        >
+                            {isOpen ? <FiX /> : <FiMenu />}
+                        </button>
+                    </div>
                 </div>
             </nav>
 

@@ -18,25 +18,31 @@
 /* Logo and Brand */
 .navbar-brand {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
 }
 
 .navbar-logo {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.6rem;
     text-decoration: none;
     font-size: 1.5rem;
     font-weight: 700;
 }
 
+.brand-text-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+}
+
 .brand-user-info {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    margin-left: 2.5rem;
-    margin-top: -0.25rem;
+    gap: 0.4rem;
+    margin-left: 0;
+    margin-top: 1px;
 }
 
 .brand-user-name {
@@ -172,12 +178,19 @@
     gap: 0.5rem;
 }
 
+/* Navbar Right Actions */
+.navbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
 /* Theme Toggle Button */
 .theme-toggle-btn {
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: transparent;
+    border: none;
     color: var(--color-primary);
-    font-size: 1.25rem;
+    font-size: 1.3rem;
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 8px;
@@ -190,7 +203,7 @@
 }
 
 .theme-toggle-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
     transform: scale(1.05);
 }
 
@@ -412,12 +425,12 @@ html.theme-light .nav-link.active {
 /* Theme Toggle Button - Light Theme */
 [data-theme="light"] .theme-toggle-btn,
 html.theme-light .theme-toggle-btn {
-    background: rgba(0, 0, 0, 0.05) !important;
-    border: 1px solid rgba(0, 0, 0, 0.15) !important;
+    background: transparent !important;
+    border: none !important;
     color: var(--color-primary) !important;
 }
 
 [data-theme="light"] .theme-toggle-btn:hover,
 html.theme-light .theme-toggle-btn:hover {
-    background: rgba(0, 0, 0, 0.1) !important;
+    background: rgba(0, 0, 0, 0.06) !important;
 }

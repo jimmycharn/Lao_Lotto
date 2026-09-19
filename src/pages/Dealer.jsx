@@ -567,11 +567,29 @@ export default function Dealer() {
 
     async function confirmDeleteHistoryRecord() {
         if (!deleteHistoryItem) return
+        const targetItem = deleteHistoryItem
+        const historyId = targetItem.id
+        const roundId = targetItem.round_id || targetItem.id
+        const previousRoundHistory = roundHistory
+        const previousSettlementOverview = settlementOverview
+
+        // Optimistic UI update: Remove from history list immediately and close modal without lag
+        setRoundHistory(prev => prev.filter(h => h.id !== historyId && h.round_id !== roundId))
+        setSettlementOverview(prev => ({
+            ...prev,
+            userHistories: prev.userHistories?.filter(uh => uh.round_id !== roundId && uh.round_id !== historyId) || [],
+            memberPayments: prev.memberPayments?.filter(mp => mp.round_id !== roundId && mp.round_id !== historyId) || [],
+            upstreamPayments: prev.upstreamPayments?.filter(up => up.round_id !== roundId && up.round_id !== historyId) || [],
+            transfers: prev.transfers?.filter(t => t.round_id !== roundId && t.round_id !== historyId) || []
+        }))
+        if (expandedHistoryId === historyId || expandedHistoryId === roundId) {
+            setExpandedHistoryId(null)
+        }
+        setDeleteHistoryItem(null)
+        toast.success('ลบประวัติงวดหวยเรียบร้อยแล้ว')
+
         setDeletingHistory(true)
         try {
-            const historyId = deleteHistoryItem.id
-            const roundId = deleteHistoryItem.round_id || deleteHistoryItem.id
-
             // 1. Try atomic RPC delete first
             try {
                 await supabase.rpc('delete_dealer_round_history', {
@@ -614,15 +632,12 @@ export default function Dealer() {
                 .delete()
                 .eq('round_id', roundId)
 
-            setRoundHistory(prev => prev.filter(h => h.id !== historyId && h.round_id !== roundId))
-            if (expandedHistoryId === historyId || expandedHistoryId === roundId) {
-                setExpandedHistoryId(null)
-            }
-            toast.success('ลบประวัติงวดหวยเรียบร้อยแล้ว')
-            setDeleteHistoryItem(null)
-            fetchRoundHistory()
+            // Do NOT call fetchRoundHistory() here, as it triggers historyLoading = true and a full-screen reload
         } catch (err) {
             console.error('Error deleting history record:', err)
+            // Rollback on failure
+            setRoundHistory(previousRoundHistory)
+            setSettlementOverview(previousSettlementOverview)
             toast.error('เกิดข้อผิดพลาดในการลบประวัติ: ' + (err.message || ''))
         } finally {
             setDeletingHistory(false)
@@ -1691,9 +1706,9 @@ export default function Dealer() {
 
     // Helper to check if a round is still open (between open_time and close_time)
     const isRoundOpen = (round) => {
-        // If status is announced, it's definitely closed
-        if (round.status === 'announced') return false
-        // Check time-based open status (ignore 'closed' status, use time instead)
+        // If status is announced or closed, it's definitely closed
+        if (round.status === 'announced' || round.status === 'closed') return false
+        // Check time-based open status
         const now = new Date()
         const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
@@ -3710,9 +3725,17 @@ export default function Dealer() {
         }
     }
 
-    // Close round
+    // Close round - Instant Optimistic UI Update
     async function handleCloseRound(roundId) {
         if (!confirm('ต้องการปิดงวดนี้?')) return
+
+        const previousRounds = rounds
+        const previousSelectedRound = selectedRound
+
+        // Optimistic UI update: Update state immediately (0ms delay, no screen freeze)
+        setRounds(prev => prev.map(r => r.id === roundId ? { ...r, status: 'closed' } : r))
+        setSelectedRound(prev => prev?.id === roundId ? { ...prev, status: 'closed' } : prev)
+        toast.success('ปิดงวดสำเร็จ')
 
         try {
             const { error } = await supabase
@@ -3720,8 +3743,16 @@ export default function Dealer() {
                 .update({ status: 'closed' })
                 .eq('id', roundId)
 
-            if (!error) {
-                // Finalize credit deduction - try immediate first, then regular
+            if (error) {
+                // Rollback if DB update fails
+                setRounds(previousRounds)
+                setSelectedRound(previousSelectedRound)
+                toast.error('เกิดข้อผิดพลาดในการปิดงวด: ' + error.message)
+                return
+            }
+
+            // Finalize credit deduction and refresh credit in background without blocking UI
+            (async () => {
                 try {
                     const { data: immediateBillingResult, error: immediateBillingError } = await supabase
                         .rpc('create_immediate_billing_record', { 
@@ -3744,18 +3775,30 @@ export default function Dealer() {
                 } catch (billingErr) {
                     console.log('Credit system not configured:', billingErr)
                 }
-                
-                fetchData()
                 fetchDealerCredit()
-            }
+            })()
         } catch (error) {
             console.error('Error:', error)
+            setRounds(previousRounds)
+            setSelectedRound(previousSelectedRound)
+            toast.error('เกิดข้อผิดพลาดในการปิดงวด')
         }
     }
 
-    // Delete round - with history preservation
+    // Delete round - Instant Optimistic UI Update with background archiving
     async function handleDeleteRound(roundId, roundStatus) {
         if (!confirm('ต้องการลบงวดนี้?')) return
+
+        const targetRound = rounds.find(r => r.id === roundId)
+        const previousRounds = rounds
+        const previousSelectedRound = selectedRound
+        const previousExpandedRoundId = expandedRoundId
+
+        // Optimistic UI update: Remove round immediately from screen (0ms delay, no screen freeze)
+        setRounds(prev => prev.filter(r => r.id !== roundId))
+        setSelectedRound(prev => prev?.id === roundId ? null : prev)
+        setExpandedRoundId(prev === roundId ? null : prev)
+        toast.success('ลบงวดสำเร็จ')
 
         try {
             const { data: roundData } = await supabase
@@ -3764,8 +3807,8 @@ export default function Dealer() {
                 .eq('id', roundId)
                 .single()
 
-            if (!roundData) {
-                toast.error('ไม่พบข้อมูลงวด')
+            const actualRoundData = roundData || targetRound
+            if (!actualRoundData) {
                 return
             }
 
@@ -3775,13 +3818,14 @@ export default function Dealer() {
                     .select('*')
                     .eq('round_id', roundId)
                     .eq('is_deleted', false)
+                    .order('created_at', { ascending: false })
                     .range(from, to)
             )
 
             const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
 
-            const shouldSaveHistory = (roundData.status === 'closed' || roundData.status === 'announced') && 
-                                      roundData.is_result_announced === true && 
+            const shouldSaveHistory = (actualRoundData.status === 'closed' || actualRoundData.status === 'announced') && 
+                                      actualRoundData.is_result_announced === true && 
                                       totalAmount > 0
 
             if (shouldSaveHistory) {
@@ -3802,28 +3846,30 @@ export default function Dealer() {
 
                 const totalEntries = submissions?.length || 0
                 const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
-                const setPrice = roundData?.set_prices?.['4_top'] || 120
+                const setPrice = actualRoundData?.set_prices?.['4_top'] || 120
                 const totalPayout = submissions?.reduce((sum, s) => {
-                    return sum + getExpectedSubmissionPayout(s, roundData.lottery_type, userSettingsMap, setPrice)
+                    return sum + getExpectedSubmissionPayout(s, actualRoundData.lottery_type, userSettingsMap, setPrice)
                 }, 0) || 0
 
                 const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
-                const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, roundData.lottery_type), 0) || 0
+                const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, actualRoundData.lottery_type), 0) || 0
                 const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
 
                 const memberProfit = totalAmount - totalCommission - totalPayout
                 const upstreamProfit = -transferredAmount + upstreamCommission + upstreamWinnings
                 const profit = memberProfit + upstreamProfit
 
+                const roundCloseDate = getRoundCloseDate(actualRoundData) || actualRoundData.close_time?.split('T')[0] || actualRoundData.round_date || actualRoundData.open_time?.split('T')[0]
+
                 const { error: historyError } = await supabase
                     .from('round_history')
                     .insert({
                         dealer_id: user.id,
                         round_id: roundId,
-                        lottery_type: roundData.lottery_type,
-                        round_date: roundData.close_time?.split('T')[0] || roundData.round_date || roundData.open_time?.split('T')[0],
-                        open_time: roundData.open_time,
-                        close_time: roundData.close_time,
+                        lottery_type: actualRoundData.lottery_type,
+                        round_date: roundCloseDate,
+                        open_time: actualRoundData.open_time,
+                        close_time: actualRoundData.close_time,
                         total_entries: totalEntries,
                         total_amount: totalAmount,
                         total_commission: totalCommission,
@@ -3832,7 +3878,7 @@ export default function Dealer() {
                         upstream_commission: upstreamCommission,
                         upstream_winnings: upstreamWinnings,
                         profit: profit,
-                        winning_numbers: roundData.winning_numbers
+                        winning_numbers: actualRoundData.winning_numbers
                     })
 
                 if (historyError) {
@@ -3852,7 +3898,7 @@ export default function Dealer() {
                     userSubmissions[s.user_id].entries += 1
                     userSubmissions[s.user_id].amount += s.amount || 0
                     userSubmissions[s.user_id].commission += s.commission_amount || 0
-                    const winAmt = getExpectedSubmissionPayout(s, roundData.lottery_type, userSettingsMap, setPrice)
+                    const winAmt = getExpectedSubmissionPayout(s, actualRoundData.lottery_type, userSettingsMap, setPrice)
                     userSubmissions[s.user_id].winnings += winAmt
                 })
 
@@ -3860,14 +3906,14 @@ export default function Dealer() {
                     user_id: userId,
                     dealer_id: user.id,
                     round_id: roundId,
-                    lottery_type: roundData.lottery_type,
-                    round_date: roundData.close_time?.split('T')[0] || roundData.round_date || roundData.open_time?.split('T')[0],
+                    lottery_type: actualRoundData.lottery_type,
+                    round_date: roundCloseDate,
                     total_entries: data.entries,
                     total_amount: data.amount,
                     total_commission: data.commission,
                     total_winnings: data.winnings,
                     profit_loss: data.winnings + data.commission - data.amount,
-                    winning_numbers: roundData.winning_numbers
+                    winning_numbers: actualRoundData.winning_numbers
                 }))
 
                 if (userHistories.length > 0) {
@@ -3904,20 +3950,27 @@ export default function Dealer() {
                 }
             }
 
-            const { error } = await supabase
+            const { error: deleteError } = await supabase
                 .from('lottery_rounds')
                 .delete()
                 .eq('id', roundId)
 
-            if (!error) {
-                setSelectedRound(null)
-                setExpandedRoundId(null)
-                fetchData()
-                fetchDealerCredit()
-                toast.success('ลบงวดสำเร็จ - บันทึกประวัติแล้ว')
+            if (deleteError) {
+                // Rollback if DB delete fails
+                setRounds(previousRounds)
+                setSelectedRound(previousSelectedRound)
+                setExpandedRoundId(previousExpandedRoundId)
+                toast.error('เกิดข้อผิดพลาดในการลบงวด: ' + deleteError.message)
+                return
             }
+
+            // Refresh dealer credit in background
+            fetchDealerCredit()
         } catch (error) {
             console.error('Error:', error)
+            setRounds(previousRounds)
+            setSelectedRound(previousSelectedRound)
+            setExpandedRoundId(previousExpandedRoundId)
             toast.error('เกิดข้อผิดพลาดในการลบงวด')
         }
     }
@@ -4108,8 +4161,11 @@ export default function Dealer() {
 
             if (error) throw error
             
+            // Update local state smoothly without full page reload
+            const updatedCloseTime = formatLocalDateTime(newCloseTime)
+            setRounds(prev => prev.map(r => r.id === round.id ? { ...r, close_time: updatedCloseTime, status: 'open' } : r))
+            setSelectedRound(prev => prev?.id === round.id ? { ...prev, close_time: updatedCloseTime, status: 'open' } : prev)
             toast.success('เปิดรับงวดหวยใหม่แล้ว (ถึง 23:59 วันนี้)')
-            fetchData()
         } catch (error) {
             console.error('Error reopening round:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
