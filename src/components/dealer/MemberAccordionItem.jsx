@@ -189,10 +189,30 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                             {isDealer ? <FiSend /> : (member.full_name ? member.full_name.charAt(0).toUpperCase() : <FiUsers />)}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                                 <span className="member-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
                                     {member.full_name || 'ไม่ระบุชื่อ'}
                                 </span>
+                                {(member.member_code || (member.id ? String(member.id).slice(0, 5) : '')) && (
+                                    <span
+                                        className="member-id-badge"
+                                        style={{
+                                            fontSize: '0.75rem',
+                                            color: 'var(--color-primary, #eab308)',
+                                            background: 'rgba(234, 179, 8, 0.12)',
+                                            border: '1px solid rgba(234, 179, 8, 0.25)',
+                                            padding: '0.1rem 0.45rem',
+                                            borderRadius: '6px',
+                                            fontWeight: '600',
+                                            letterSpacing: '0.5px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center'
+                                        }}
+                                        title={`รหัสสมาชิก: ${member.member_code || String(member.id).slice(0, 5)}`}
+                                    >
+                                        ID: {member.member_code || String(member.id).slice(0, 5)}
+                                    </span>
+                                )}
                                 {isDealer && (
                                     <span style={{
                                         background: member.id === user?.id ? 'var(--color-warning)' : 'var(--color-info)',
@@ -455,6 +475,12 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                         {activeTab === 'info' && (
                             <div className="member-info-view" style={{ animation: 'fadeIn 0.3s ease' }}>
                                 <div className="info-grid member-info-grid">
+                                    <div className="info-item">
+                                        <label className="info-item-label">รหัสสมาชิก (ID)</label>
+                                        <div className="info-item-value" style={{ fontWeight: '600', color: 'var(--color-primary, #eab308)' }}>
+                                            {member.member_code || (member.id ? String(member.id).slice(0, 5) : '-')}
+                                        </div>
+                                    </div>
                                     <div className="info-item">
                                         <label className="info-item-label">เบอร์โทรศัพท์</label>
                                         <div className="info-item-value">{member.phone || '-'}</div>

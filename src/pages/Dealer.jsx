@@ -2124,7 +2124,8 @@ export default function Dealer() {
                         line_user_id,
                         bank_name,
                         bank_account,
-                        bank_account_name
+                        bank_account_name,
+                        member_code
                     )
                 `)
                 .eq('dealer_id', user.id)
@@ -2216,6 +2217,7 @@ export default function Dealer() {
                 email: m.email,
                 full_name: m.full_name,
                 phone: m.phone,
+                member_code: m.member_code,
                 created_at: m.created_at,
                 membership_id: m.membership_id,
                 membership_status: m.membership_status,
@@ -2263,7 +2265,7 @@ export default function Dealer() {
                     .select(`
                         *,
                         dealer_profile:dealer_id (
-                            id, full_name, email, phone, created_at
+                            id, full_name, email, phone, created_at, member_code
                         )
                     `)
                     .eq('upstream_dealer_id', user.id)
@@ -2281,6 +2283,7 @@ export default function Dealer() {
                             email: d.dealer_profile?.email,
                             full_name: d.dealer_profile?.full_name || d.upstream_name,
                             phone: d.dealer_profile?.phone,
+                            member_code: d.dealer_profile?.member_code,
                             created_at: d.dealer_profile?.created_at,
                             membership_id: d.id,
                             membership_status: d.status || (d.is_blocked ? 'blocked' : 'active'),
@@ -5683,7 +5686,22 @@ export default function Dealer() {
                                                 gap: '0.5rem'
                                             }}>
                                                 <div className="member-info">
-                                                    <div style={{ fontWeight: 500 }}>{member.full_name || 'ไม่มีชื่อ'}</div>
+                                                    <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                        <span>{member.full_name || 'ไม่มีชื่อ'}</span>
+                                                        {(member.member_code || (member.id ? String(member.id).slice(0, 5) : '')) && (
+                                                            <span style={{
+                                                                fontSize: '0.75rem',
+                                                                color: 'var(--color-primary, #eab308)',
+                                                                background: 'rgba(234, 179, 8, 0.12)',
+                                                                border: '1px solid rgba(234, 179, 8, 0.25)',
+                                                                padding: '0.05rem 0.4rem',
+                                                                borderRadius: '4px',
+                                                                fontWeight: '600'
+                                                            }}>
+                                                                ID: {member.member_code || String(member.id).slice(0, 5)}
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{member.email}</div>
                                                 </div>
                                                 <div className="member-actions" style={{ display: 'flex', gap: '0.5rem' }}>
@@ -5794,7 +5812,7 @@ export default function Dealer() {
                                     <input
                                         type="text"
                                         className="form-input"
-                                        placeholder="ค้นหาชื่อ, เบอร์โทร, อีเมล, LINE User ID..."
+                                        placeholder="ค้นหาชื่อ, รหัส ID, เบอร์โทร, อีเมล, LINE User ID..."
                                         value={memberSearchQuery}
                                         onChange={(e) => setMemberSearchQuery(e.target.value)}
                                         style={{
@@ -5854,9 +5872,22 @@ export default function Dealer() {
                                                 }}>
                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
                                                         <div>
-                                                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                                                                 <FiSend style={{ color: 'var(--color-info)' }} />
-                                                                {dealer.full_name || 'ไม่มีชื่อ'}
+                                                                <span>{dealer.full_name || 'ไม่มีชื่อ'}</span>
+                                                                {(dealer.member_code || (dealer.id ? String(dealer.id).slice(0, 5) : '')) && (
+                                                                    <span style={{
+                                                                        fontSize: '0.75rem',
+                                                                        color: 'var(--color-primary, #eab308)',
+                                                                        background: 'rgba(234, 179, 8, 0.12)',
+                                                                        border: '1px solid rgba(234, 179, 8, 0.25)',
+                                                                        padding: '0.05rem 0.4rem',
+                                                                        borderRadius: '4px',
+                                                                        fontWeight: '600'
+                                                                    }}>
+                                                                        ID: {dealer.member_code || String(dealer.id).slice(0, 5)}
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                             <div style={{ fontSize: '0.8rem', opacity: 0.7 }}>{dealer.email}</div>
                                                             <div style={{ fontSize: '0.75rem', opacity: 0.5, marginTop: '0.25rem' }}>
@@ -5902,7 +5933,9 @@ export default function Dealer() {
                                         (m.email || '').toLowerCase().includes(q) ||
                                         (m.phone || '').toLowerCase().includes(q) ||
                                         (m.line_user_id || '').toLowerCase().includes(q) ||
-                                        (m.bank_account || '').toLowerCase().includes(q)
+                                        (m.bank_account || '').toLowerCase().includes(q) ||
+                                        (m.member_code || '').toLowerCase().includes(q) ||
+                                        String(m.id || '').toLowerCase().includes(q)
                                     )
                                 }
 
@@ -5989,8 +6022,21 @@ export default function Dealer() {
                                                 }}>
                                                     <div className="member-info" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                         <div>
-                                                            <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                {member.full_name || 'ไม่มีชื่อ'}
+                                                            <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                                <span>{member.full_name || 'ไม่มีชื่อ'}</span>
+                                                                {(member.member_code || (member.id ? String(member.id).slice(0, 5) : '')) && (
+                                                                    <span style={{
+                                                                        fontSize: '0.75rem',
+                                                                        color: 'var(--color-primary, #eab308)',
+                                                                        background: 'rgba(234, 179, 8, 0.12)',
+                                                                        border: '1px solid rgba(234, 179, 8, 0.25)',
+                                                                        padding: '0.05rem 0.4rem',
+                                                                        borderRadius: '4px',
+                                                                        fontWeight: '600'
+                                                                    }}>
+                                                                        ID: {member.member_code || String(member.id).slice(0, 5)}
+                                                                    </span>
+                                                                )}
                                                                 {member.is_dealer && (
                                                                     <span style={{
                                                                         background: 'var(--color-info)',
