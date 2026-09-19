@@ -510,17 +510,6 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                         </div>
                                     </div>
                                 )}
-                                {!isLinked && (
-                                    <div className="info-item">
-                                        <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>สถานะการใช้งาน</label>
-                                        <div style={{ fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '0.4rem', color: isActive ? '#10b981' : 'var(--color-text-muted)' }}>
-                                            {isActive
-                                                ? <><FiCheck size={14} /> <span style={{ color: '#10b981', fontWeight: '600' }}>ใช้ตีออกอัตโนมัติ</span><span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>(Bot จะตีออกมาที่นี่)</span></>
-                                                : <><FiSlash size={14} /> ไม่ได้ใช้งาน</>
-                                            }
-                                        </div>
-                                    </div>
-                                )}
                                 {dealer.notes && (
                                     <div className="info-item" style={{ gridColumn: '1 / -1' }}>
                                         <label style={{ display: 'block', color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '0.25rem' }}>หมายเหตุ</label>
@@ -547,15 +536,6 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                                         style={{ background: '#10b981', borderColor: '#10b981' }}
                                     >
                                         <FiStar /> ตั้งเป็นเจ้ามือหลัก
-                                    </button>
-                                )}
-                                {!isLinked && isActive && (
-                                    <button
-                                        className="btn btn-outline btn-sm"
-                                        disabled
-                                        style={{ color: '#10b981', borderColor: '#10b981', cursor: 'default' }}
-                                    >
-                                        <FiCheck /> ตีออกอัตโนมัติ (เป็นหลักอยู่แล้ว)
                                     </button>
                                 )}
                                 {!isLinked && (
