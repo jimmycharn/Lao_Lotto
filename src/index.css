@@ -10,6 +10,10 @@
 
 /* CSS Variables */
 :root {
+  color-scheme: dark;
+  scrollbar-color: rgba(255, 255, 255, 0.2) var(--bg-dark);
+  scrollbar-width: thin;
+
   /* Colors - Golden Lotto Theme */
   --color-primary: #d4af37;
   --color-primary-light: #f4d03f;
@@ -77,6 +81,10 @@
    ======================================== */
 :root.theme-light,
 [data-theme="light"] {
+  color-scheme: light;
+  scrollbar-color: rgba(0, 0, 0, 0.2) var(--bg-dark);
+  scrollbar-width: thin;
+
   /* Colors - Light Theme */
   --color-primary: #b8960c;
   --color-primary-light: #d4af37;
@@ -139,15 +147,22 @@ html {
   font-size: 16px;
   scroll-behavior: smooth;
   overflow-y: scroll;
+  overflow-x: clip;
+  max-width: 100vw;
+  background-color: var(--bg-dark);
 }
 
 body {
   font-family: var(--font-family);
   background: var(--bg-dark);
+  background-color: var(--bg-dark);
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: clip;
+  max-width: 100vw;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 /* Background Pattern */
@@ -573,9 +588,20 @@ select.form-input option:checked {
   }
 }
 
+/* Suppress root horizontal scrollbar completely across mobile & desktop */
+html::-webkit-scrollbar:horizontal,
+body::-webkit-scrollbar:horizontal,
+#root::-webkit-scrollbar:horizontal {
+  display: none !important;
+  height: 0 !important;
+  width: 0 !important;
+  background: transparent !important;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -583,12 +609,17 @@ select.form-input option:checked {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--bg-card);
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-primary);
+}
+
+:root.theme-light ::-webkit-scrollbar-thumb,
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
 }
 
 /* Responsive */

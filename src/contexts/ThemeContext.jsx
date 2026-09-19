@@ -109,6 +109,15 @@ export function ThemeProvider({ children }) {
     
     // Also set data attribute for CSS selectors
     root.setAttribute('data-theme', currentTheme)
+
+    // Update meta theme-color tag dynamically
+    let metaThemeColor = document.querySelector('meta[name="theme-color"]')
+    if (!metaThemeColor) {
+      metaThemeColor = document.createElement('meta')
+      metaThemeColor.name = 'theme-color'
+      document.head.appendChild(metaThemeColor)
+    }
+    metaThemeColor.setAttribute('content', currentTheme === THEMES.LIGHT ? '#f0f2f5' : '#0f0f1a')
   }, [currentTheme])
 
   const value = {

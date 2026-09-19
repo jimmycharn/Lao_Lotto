@@ -3,7 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f0f1a" id="theme-color-meta" />
+    <meta name="color-scheme" content="dark light" />
     <meta name="description" content="Big Lotto - ซื้อหวยออนไลน์ ง่าย สะดวก ปลอดภัย มีผลหวยทุกงวด จ่ายจริง จ่ายเร็ว" />
     <meta name="keywords" content="Big Lotto, หวยออนไลน์, ซื้อหวย, ผลหวย, เลขเด็ด" />
     <title>Big Lotto - ระบบหวยออนไลน์</title>
@@ -42,6 +44,10 @@
         var html = document.documentElement;
         html.className = 'theme-' + theme;
         html.setAttribute('data-theme', theme);
+        var themeMeta = document.getElementById('theme-color-meta');
+        if (themeMeta) {
+          themeMeta.setAttribute('content', theme === 'light' ? '#f0f2f5' : '#0f0f1a');
+        }
         
         // Show body when DOM is ready
         if (document.readyState === 'loading') {
