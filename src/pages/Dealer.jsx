@@ -291,6 +291,7 @@ export default function Dealer() {
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
     const [loading, setLoading] = useState(true)
     const [selectedRound, setSelectedRound] = useState(null)
+    const [syncingRoundIds, setSyncingRoundIds] = useState({})
 
     // Modal states
     const [showCreateModal, setShowCreateModal] = useState(false)
@@ -321,6 +322,9 @@ export default function Dealer() {
         }
     }, [profile?.allowed_lottery_types])
     const [roundsTab, setRoundsTab] = useState('open') // 'open' | 'closed' | 'history'
+    useEffect(() => {
+        setSyncingRoundIds({})
+    }, [roundsTab])
     const [roundHistory, setRoundHistory] = useState([])
     const [historyLoading, setHistoryLoading] = useState(false)
     const [historyMonthFilter, setHistoryMonthFilter] = useState('all')
@@ -586,53 +590,25 @@ export default function Dealer() {
             setExpandedHistoryId(null)
         }
         setDeleteHistoryItem(null)
-        toast.success('ลบประวัติงวดหวยเรียบร้อยแล้ว')
 
         setDeletingHistory(true)
         try {
-            // 1. Try atomic RPC delete first
-            try {
-                await supabase.rpc('delete_dealer_round_history', {
-                    p_round_id: roundId,
-                    p_history_id: historyId
-                })
-            } catch (rpcErr) {
-                console.warn('RPC delete_dealer_round_history note:', rpcErr)
+            console.log('[confirmDeleteHistoryRecord] Calling delete_dealer_round_history:', { roundId, historyId, dealerId: user?.id })
+            const { data: rpcResult, error: rpcErr } = await supabase.rpc('delete_dealer_round_history', {
+                p_round_id: roundId,
+                p_history_id: historyId,
+                p_dealer_id: user?.id
+            })
+
+            if (rpcErr || !rpcResult?.success) {
+                console.error('[confirmDeleteHistoryRecord] RPC failed:', rpcErr || rpcResult)
+                setRoundHistory(previousRoundHistory)
+                setSettlementOverview(previousSettlementOverview)
+                toast.error('เกิดข้อผิดพลาดในการลบประวัติ: ' + (rpcErr?.message || rpcResult?.message || 'ไม่สามารถลบได้'))
+                return
             }
 
-            // 2. Direct delete from round_history
-            const { error: err1 } = await supabase
-                .from('round_history')
-                .delete()
-                .or(`id.eq.${historyId},round_id.eq.${roundId}`)
-
-            if (err1) console.warn('round_history delete note:', err1)
-
-            // 3. Direct delete from user_round_history
-            await supabase
-                .from('user_round_history')
-                .delete()
-                .eq('round_id', roundId)
-
-            // 4. Direct delete from lottery_rounds if active closed/announced round
-            await supabase
-                .from('lottery_rounds')
-                .delete()
-                .eq('id', roundId)
-
-            // 5. Delete associated member settlement payments
-            await supabase
-                .from('member_round_payments')
-                .delete()
-                .eq('round_id', roundId)
-
-            // 6. Delete associated upstream settlement payments
-            await supabase
-                .from('upstream_round_payments')
-                .delete()
-                .eq('round_id', roundId)
-
-            // Do NOT call fetchRoundHistory() here, as it triggers historyLoading = true and a full-screen reload
+            toast.success('ลบประวัติงวดหวยเรียบร้อยแล้ว')
         } catch (err) {
             console.error('Error deleting history record:', err)
             // Rollback on failure
@@ -2401,9 +2377,9 @@ export default function Dealer() {
     }
 
     // Fetch round history for dealer (both archived round_history and active closed/announced rounds)
-    async function fetchRoundHistory() {
+    async function fetchRoundHistory(isBackground = false) {
         if (!user?.id) return
-        setHistoryLoading(true)
+        if (!isBackground) setHistoryLoading(true)
         try {
             // 1. Fetch all round history and settlement overview data in parallel with full pagination
             const [
@@ -2715,7 +2691,7 @@ export default function Dealer() {
         } catch (error) {
             console.error('Error fetching round history:', error)
         } finally {
-            setHistoryLoading(false)
+            if (!isBackground) setHistoryLoading(false)
         }
     }
     
@@ -3794,154 +3770,25 @@ export default function Dealer() {
         }
     }
 
-    // Delete round - Instant Optimistic UI Update with background archiving
+    // Delete round - Instant Optimistic UI Update with secure RPC and background archiving
     async function handleDeleteRound(roundId, roundStatus) {
         if (!confirm('ต้องการลบงวดนี้?')) return
 
-        const targetRound = rounds.find(r => r.id === roundId)
-        const previousRounds = rounds
+        const previousRounds = [...rounds]
         const previousSelectedRound = selectedRound
         const previousExpandedRoundId = expandedRoundId
 
         // Optimistic UI update: Remove round immediately from screen (0ms delay, no screen freeze)
         setRounds(prev => prev.filter(r => r.id !== roundId))
         setSelectedRound(prev => prev?.id === roundId ? null : prev)
-        setExpandedRoundId(prev === roundId ? null : prev)
-        toast.success('ลบงวดสำเร็จ')
-
+        setExpandedRoundId(prev => prev === roundId ? null : prev)
         try {
-            const { data: roundData } = await supabase
-                .from('lottery_rounds')
-                .select('*')
-                .eq('id', roundId)
-                .single()
-
-            const actualRoundData = roundData || targetRound
-            if (!actualRoundData) {
-                return
-            }
-
-            const { data: submissions } = await fetchAllRows(
-                (from, to) => supabase
-                    .from('submissions')
-                    .select('*')
-                    .eq('round_id', roundId)
-                    .eq('is_deleted', false)
-                    .order('created_at', { ascending: false })
-                    .range(from, to)
-            )
-
-            const totalAmount = submissions?.reduce((sum, s) => sum + (s.amount || 0), 0) || 0
-
-            const shouldSaveHistory = (actualRoundData.status === 'closed' || actualRoundData.status === 'announced') && 
-                                      actualRoundData.is_result_announced === true && 
-                                      totalAmount > 0
-
-            if (shouldSaveHistory) {
-                const { data: dealerUserSettings } = await supabase
-                    .from('user_settings')
-                    .select('*')
-                    .eq('dealer_id', user.id)
-
-                const userSettingsMap = {}
-                if (dealerUserSettings) {
-                    dealerUserSettings.forEach(s => { userSettingsMap[s.user_id] = s })
-                }
-
-                const { data: transfers } = await supabase
-                    .from('bet_transfers')
-                    .select('*')
-                    .eq('round_id', roundId)
-
-                const totalEntries = submissions?.length || 0
-                const totalCommission = submissions?.reduce((sum, s) => sum + (s.commission_amount || 0), 0) || 0
-                const setPrice = actualRoundData?.set_prices?.['4_top'] || 120
-                const totalPayout = submissions?.reduce((sum, s) => {
-                    return sum + getExpectedSubmissionPayout(s, actualRoundData.lottery_type, userSettingsMap, setPrice)
-                }, 0) || 0
-
-                const transferredAmount = transfers?.reduce((sum, t) => sum + (t.amount || 0), 0) || 0
-                const upstreamCommission = transfers?.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, actualRoundData.lottery_type), 0) || 0
-                const upstreamWinnings = transfers?.reduce((sum, t) => sum + (t.winnings || 0), 0) || 0
-
-                const memberProfit = totalAmount - totalCommission - totalPayout
-                const upstreamProfit = -transferredAmount + upstreamCommission + upstreamWinnings
-                const profit = memberProfit + upstreamProfit
-
-                const roundCloseDate = getRoundCloseDate(actualRoundData) || actualRoundData.close_time?.split('T')[0] || actualRoundData.round_date || actualRoundData.open_time?.split('T')[0]
-
-                const { error: historyError } = await supabase
-                    .from('round_history')
-                    .insert({
-                        dealer_id: user.id,
-                        round_id: roundId,
-                        lottery_type: actualRoundData.lottery_type,
-                        round_date: roundCloseDate,
-                        open_time: actualRoundData.open_time,
-                        close_time: actualRoundData.close_time,
-                        total_entries: totalEntries,
-                        total_amount: totalAmount,
-                        total_commission: totalCommission,
-                        total_payout: totalPayout,
-                        transferred_amount: transferredAmount,
-                        upstream_commission: upstreamCommission,
-                        upstream_winnings: upstreamWinnings,
-                        profit: profit,
-                        winning_numbers: actualRoundData.winning_numbers
-                    })
-
-                if (historyError) {
-                    console.error('Error saving dealer history:', historyError)
-                }
-
-                const userSubmissions = {}
-                submissions?.forEach(s => {
-                    if (!userSubmissions[s.user_id]) {
-                        userSubmissions[s.user_id] = {
-                            entries: 0,
-                            amount: 0,
-                            commission: 0,
-                            winnings: 0
-                        }
-                    }
-                    userSubmissions[s.user_id].entries += 1
-                    userSubmissions[s.user_id].amount += s.amount || 0
-                    userSubmissions[s.user_id].commission += s.commission_amount || 0
-                    const winAmt = getExpectedSubmissionPayout(s, actualRoundData.lottery_type, userSettingsMap, setPrice)
-                    userSubmissions[s.user_id].winnings += winAmt
-                })
-
-                const userHistories = Object.entries(userSubmissions).map(([userId, data]) => ({
-                    user_id: userId,
-                    dealer_id: user.id,
-                    round_id: roundId,
-                    lottery_type: actualRoundData.lottery_type,
-                    round_date: roundCloseDate,
-                    total_entries: data.entries,
-                    total_amount: data.amount,
-                    total_commission: data.commission,
-                    total_winnings: data.winnings,
-                    profit_loss: data.winnings + data.commission - data.amount,
-                    winning_numbers: actualRoundData.winning_numbers
-                }))
-
-                if (userHistories.length > 0) {
-                    const { error: userHistoryError } = await supabase
-                        .from('user_round_history')
-                        .insert(userHistories)
-
-                    if (userHistoryError) {
-                        console.error('Error saving user histories:', userHistoryError)
-                    }
-                }
-            }
-
             if (roundStatus === 'open') {
                 try {
                     const { data: immediateBillingResult, error: immediateBillingError } = await supabase
                         .rpc('create_immediate_billing_record', { 
                             p_round_id: roundId,
-                            p_dealer_id: user.id
+                            p_dealer_id: user?.id
                         })
                     
                     if (!immediateBillingError && immediateBillingResult?.success && immediateBillingResult?.amount_deducted > 0) {
@@ -3959,28 +3806,111 @@ export default function Dealer() {
                 }
             }
 
-            const { error: deleteError } = await supabase
-                .from('lottery_rounds')
-                .delete()
-                .eq('id', roundId)
+            // Call secure atomic RPC to delete round and cascade child records
+            console.log('[handleDeleteRound] Calling dealer_delete_round:', { roundId, dealerId: user?.id })
+            const { data: deleteResult, error: deleteError } = await supabase
+                .rpc('dealer_delete_round', { 
+                    p_round_id: roundId,
+                    p_dealer_id: user?.id || null
+                })
 
-            if (deleteError) {
-                // Rollback if DB delete fails
+            if (deleteError || !deleteResult?.success) {
+                console.error('[handleDeleteRound] Delete round error:', deleteError || deleteResult)
                 setRounds(previousRounds)
                 setSelectedRound(previousSelectedRound)
                 setExpandedRoundId(previousExpandedRoundId)
-                toast.error('เกิดข้อผิดพลาดในการลบงวด: ' + deleteError.message)
+                toast.error('เกิดข้อผิดพลาดในการลบงวด: ' + (deleteError?.message || deleteResult?.message || 'ไม่สามารถลบงวดได้'))
                 return
             }
 
-            // Refresh dealer credit in background
+            console.log('[handleDeleteRound] Delete round success:', deleteResult)
+            toast.success('ลบงวดสำเร็จ')
+            // Refresh dealer credit & round history in background
             fetchDealerCredit()
+            fetchRoundHistory()
         } catch (error) {
-            console.error('Error:', error)
+            console.error('[handleDeleteRound] Unexpected error:', error)
             setRounds(previousRounds)
             setSelectedRound(previousSelectedRound)
             setExpandedRoundId(previousExpandedRoundId)
-            toast.error('เกิดข้อผิดพลาดในการลบงวด')
+            toast.error('เกิดข้อผิดพลาดในการลบงวด: ' + (error.message || ''))
+        }
+    }
+
+    // Synchronize round data to history tables (round_history and user_round_history)
+    async function handleSyncRoundToHistory(roundId, isSilent = false) {
+        if (!user?.id || !roundId) return
+        setSyncingRoundIds(prev => ({ ...prev, [roundId]: true }))
+
+        let loadingToastId = null
+        if (!isSilent && toast?.loading) {
+            try {
+                loadingToastId = toast.loading('กำลังซิงค์ยอดเข้าประวัติ...')
+            } catch (e) {
+                console.warn('Toast loading error:', e)
+            }
+        }
+
+        // Safety fallback timer: guarantee spinner stops even if unexpected async hiccups occur
+        const safetyTimeout = setTimeout(() => {
+            setSyncingRoundIds(prev => {
+                if (!prev[roundId]) return prev
+                const next = { ...prev }
+                delete next[roundId]
+                return next
+            })
+        }, 3000)
+
+        try {
+            const rpcCall = supabase.rpc('sync_round_to_history', {
+                p_round_id: roundId,
+                p_dealer_id: user?.id || null
+            })
+            const networkTimeout = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('การเชื่อมต่อหมดเวลา กรุณาลองใหม่')), 6000)
+            )
+            const minSpinTime = new Promise(resolve => setTimeout(resolve, 800))
+
+            const [rpcRes] = await Promise.all([
+                Promise.race([rpcCall, networkTimeout]),
+                minSpinTime
+            ])
+
+            const { data, error } = rpcRes || {}
+            if (loadingToastId && toast?.dismiss) {
+                try { toast.dismiss(loadingToastId) } catch (e) {}
+            }
+
+            if (error || !data?.success) {
+                if (!isSilent) toast.error('ซิงค์ยอดไม่สำเร็จ: ' + (error?.message || data?.message || 'เกิดข้อผิดพลาด'))
+                return
+            }
+
+            // Clear cached history details for this round
+            setHistoryDetails(prev => {
+                const next = { ...prev }
+                delete next[roundId]
+                return next
+            })
+
+            if (!isSilent) toast.success('ซิงค์ยอดเข้าแท็บประวัติเรียบร้อยแล้ว')
+
+            // Trigger background reload without blocking the button stop
+            fetchRoundHistory(true).catch(console.error)
+            fetchDealerCredit().catch(console.error)
+        } catch (err) {
+            if (loadingToastId && toast?.dismiss) {
+                try { toast.dismiss(loadingToastId) } catch (e) {}
+            }
+            if (!isSilent) toast.error('เกิดข้อผิดพลาด: ' + (err.message || ''))
+        } finally {
+            clearTimeout(safetyTimeout)
+            // Guarantee spinning stops immediately after sync RPC completes
+            setSyncingRoundIds(prev => {
+                const next = { ...prev }
+                delete next[roundId]
+                return next
+            })
         }
     }
 
@@ -4798,6 +4728,50 @@ export default function Dealer() {
                                                                                 >
                                                                                     <FiTrash2 size={16} />
                                                                                 </button>
+                                                                                {(() => {
+                                                                                    const targetRound = rounds.find(r => 
+                                                                                        r.id === history.round_id || 
+                                                                                        r.id === history.id || 
+                                                                                        (r.lottery_type === history.lottery_type && (getRoundCloseDate(r) === getRoundCloseDate(history) || r.round_date === history.round_date))
+                                                                                    );
+                                                                                    if (!targetRound) return null;
+                                                                                    const syncTargetId = targetRound.id;
+                                                                                    const isSyncing = Boolean(syncingRoundIds[syncTargetId] || (history.id && syncingRoundIds[history.id]) || (history.round_id && syncingRoundIds[history.round_id]));
+                                                                                    return (
+                                                                                        <button
+                                                                                            key={`sync-btn-${history.id || targetRound.id}`}
+                                                                                            title={isSyncing ? "กำลังซิงค์ยอดเข้าประวัติ..." : "ซิงค์ยอดจากงวดจริงเข้าประวัติ"}
+                                                                                            disabled={isSyncing}
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                handleSyncRoundToHistory(syncTargetId);
+                                                                                            }}
+                                                                                            style={{
+                                                                                                background: isSyncing ? 'rgba(59, 130, 246, 0.25)' : 'none',
+                                                                                                border: 'none',
+                                                                                                color: isSyncing ? '#60a5fa' : '#3b82f6',
+                                                                                                cursor: isSyncing ? 'not-allowed' : 'pointer',
+                                                                                                padding: '0.15rem 0.35rem',
+                                                                                                borderRadius: '4px',
+                                                                                                display: 'inline-flex',
+                                                                                                alignItems: 'center',
+                                                                                                justifyContent: 'center',
+                                                                                                marginLeft: '0.15rem',
+                                                                                                marginRight: '0.15rem',
+                                                                                                transition: 'background 0.2s',
+                                                                                                opacity: isSyncing ? 0.8 : 1
+                                                                                            }}
+                                                                                            onMouseEnter={(e) => { if (!isSyncing) e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)' }}
+                                                                                            onMouseLeave={(e) => { if (!isSyncing) e.currentTarget.style.background = 'none' }}
+                                                                                        >
+                                                                                            <FiRefreshCw 
+                                                                                                size={15} 
+                                                                                                className={isSyncing ? 'spin' : ''} 
+                                                                                                style={{ animation: isSyncing ? 'spin 1s linear infinite' : 'none' }}
+                                                                                            />
+                                                                                        </button>
+                                                                                    );
+                                                                                })()}
                                                                                 {isSettled ? (
                                                                                     <span 
                                                                                         className="settled-status-badge settled" 
@@ -5594,6 +5568,8 @@ export default function Dealer() {
                                                     onEditRound={() => handleOpenEditModal(round)}
                                                     onShowNumberLimits={() => { setSelectedRound(round); setShowNumberLimitsModal(true); }}
                                                     onDeleteRound={() => handleDeleteRound(round.id, round.status)}
+                                                    onSyncRoundToHistory={handleSyncRoundToHistory}
+                                                    isSyncingHistory={!!syncingRoundIds[round.id]}
                                                     onShowResults={() => { setSelectedRound(round); setShowResultsModal(true); }}
                                                     onToggleActive={() => handleToggleRoundActive(round)}
                                                     getStatusBadge={(r) => getStatusBadge(r, true)}

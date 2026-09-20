@@ -233,6 +233,8 @@ export default function RoundAccordionItem({
     onEditRound, 
     onShowNumberLimits, 
     onDeleteRound, 
+    onSyncRoundToHistory,
+    isSyncingHistory = false,
     onShowResults, 
     getStatusBadge, 
     formatDate, 
@@ -2187,6 +2189,9 @@ export default function RoundAccordionItem({
             setSelectedItems({})
             await fetchInlineSubmissions(true)
             if (onCreditUpdate) onCreditUpdate()
+            if (onSyncRoundToHistory && (round.is_result_announced || round.status === 'announced')) {
+                onSyncRoundToHistory(round.id, true)
+            }
         } catch (error) {
             console.error('Error deleting submissions:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -2208,6 +2213,9 @@ export default function RoundAccordionItem({
             toast.success('ลบรายการสำเร็จ')
             await fetchInlineSubmissions(true)
             if (onCreditUpdate) onCreditUpdate()
+            if (onSyncRoundToHistory && (round.is_result_announced || round.status === 'announced')) {
+                onSyncRoundToHistory(round.id, true)
+            }
         } catch (error) {
             console.error('Error deleting submission:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -2289,6 +2297,9 @@ export default function RoundAccordionItem({
             await fetchInlineSubmissions(true)
             fetchSummaryData()
             if (onCreditUpdate) onCreditUpdate()
+            if (onSyncRoundToHistory && (round.is_result_announced || round.status === 'announced')) {
+                onSyncRoundToHistory(round.id, true)
+            }
         } catch (error) {
             console.error('Error cancelling bill:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -2312,6 +2323,9 @@ export default function RoundAccordionItem({
             await fetchInlineSubmissions(true)
             fetchSummaryData()
             if (onCreditUpdate) onCreditUpdate()
+            if (onSyncRoundToHistory && (round.is_result_announced || round.status === 'announced')) {
+                onSyncRoundToHistory(round.id, true)
+            }
         } catch (error) {
             console.error('Error permanently deleting bill:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -2345,6 +2359,9 @@ export default function RoundAccordionItem({
                 await fetchInlineSubmissions(true)
                 fetchSummaryData()
                 if (onCreditUpdate) onCreditUpdate()
+                if (onSyncRoundToHistory && (round.is_result_announced || round.status === 'announced')) {
+                    onSyncRoundToHistory(round.id, true)
+                }
             } catch (error) {
                 console.error('Error permanently deleting bill:', error)
                 toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -2375,6 +2392,9 @@ export default function RoundAccordionItem({
             toast.success(`ลบ ${ids.length} รายการสำเร็จ`)
             await fetchInlineSubmissions(true)
             if (onCreditUpdate) onCreditUpdate()
+            if (onSyncRoundToHistory && (round.is_result_announced || round.status === 'announced')) {
+                onSyncRoundToHistory(round.id, true)
+            }
         } catch (error) {
             console.error('Error deleting items:', error)
             toast.error('เกิดข้อผิดพลาด: ' + error.message)
@@ -2905,6 +2925,33 @@ export default function RoundAccordionItem({
                                 >
                                     🤖 AI วิเคราะห์
                                 </button>
+                                {onSyncRoundToHistory && (round.status === 'announced' || isAnnounced || round.status === 'closed') && (
+                                    <button
+                                        className="extra-action-btn sync-history-btn"
+                                        disabled={isSyncingHistory}
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            onSyncRoundToHistory(round.id)
+                                        }}
+                                        title={isSyncingHistory ? "กำลังซิงค์ยอดเข้าประวัติ..." : "ซิงค์ยอดปัจจุบันเข้าแท็บประวัติ"}
+                                        style={{
+                                            background: isSyncingHistory ? 'rgba(59, 130, 246, 0.25)' : 'rgba(59, 130, 246, 0.15)',
+                                            color: '#60a5fa',
+                                            border: '1px solid rgba(59, 130, 246, 0.3)',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.35rem',
+                                            cursor: isSyncingHistory ? 'not-allowed' : 'pointer',
+                                            opacity: isSyncingHistory ? 0.8 : 1
+                                        }}
+                                    >
+                                        <FiRefreshCw 
+                                            className={isSyncingHistory ? 'spin' : ''} 
+                                            style={{ animation: isSyncingHistory ? 'spin 1s linear infinite' : 'none' }}
+                                        />
+                                        {isSyncingHistory ? 'กำลังซิงค์...' : 'ซิงค์ยอดประวัติ'}
+                                    </button>
+                                )}
                             </div>
                         </div>
                         
@@ -5596,6 +5643,9 @@ export default function RoundAccordionItem({
                         fetchInlineSubmissions(true)
                         fetchSummaryData()
                         if (onCreditUpdate) onCreditUpdate()
+                        if (onSyncRoundToHistory && (round.is_result_announced || round.status === 'announced')) {
+                            onSyncRoundToHistory(round.id, true)
+                        }
                     }}
                     editingData={editingBillData}
                 />

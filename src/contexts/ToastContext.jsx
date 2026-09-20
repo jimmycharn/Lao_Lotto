@@ -36,7 +36,9 @@ export function ToastProvider({ children }) {
         error: (message, duration) => addToast(message, 'error', duration ?? 5000),
         warning: (message, duration) => addToast(message, 'warning', duration),
         info: (message, duration) => addToast(message, 'info', duration),
-    }), [addToast])
+        loading: (message) => addToast(message, 'info', 60000),
+        dismiss: (id) => { if (id) removeToast(id) },
+    }), [addToast, removeToast])
 
     const value = useMemo(() => ({ toast, removeToast }), [toast, removeToast])
 
