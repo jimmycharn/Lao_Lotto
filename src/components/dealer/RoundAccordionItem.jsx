@@ -45,6 +45,7 @@ import { findMatchingLimit, getEffectivePayoutPercent } from '../../utils/number
 import { checkBetWin, deriveWinningNumbers } from '../../utils/scenarioCalculator'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
+import MemberTimeExtensionModal from './MemberTimeExtensionModal'
 
 // Helper functions for default fallbacks
 const getFallbackCommission = (betType, lotteryType) => {
@@ -242,7 +243,8 @@ export default function RoundAccordionItem({
     pendingCreditRefresh, // Counter to trigger re-fetch of pending credits
     roundPendingData, // Direct pending credit data from parent (avoids stale DB fetch)
     isExpanded: isExpandedProp, // Controlled expanded state from parent
-    onToggle // Callback to toggle expanded state
+    onToggle, // Callback to toggle expanded state
+    onRoundUpdate // Optional callback when round is updated
 }) {
     const { toast } = useToast()
     // Use controlled state if provided, otherwise use internal state
@@ -295,6 +297,15 @@ export default function RoundAccordionItem({
     const [selectedMemberForBet, setSelectedMemberForBet] = useState(null)
     const [editingBillData, setEditingBillData] = useState(null)
     const [billActionModal, setBillActionModal] = useState(null)
+    const [timeExtensionModal, setTimeExtensionModal] = useState({ isOpen: false, member: null })
+    const [, setTicker] = useState(0)
+
+    useEffect(() => {
+        const hasActiveExt = Object.values(round.temp_open_members || {}).some(e => e?.expires_at && new Date(e.expires_at) > new Date())
+        if (!hasActiveExt) return
+        const interval = setInterval(() => setTicker(t => t + 1), 1000)
+        return () => clearInterval(interval)
+    }, [round.temp_open_members])
 
     // Inline excess transfer states
     const [selectedExcessItems, setSelectedExcessItems] = useState({})
@@ -325,15 +336,127 @@ export default function RoundAccordionItem({
     // Upstream summaries data (for outgoing tab)
     const [upstreamSummaries, setUpstreamSummaries] = useState({ loading: false, dealers: [] })
 
-    const isAnnounced = round.is_result_announced === true
-    const isClosed = round.status === 'closed' || (round.status !== 'announced' && new Date() > new Date(round.close_time))
+    const isAnnounced = round.is_result_announced === true || round.status === 'announced'
+    const isClosed = round.status === 'closed' || (round.status !== 'announced' && !round.is_result_announced && new Date() > new Date(round.close_time))
 
     const isOpen = (() => {
-        if (round.status === 'announced' || round.status === 'closed') return false
+        if (round.status === 'announced' || round.status === 'closed' || round.is_result_announced === true) return false
         const now = new Date()
         const closeTime = new Date(round.close_time)
         return now <= closeTime
     })()
+
+    // Handlers for Member-Specific Time Extension (supports single ID or array of IDs)
+    const handleSaveTimeExtension = async (memberIds, expiresAtISO, extensionInfos) => {
+        const ids = Array.isArray(memberIds) ? memberIds : [memberIds]
+        if (ids.length === 0) return
+
+        const currentExtensions = { ...(round.temp_open_members || {}) }
+        ids.forEach(id => {
+            const info = (extensionInfos && extensionInfos[id]) ? extensionInfos[id] : (extensionInfos || {})
+            currentExtensions[id] = info
+        })
+
+        const primaryId = ids[0]
+
+        let { error } = await supabase
+            .from('lottery_rounds')
+            .update({
+                temp_open_members: currentExtensions,
+                temp_open_member_id: primaryId,
+                temp_open_expires_at: expiresAtISO,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', round.id)
+
+        if (error && error.message?.includes('temp_open_members')) {
+            console.warn('temp_open_members column cache pending, falling back to temp_open_member_id:', error)
+            const fallbackRes = await supabase
+                .from('lottery_rounds')
+                .update({
+                    temp_open_member_id: primaryId,
+                    temp_open_expires_at: expiresAtISO,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', round.id)
+            error = fallbackRes.error
+        }
+
+        if (error) throw error
+
+        toast.success(ids.length === 1 
+            ? `ตั้งเวลาปิดรับให้ ${extensionInfos[primaryId]?.member_name || 'สมาชิก'} ถึง ${new Date(expiresAtISO).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
+            : `ตั้งเวลาปิดรับให้สมาชิก ${ids.length} คน ถึง ${new Date(expiresAtISO).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.`
+        )
+
+        const updatedRound = {
+            ...round,
+            temp_open_members: currentExtensions,
+            temp_open_member_id: primaryId,
+            temp_open_expires_at: expiresAtISO
+        }
+        if (onRoundUpdate) {
+            onRoundUpdate(updatedRound)
+        } else {
+            round.temp_open_members = currentExtensions
+            round.temp_open_member_id = primaryId
+            round.temp_open_expires_at = expiresAtISO
+        }
+    }
+
+    const handleRevokeTimeExtension = async (memberIds) => {
+        const ids = Array.isArray(memberIds) ? memberIds : [memberIds]
+        if (ids.length === 0) return
+
+        const currentExtensions = { ...(round.temp_open_members || {}) }
+        ids.forEach(id => {
+            delete currentExtensions[id]
+        })
+
+        const remainingEntries = Object.entries(currentExtensions).filter(([_, info]) => info?.expires_at && new Date(info.expires_at) > new Date())
+        const nextActive = remainingEntries.length > 0 ? remainingEntries[0] : null
+
+        let { error } = await supabase
+            .from('lottery_rounds')
+            .update({
+                temp_open_members: currentExtensions,
+                temp_open_member_id: nextActive ? nextActive[0] : null,
+                temp_open_expires_at: nextActive ? nextActive[1].expires_at : null,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', round.id)
+
+        if (error && error.message?.includes('temp_open_members')) {
+            const fallbackRes = await supabase
+                .from('lottery_rounds')
+                .update({
+                    temp_open_member_id: nextActive ? nextActive[0] : null,
+                    temp_open_expires_at: nextActive ? nextActive[1].expires_at : null,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', round.id)
+            error = fallbackRes.error
+        }
+
+        if (error) throw error
+
+        toast.info(`ยกเลิกสิทธิ์ขยายเวลาให้สมาชิก ${ids.length} คน เรียบร้อยแล้ว`)
+
+        const updatedRound = {
+            ...round,
+            temp_open_members: currentExtensions,
+            temp_open_member_id: nextActive ? nextActive[0] : null,
+            temp_open_expires_at: nextActive ? nextActive[1].expires_at : null
+        }
+        if (onRoundUpdate) {
+            onRoundUpdate(updatedRound)
+        } else {
+            round.temp_open_members = currentExtensions
+            round.temp_open_member_id = nextActive ? nextActive[0] : null
+            round.temp_open_expires_at = nextActive ? nextActive[1].expires_at : null
+        }
+    }
+
 
     // Fetch summary data on mount or when results change
     useEffect(() => {
@@ -402,7 +525,7 @@ export default function RoundAccordionItem({
         if (isClosed || isAnnounced) {
             fetchUpstreamSummaries()
         }
-    }, [isClosed, isAnnounced, round.is_result_announced, JSON.stringify(round.winning_numbers)])
+    }, [isClosed, isAnnounced, round.status, round.is_result_announced, JSON.stringify(round.winning_numbers)])
 
     async function fetchUpstreamDealers() {
         try {
@@ -2707,15 +2830,22 @@ export default function RoundAccordionItem({
     const grandTotalBet = userSummaries.reduce((sum, u) => sum + u.totalBet, 0)
     const grandTotalWin = userSummaries.reduce((sum, u) => sum + u.totalWin, 0)
     const grandTotalCommission = userSummaries.reduce((sum, u) => sum + u.totalCommission, 0)
-    const dealerProfit = grandTotalBet - grandTotalWin - grandTotalCommission
+    const roundedGrandTotalBet = Math.round(grandTotalBet)
+    const roundedGrandTotalCommission = Math.round(grandTotalCommission)
+    const roundedGrandTotalWin = Math.round(grandTotalWin)
+    // Displayed profit matches displayed components: ยอดรวม - ค่าคอม - จ่าย = กำไร
+    const dealerProfit = roundedGrandTotalBet - roundedGrandTotalCommission - roundedGrandTotalWin
 
     // Outgoing (ตีออก) totals - calculate from upstreamSummaries
     const outgoingTotalBet = upstreamSummaries.dealers.reduce((sum, d) => sum + d.totalBet, 0)
     const outgoingTotalWin = upstreamSummaries.dealers.reduce((sum, d) => sum + d.totalWin, 0)
     const outgoingTotalCommission = upstreamSummaries.dealers.reduce((sum, d) => sum + d.totalCommission, 0)
     const outgoingTicketCount = upstreamSummaries.dealers.reduce((sum, d) => sum + d.ticketCount, 0)
+    const roundedOutgoingBet = Math.round(outgoingTotalBet)
+    const roundedOutgoingCommission = Math.round(outgoingTotalCommission)
+    const roundedOutgoingWin = Math.round(outgoingTotalWin)
     // For outgoing: we sent bets, if they win we get paid, plus commission
-    const outgoingProfit = outgoingTotalWin + outgoingTotalCommission - outgoingTotalBet
+    const outgoingProfit = roundedOutgoingWin + roundedOutgoingCommission - roundedOutgoingBet
 
     // Combined total profit
     const totalCombinedProfit = dealerProfit + outgoingProfit
@@ -2724,7 +2854,7 @@ export default function RoundAccordionItem({
         <div className={`round-accordion-item ${round.lottery_type} ${isExpanded ? 'expanded' : ''}`}>
             <div className="round-accordion-header card" onClick={handleHeaderClick} style={{ cursor: 'pointer' }}>
                 {/* New Layout for Closed/Announced Rounds */}
-                {(round.status === 'closed' || round.status === 'announced') ? (
+                {(round.status === 'closed' || round.status === 'announced' || isAnnounced || isClosed) ? (
                     <div className="closed-round-layout">
                         {/* Top Row: Logo, Name, Status + Delete at top-right */}
                         <div className="closed-round-top">
@@ -2733,30 +2863,6 @@ export default function RoundAccordionItem({
                                     <span className={`lottery-badge ${round.lottery_type}`}>{LOTTERY_TYPES[round.lottery_type]}</span>
                                     <h3 className="lottery-title">{round.lottery_name || LOTTERY_TYPES[round.lottery_type]}</h3>
                                     {getStatusBadge(round)}
-                                    {round.status !== 'closed' && (
-                                        <button
-                                            className="btn-close-round"
-                                            onClick={(e) => { e.stopPropagation(); onCloseRound(); }}
-                                            title="ปิดงวด"
-                                            style={{
-                                                background: 'rgba(255, 77, 79, 0.2)',
-                                                border: 'none',
-                                                borderRadius: '4px',
-                                                padding: '2px 8px',
-                                                cursor: 'pointer',
-                                                fontSize: '0.75rem',
-                                                color: 'var(--color-danger, #ff4d4f)',
-                                                fontWeight: 'bold',
-                                                marginLeft: '8px',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                height: '24px'
-                                            }}
-                                        >
-                                            <FiLock /> ปิดงวด
-                                        </button>
-                                    )}
                                 </div>
                                 <button className="icon-btn-sm danger" onClick={(e) => { e.stopPropagation(); onDeleteRound(); }} title="ลบ" style={{ marginLeft: 'auto', flexShrink: 0 }}><FiTrash2 /></button>
                             </div>
@@ -2812,52 +2918,48 @@ export default function RoundAccordionItem({
                                         <div className="stats-items">
                                             <span className="stat-box">
                                                 <span className="stat-label">ยอดรวม</span>
-                                                <span className="stat-value success">+{round.currency_symbol}{Math.round(grandTotalBet).toLocaleString()}</span>
+                                                <span className="stat-value success">+{round.currency_symbol}{roundedGrandTotalBet.toLocaleString()}</span>
                                             </span>
                                             <span className="stat-box">
                                                 <span className="stat-label">ค่าคอม</span>
-                                                <span className="stat-value danger">-{round.currency_symbol}{Math.round(grandTotalCommission).toLocaleString()}</span>
+                                                <span className="stat-value danger">-{round.currency_symbol}{roundedGrandTotalCommission.toLocaleString()}</span>
                                             </span>
-                                            {isAnnounced && (
-                                                <>
-                                                    <span className="stat-box">
-                                                        <span className="stat-label">จ่าย</span>
-                                                        <span className={`stat-value ${grandTotalWin > 0 ? 'danger' : ''}`}>{grandTotalWin > 0 ? '-' : ''}{round.currency_symbol}{Math.round(grandTotalWin).toLocaleString()}</span>
-                                                    </span>
-                                                    <span className="stat-box">
-                                                        <span className="stat-label">กำไร</span>
-                                                        <span className={`stat-value ${dealerProfit >= 0 ? 'success' : 'danger'}`}>
-                                                            {dealerProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(dealerProfit)).toLocaleString()}
-                                                        </span>
-                                                    </span>
-                                                </>
-                                            )}
+                                            <span className="stat-box">
+                                                <span className="stat-label">จ่าย</span>
+                                                <span className={`stat-value ${roundedGrandTotalWin > 0 ? 'danger' : ''}`}>{roundedGrandTotalWin > 0 ? `-${round.currency_symbol}${roundedGrandTotalWin.toLocaleString()}` : `${round.currency_symbol}0`}</span>
+                                            </span>
+                                            <span className="stat-box">
+                                                <span className="stat-label">กำไร</span>
+                                                <span className={`stat-value ${dealerProfit >= 0 ? 'success' : 'danger'}`}>
+                                                    {dealerProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(dealerProfit).toLocaleString()}
+                                                </span>
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
                                 
                                 {/* ยอดส่ง Row - only show if there are outgoing transfers */}
-                                {isAnnounced && outgoingTicketCount > 0 && (
+                                {outgoingTicketCount > 0 && (
                                     <div className="stats-row outgoing-stats">
                                         <div className="stats-section">
                                             <span className="section-label">ยอดส่ง  {outgoingTicketCount} รายการ</span>
                                             <div className="stats-items">
                                                 <span className="stat-box">
                                                     <span className="stat-label">ยอดรวม</span>
-                                                    <span className="stat-value danger">-{round.currency_symbol}{Math.round(outgoingTotalBet).toLocaleString()}</span>
+                                                    <span className="stat-value danger">-{round.currency_symbol}{roundedOutgoingBet.toLocaleString()}</span>
                                                 </span>
                                                 <span className="stat-box">
                                                     <span className="stat-label">ค่าคอม</span>
-                                                    <span className="stat-value success">+{round.currency_symbol}{Math.round(outgoingTotalCommission).toLocaleString()}</span>
+                                                    <span className="stat-value success">+{round.currency_symbol}{roundedOutgoingCommission.toLocaleString()}</span>
                                                 </span>
                                                 <span className="stat-box">
                                                     <span className="stat-label">รับ</span>
-                                                    <span className={`stat-value ${outgoingTotalWin > 0 ? 'success' : ''}`}>{outgoingTotalWin > 0 ? '+' : ''}{round.currency_symbol}{Math.round(outgoingTotalWin).toLocaleString()}</span>
+                                                    <span className={`stat-value ${roundedOutgoingWin > 0 ? 'success' : ''}`}>{roundedOutgoingWin > 0 ? '+' : ''}{round.currency_symbol}{roundedOutgoingWin.toLocaleString()}</span>
                                                 </span>
                                                 <span className="stat-box">
                                                     <span className="stat-label">กำไร</span>
                                                     <span className={`stat-value ${outgoingProfit >= 0 ? 'success' : 'danger'}`}>
-                                                        {outgoingProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(outgoingProfit)).toLocaleString()}
+                                                        {outgoingProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(outgoingProfit).toLocaleString()}
                                                     </span>
                                                 </span>
                                             </div>
@@ -2866,16 +2968,14 @@ export default function RoundAccordionItem({
                                 )}
                                 
                                 {/* กำไรรวม Row */}
-                                {isAnnounced && (
-                                    <div className="stats-row total-stats">
-                                        <div className="total-profit-display">
-                                            <span className="total-label">กำไรรวม</span>
-                                            <span className={`total-value ${totalCombinedProfit >= 0 ? 'profit-positive' : 'profit-negative'}`}>
-                                                {totalCombinedProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(Math.round(totalCombinedProfit)).toLocaleString()}
-                                            </span>
-                                        </div>
+                                <div className="stats-row total-stats">
+                                    <div className="total-profit-display">
+                                        <span className="total-label">กำไรรวม</span>
+                                        <span className={`total-value ${totalCombinedProfit >= 0 ? 'profit-positive' : 'profit-negative'}`}>
+                                            {totalCombinedProfit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(totalCombinedProfit).toLocaleString()}
+                                        </span>
                                     </div>
-                                )}
+                                </div>
                             </div>
                         )}
                         {summaryData.loading && (
@@ -2907,7 +3007,7 @@ export default function RoundAccordionItem({
                             <div className="open-round-actions-row">
                                 <div className="round-actions">
                                     <button className="icon-btn" onClick={(e) => { e.stopPropagation(); onEditRound(); }} title="แก้ไขงวด"><FiEdit2 /></button>
-                                    {round.status === 'open' && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
+                                    {round.status === 'open' && !isAnnounced && <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onCloseRound(); }} title="ปิดงวด"><FiLock /></button>}
                                     <button className="icon-btn warning" onClick={(e) => { e.stopPropagation(); onShowNumberLimits(); }} title="ตั้งค่าเลขอั้น"><FiAlertTriangle /></button>
                                     <button className="icon-btn" onClick={(e) => { e.stopPropagation(); fetchSummaryData(); fetchInlineSubmissions(true); if (onCreditUpdate) onCreditUpdate(); }} title="รีเฟรชทั้งหมด"><FiRefreshCw /></button>
                                 </div>
@@ -3391,57 +3491,63 @@ export default function RoundAccordionItem({
                                                     </button>
                                                 </div>
                                                 
-                                                {/* Row 0.5: Dropdown + Write bet button */}
-                                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'stretch' }}>
-                                                     <SearchableDropdown
-                                                         value={inlineUserFilter}
-                                                         onChange={(val) => setInlineUserFilter(val)}
-                                                         options={[
-                                                             { label: 'ทุกคน', value: 'all' },
-                                                             ...(memberFilterMode === 'all'
-                                                                 ? allowedMembers.map(member => {
-                                                                       const name = member.full_name || member.email || 'ไม่ระบุ'
-                                                                       return { label: name, value: name }
-                                                                   })
-                                                                 : [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => ({
-                                                                       label: name,
-                                                                       value: name
-                                                                   }))
-                                                             )
-                                                         ]}
-                                                     />
-                                                     {canWriteBetForSelectedMember() && (
+                                                {/* Row 0.5: Dropdown (top on mobile) + Action buttons (bottom on mobile) */}
+                                                <div className="round-filter-member-bar">
+                                                    <div className="round-filter-dropdown-wrapper">
+                                                        <SearchableDropdown
+                                                            value={inlineUserFilter}
+                                                            onChange={(val) => setInlineUserFilter(val)}
+                                                            options={[
+                                                                { label: 'ทุกคน', value: 'all' },
+                                                                ...(memberFilterMode === 'all'
+                                                                    ? allowedMembers.map(member => {
+                                                                          const name = member.full_name || member.email || 'ไม่ระบุ'
+                                                                          return { label: name, value: name }
+                                                                      })
+                                                                    : [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => ({
+                                                                          label: name,
+                                                                          value: name
+                                                                      }))
+                                                                )
+                                                            ]}
+                                                        />
+                                                    </div>
+                                                    <div className="round-filter-actions-group">
+                                                        {canWriteBetForSelectedMember() && (
+                                                            <button
+                                                                className="btn btn-primary btn-sm round-filter-btn"
+                                                                onClick={handleOpenWriteBet}
+                                                                title="เขียนโพย"
+                                                            >
+                                                                <FiFileText /> เขียนโพย
+                                                            </button>
+                                                        )}
                                                         <button
-                                                            className="btn btn-primary btn-sm"
-                                                            onClick={handleOpenWriteBet}
-                                                            style={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '0.35rem',
-                                                                whiteSpace: 'nowrap',
-                                                                padding: '0 0.75rem',
-                                                                fontSize: '0.85rem'
-                                                            }}
+                                                            className="btn btn-outline btn-sm round-filter-btn"
+                                                            onClick={handleCopyTotal}
+                                                            disabled={inlineSubmissions.length === 0}
+                                                            title="คัดลอกยอดรับรวม"
                                                         >
-                                                            <FiFileText /> เขียนโพย
+                                                            <FiCopy /> คัดลอก
                                                         </button>
-                                                    )}
-                                                    <button
-                                                        className="btn btn-outline btn-sm"
-                                                        onClick={handleCopyTotal}
-                                                        disabled={inlineSubmissions.length === 0}
-                                                        style={{
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '0.35rem',
-                                                            whiteSpace: 'nowrap',
-                                                            padding: '0 0.75rem',
-                                                            fontSize: '0.85rem'
-                                                        }}
-                                                        title="คัดลอกยอดรับรวม"
-                                                    >
-                                                        <FiCopy /> คัดลอก
-                                                    </button>
+                                                        {!isAnnounced && (
+                                                            <button
+                                                                className="btn btn-outline btn-sm round-filter-btn round-filter-btn-extend"
+                                                                onClick={() => {
+                                                                    const preselectedMember = inlineUserFilter !== 'all'
+                                                                        ? allowedMembers.find(m => (m.full_name || m.email) === inlineUserFilter)
+                                                                        : null
+                                                                    setTimeExtensionModal({
+                                                                        isOpen: true,
+                                                                        member: preselectedMember ? { id: preselectedMember.id, name: preselectedMember.full_name || preselectedMember.email, code: preselectedMember.member_code } : null
+                                                                    })
+                                                                }}
+                                                                title="ตั้งเวลาปิดรับ หรือยืดเวลาส่งเลขเฉพาะบุคคล"
+                                                            >
+                                                                <FiClock /> ขยายเวลา
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 
                                                 {/* Row 1: View mode toggle (รวม/ใบโพย) + Display mode toggle */}
@@ -3791,49 +3897,75 @@ export default function RoundAccordionItem({
                                                         if (wi) totalPayout += wi.payout
                                                     })
                                                 }
-                                                const profit = totalAmount - totalCommission - totalPayout
-                                                const showPayoutCol = isAnnounced
-                                                const cellStyle = { display: 'flex', flexDirection: 'column', gap: '0.15rem', minWidth: 0 }
-                                                const lblStyle = { fontSize: '0.72rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
-                                                const valStyle = { fontSize: '0.95rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
+                                                const roundedTotalAmount = Math.round(totalAmount)
+                                                const roundedTotalCommission = Math.round(totalCommission)
+                                                const roundedNet = roundedTotalAmount - roundedTotalCommission
+                                                const roundedTotalPayout = Math.round(totalPayout)
+                                                const profit = roundedNet - roundedTotalPayout
+                                                const cellLeftStyle = { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', textAlign: 'left', gap: '0.15rem', minWidth: 0 }
+                                                const cellCenterStyle = { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: '0.15rem', minWidth: 0 }
+                                                const cellRightStyle = { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', justifyContent: 'center', textAlign: 'right', gap: '0.15rem', minWidth: 0 }
+                                                const lblStyle = { fontSize: '0.78rem', color: 'var(--color-text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }
+                                                const valStyle = { fontSize: '1rem', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }
                                                 return (
                                                     <div style={{ 
-                                                        display: 'grid', 
-                                                        gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', 
-                                                        gap: '0.5rem 0.75rem',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '0.55rem',
                                                         background: 'var(--color-surface)',
                                                         border: '1px solid var(--color-border)',
                                                         borderRadius: 'var(--radius-md)',
-                                                        padding: '0.75rem 1rem',
+                                                        padding: '0.75rem 0.75rem',
                                                         marginBottom: '0.75rem'
                                                     }}>
-                                                        <div style={cellStyle}>
-                                                            <span style={lblStyle}>รายการ</span>
-                                                            <span style={{ ...valStyle, color: 'var(--color-text)' }}>{itemCount}</span>
-                                                        </div>
-                                                        <div style={cellStyle}>
-                                                            <span style={lblStyle}>ยอดรวม</span>
-                                                            <span style={{ ...valStyle, color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalAmount).toLocaleString()}</span>
-                                                        </div>
-                                                        <div style={cellStyle}>
-                                                            <span style={lblStyle}>ค่าคอม</span>
-                                                            <span style={{ ...valStyle, color: 'var(--color-danger)' }}>-{round.currency_symbol}{Math.round(totalCommission).toLocaleString()}</span>
-                                                        </div>
-                                                        <div style={cellStyle}>
-                                                            <span style={lblStyle}>เหลือรับ</span>
-                                                            <span style={{ ...valStyle, color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalAmount - totalCommission).toLocaleString()}</span>
-                                                        </div>
-                                                        {showPayoutCol && (
-                                                            <div style={cellStyle}>
-                                                                <span style={lblStyle}>จ่าย</span>
-                                                                <span style={{ ...valStyle, color: 'var(--color-danger)' }}>-{round.currency_symbol}{Math.round(totalPayout).toLocaleString()}</span>
+                                                        {/* Row 1: ยอดรวม (ซ้าย) | ค่าคอม (กลาง) | เหลือรับ (ขวา) */}
+                                                        <div style={{
+                                                            display: 'grid',
+                                                            gridTemplateColumns: 'repeat(3, 1fr)',
+                                                            gap: '0.4rem',
+                                                            alignItems: 'center'
+                                                        }}>
+                                                            <div style={cellLeftStyle}>
+                                                                <span style={{ ...lblStyle, textAlign: 'left' }}>ยอดรวม</span>
+                                                                <span style={{ ...valStyle, textAlign: 'left', color: 'var(--color-success)' }}>
+                                                                    +{round.currency_symbol}{roundedTotalAmount.toLocaleString()}
+                                                                </span>
                                                             </div>
-                                                        )}
-                                                        <div style={cellStyle}>
-                                                            <span style={lblStyle}>กำไร</span>
-                                                            <span style={{ ...valStyle, color: profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
-                                                                {profit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.round(Math.abs(profit)).toLocaleString()}
-                                                            </span>
+                                                            <div style={cellCenterStyle}>
+                                                                <span style={{ ...lblStyle, textAlign: 'center' }}>ค่าคอม</span>
+                                                                <span style={{ ...valStyle, textAlign: 'center', color: 'var(--color-danger)' }}>
+                                                                    -{round.currency_symbol}{roundedTotalCommission.toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                            <div style={cellRightStyle}>
+                                                                <span style={{ ...lblStyle, textAlign: 'right' }}>เหลือรับ</span>
+                                                                <span style={{ ...valStyle, textAlign: 'right', color: 'var(--color-success)' }}>
+                                                                    +{round.currency_symbol}{roundedNet.toLocaleString()}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Row 2: ถูกรางวัล (เสมอซ้ายบน) | กำไร (เสมอขวาบน) */}
+                                                        <div style={{
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center',
+                                                            gap: '0.5rem',
+                                                            paddingTop: '0.55rem',
+                                                            borderTop: '1px dashed var(--color-border)'
+                                                        }}>
+                                                            <div style={cellLeftStyle}>
+                                                                <span style={{ ...lblStyle, textAlign: 'left' }}>ถูกรางวัล</span>
+                                                                <span style={{ ...valStyle, textAlign: 'left', color: roundedTotalPayout > 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' }}>
+                                                                    {roundedTotalPayout > 0 ? `-${round.currency_symbol}${roundedTotalPayout.toLocaleString()}` : `${round.currency_symbol}0`}
+                                                                </span>
+                                                            </div>
+                                                            <div style={cellRightStyle}>
+                                                                <span style={{ ...lblStyle, textAlign: 'right' }}>กำไร</span>
+                                                                <span style={{ ...valStyle, textAlign: 'right', color: profit >= 0 ? 'var(--color-success)' : 'var(--color-danger)' }}>
+                                                                    {profit >= 0 ? '+' : '-'}{round.currency_symbol}{Math.abs(profit).toLocaleString()}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 )
@@ -4227,6 +4359,111 @@ export default function RoundAccordionItem({
                                                                             <span style={{ fontSize: '0.8rem', fontWeight: '400', opacity: 0.8 }}>
                                                                                 {filteredBillsCount} ใบโพย ({totalItems})
                                                                             </span>
+                                                                            {!isAnnounced && (() => {
+                                                                                const ext = round.temp_open_members?.[userGroup.user_id] || (
+                                                                                    round.temp_open_member_id === userGroup.user_id && round.temp_open_expires_at
+                                                                                        ? { expires_at: round.temp_open_expires_at }
+                                                                                        : null
+                                                                                )
+                                                                                const isExtActive = ext?.expires_at && new Date(ext.expires_at) > new Date()
+                                                                                const isRoundPastClose = round?.close_time && new Date() > new Date(round.close_time)
+
+                                                                                if (isExtActive) {
+                                                                                    if (isRoundPastClose) {
+                                                                                        const diffSecs = Math.max(0, Math.floor((new Date(ext.expires_at).getTime() - Date.now()) / 1000))
+                                                                                        const m = Math.floor(diffSecs / 60)
+                                                                                        const s = diffSecs % 60
+                                                                                        const timeStr = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+                                                                                        return (
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation()
+                                                                                                    setTimeExtensionModal({
+                                                                                                        isOpen: true,
+                                                                                                        member: { id: userGroup.user_id, name: userGroup.user_name }
+                                                                                                    })
+                                                                                                }}
+                                                                                                title={`กำลังเปิดรับชั่วคราวถึง ${new Date(ext.expires_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น. (คลิกเพื่อแก้ไขเวลาหรือยกเลิก)`}
+                                                                                                style={{
+                                                                                                    padding: '1px 8px',
+                                                                                                    borderRadius: '12px',
+                                                                                                    background: '#047857',
+                                                                                                    color: '#fff',
+                                                                                                    border: '1px solid #10b981',
+                                                                                                    fontSize: '0.72rem',
+                                                                                                    fontWeight: '700',
+                                                                                                    display: 'inline-flex',
+                                                                                                    alignItems: 'center',
+                                                                                                    gap: '3px',
+                                                                                                    cursor: 'pointer',
+                                                                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                                                                                }}
+                                                                                            >
+                                                                                                <FiClock size={11} /> เหลือ {timeStr}
+                                                                                            </button>
+                                                                                        )
+                                                                                    } else {
+                                                                                        const extTimeStr = new Date(ext.expires_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
+                                                                                        return (
+                                                                                            <button
+                                                                                                type="button"
+                                                                                                onClick={(e) => {
+                                                                                                    e.stopPropagation()
+                                                                                                    setTimeExtensionModal({
+                                                                                                        isOpen: true,
+                                                                                                        member: { id: userGroup.user_id, name: userGroup.user_name }
+                                                                                                    })
+                                                                                                }}
+                                                                                                title={`ตั้งเวลาปิดรับพิเศษไว้ถึง ${extTimeStr} น. (คลิกเพื่อแก้ไขเวลาหรือยกเลิก)`}
+                                                                                                style={{
+                                                                                                    padding: '1px 8px',
+                                                                                                    borderRadius: '12px',
+                                                                                                    background: '#047857',
+                                                                                                    color: '#fff',
+                                                                                                    border: '1px solid #10b981',
+                                                                                                    fontSize: '0.72rem',
+                                                                                                    fontWeight: '700',
+                                                                                                    display: 'inline-flex',
+                                                                                                    alignItems: 'center',
+                                                                                                    gap: '3px',
+                                                                                                    cursor: 'pointer',
+                                                                                                    boxShadow: '0 1px 3px rgba(0,0,0,0.2)'
+                                                                                                }}
+                                                                                            >
+                                                                                                <FiClock size={11} /> ปิด {extTimeStr}
+                                                                                            </button>
+                                                                                        )
+                                                                                    }
+                                                                                }
+                                                                                return (
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation()
+                                                                                            setTimeExtensionModal({
+                                                                                                isOpen: true,
+                                                                                                member: { id: userGroup.user_id, name: userGroup.user_name }
+                                                                                            })
+                                                                                        }}
+                                                                                        title="ตั้งเวลาปิดรับ หรือยืดเวลาเฉพาะสมาชิกท่านนี้"
+                                                                                        style={{
+                                                                                            padding: '2px 5px',
+                                                                                            borderRadius: '8px',
+                                                                                            background: 'rgba(0, 0, 0, 0.15)',
+                                                                                            color: '#000',
+                                                                                            border: '1px dashed rgba(0, 0, 0, 0.35)',
+                                                                                            display: 'inline-flex',
+                                                                                            alignItems: 'center',
+                                                                                            justifyContent: 'center',
+                                                                                            cursor: 'pointer',
+                                                                                            flexShrink: 0
+                                                                                        }}
+                                                                                    >
+                                                                                        <FiClock size={13} />
+                                                                                    </button>
+                                                                                )
+                                                                            })()}
                                                                         </div>
                                                                         {(isOpen || canEditBillForUser(userGroup.user_id)) && (
                                                                             <button 
@@ -5066,11 +5303,11 @@ export default function RoundAccordionItem({
                                                                     <span style={summaryLabelStyle}>เหลือส่ง</span>
                                                                     <span style={{ ...summaryValueStyle, color: 'var(--color-danger)' }}>-{round.currency_symbol}{Math.round(netSent).toLocaleString()}</span>
                                                                 </div>
-                                                                {isAnnounced && (
+                                                                {(isAnnounced || isClosed) && (
                                                                     <>
                                                                         <div style={summaryCellStyle}>
                                                                             <span style={summaryLabelStyle}>รับ</span>
-                                                                            <span style={{ ...summaryValueStyle, color: 'var(--color-success)' }}>+{round.currency_symbol}{Math.round(totalWinPayout).toLocaleString()}</span>
+                                                                            <span style={{ ...summaryValueStyle, color: totalWinPayout > 0 ? 'var(--color-success)' : 'var(--color-text)' }}>{totalWinPayout > 0 ? '+' : ''}{round.currency_symbol}{Math.round(totalWinPayout).toLocaleString()}</span>
                                                                         </div>
                                                                         <div style={summaryCellStyle}>
                                                                             <span style={summaryLabelStyle}>กำไร</span>
@@ -5544,6 +5781,16 @@ export default function RoundAccordionItem({
                         toast.info('ไม่พบรายการแนะนำตีออก')
                     }
                 }}
+            />
+
+            <MemberTimeExtensionModal
+                isOpen={timeExtensionModal.isOpen}
+                onClose={() => setTimeExtensionModal({ isOpen: false, member: null })}
+                round={round}
+                member={timeExtensionModal.member}
+                allMembers={allMembers}
+                onSave={handleSaveTimeExtension}
+                onRevoke={handleRevokeTimeExtension}
             />
         </div>
     )

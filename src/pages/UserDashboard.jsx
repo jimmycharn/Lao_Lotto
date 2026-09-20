@@ -858,9 +858,24 @@ export default function UserDashboard() {
     // Check if a specific round can accept submissions (works without selectedRound)
     function canSubmitRound(round) {
         if (!round) return false
-        if (round.status !== 'open') return false
+        if (round.status === 'announced' || round.is_result_announced === true) return false
         if (isMembershipExpired()) return false
         const now = new Date()
+
+        // Check if member has an individual close time / extension on this round
+        if (user?.id) {
+            const ext = round.temp_open_members?.[user.id] || (
+                round.temp_open_member_id === user.id && round.temp_open_expires_at
+                    ? { expires_at: round.temp_open_expires_at }
+                    : null
+            )
+            if (ext?.expires_at) {
+                if (round.open_time && now < new Date(round.open_time)) return false
+                return now < new Date(ext.expires_at)
+            }
+        }
+
+        if (round.status !== 'open') return false
         if (round.open_time && now < new Date(round.open_time)) return false
         return now < new Date(round.close_time)
     }
@@ -3184,13 +3199,37 @@ export default function UserDashboard() {
                                                             {LOTTERY_TYPES[round.lottery_type]}
                                                         </span>
                                                         <span className="round-name">{round.lottery_name}</span>
-                                                        {round.status === 'open' ? (
-                                                            <div className="time-remaining">
-                                                                {formatTimeRemaining(round.close_time)}
-                                                            </div>
-                                                        ) : (
-                                                            <span className="round-status closed">ปิดรับแล้ว</span>
-                                                        )}
+                                                        {(() => {
+                                                            const ext = round.temp_open_members?.[user?.id] || (
+                                                                round.temp_open_member_id === user?.id && round.temp_open_expires_at
+                                                                    ? { expires_at: round.temp_open_expires_at }
+                                                                    : null
+                                                            )
+                                                            const isExtActive = ext?.expires_at && new Date(ext.expires_at) > new Date()
+                                                            const isExtExpired = ext?.expires_at && new Date(ext.expires_at) <= new Date()
+
+                                                            if (isExtActive) {
+                                                                return (
+                                                                    <div className="time-remaining" style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#10b981', border: '1px solid #10b981', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                                                        <FiClock /> พิเศษ: ส่งได้ถึง {new Date(ext.expires_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                                                                    </div>
+                                                                )
+                                                            }
+
+                                                            if (isExtExpired) {
+                                                                return <span className="round-status closed">หมดเวลาส่งแล้ว</span>
+                                                            }
+
+                                                            if (round.status === 'open' && new Date() < new Date(round.close_time)) {
+                                                                return (
+                                                                    <div className="time-remaining">
+                                                                        {formatTimeRemaining(round.close_time)}
+                                                                    </div>
+                                                                )
+                                                            }
+
+                                                            return <span className="round-status closed">ปิดรับแล้ว</span>
+                                                        })()}
                                                     </div>
                                                     
                                                     {/* Row 2: Date/Time */}

@@ -5914,6 +5914,98 @@ html.theme-light .icon-btn-sm:hover {
     background: var(--color-primary) !important;
 }
 
+/* =============================================
+   ROUND FILTER MEMBER BAR (Dropdown + Actions)
+   ============================================= */
+
+.round-filter-member-bar {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+    margin-bottom: 0.5rem;
+}
+
+.round-filter-dropdown-wrapper {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+}
+
+.round-filter-dropdown-wrapper .searchable-dropdown {
+    width: 100%;
+}
+
+.round-filter-actions-group {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.round-filter-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    padding: 0 0.75rem;
+    font-size: 0.85rem;
+    min-height: 40px;
+    box-sizing: border-box;
+}
+
+.round-filter-btn-extend {
+    color: #f59e0b !important;
+    border-color: #f59e0b !important;
+}
+
+.round-filter-btn-extend:hover {
+    background: rgba(245, 158, 11, 0.15) !important;
+}
+
+:root.theme-light .round-filter-btn-extend,
+[data-theme="light"] .round-filter-btn-extend {
+    color: #d97706 !important;
+    border-color: #d97706 !important;
+}
+
+/* On Mobile (< 640px): Dropdown on row 1 (full width), buttons on row 2 (flex 1) */
+@media (max-width: 640px) {
+    .round-filter-member-bar {
+        flex-direction: column;
+        gap: 0.45rem;
+    }
+
+    .round-filter-dropdown-wrapper {
+        width: 100%;
+    }
+
+    .round-filter-actions-group {
+        width: 100%;
+        display: flex;
+        gap: 0.4rem;
+    }
+
+    .round-filter-btn {
+        flex: 1;
+        min-width: 0;
+        padding: 0 0.35rem;
+        font-size: 0.82rem;
+        min-height: 38px;
+    }
+}
+
+@media (max-width: 380px) {
+    .round-filter-actions-group {
+        gap: 0.3rem;
+    }
+
+    .round-filter-btn {
+        padding: 0 0.25rem;
+        font-size: 0.78rem;
+    }
+}
+
 .round-form-modal {
     display: flex;
     flex-direction: column;

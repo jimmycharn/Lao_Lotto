@@ -8514,8 +8514,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              // If round is closed/announced and has no temp_open_member_id, nothing to close
-              if (openRound.status !== 'open' && !openRound.temp_open_member_id) {
+              // If round is closed/announced and has no temp_open_member_id or temp_open_members, nothing to close
+              const hasTempOpenMembers = openRound.temp_open_members && Object.keys(openRound.temp_open_members).length > 0;
+              if (openRound.status !== 'open' && !openRound.temp_open_member_id && !hasTempOpenMembers) {
                 await sendLineReply(replyToken, `❌ ไม่มีงวดหวย ${groupLink.lottery_type.toUpperCase()} ที่เปิดรับอยู่ในขณะนี้`);
                 continue;
               }
@@ -8524,7 +8525,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const { error: closeErr } = await supabase
                 .from('lottery_rounds')
-                .update({ status: 'closed', temp_open_member_id: null, temp_open_expires_at: null, updated_at: new Date().toISOString() })
+                .update({ status: 'closed', temp_open_member_id: null, temp_open_expires_at: null, temp_open_members: {}, updated_at: new Date().toISOString() })
                 .eq('id', openRound.id);
 
               if (closeErr) {
@@ -8733,10 +8734,23 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              // Set temp_open_member_id on the round (keep status as 'closed')
+              // Set temp_open_member_id and temp_open_members on the round (keep status as 'closed')
+              const existingMembersMap = { ...(closedRound.temp_open_members || {}) };
+              existingMembersMap[memberProfile.id] = {
+                expires_at: null,
+                granted_at: new Date().toISOString(),
+                duration_minutes: null,
+                member_name: memberProfile.full_name,
+                member_code: memberProfile.member_code
+              };
               const { error: tempOpenErr } = await supabase
                 .from('lottery_rounds')
-                .update({ temp_open_member_id: memberProfile.id, temp_open_expires_at: null, updated_at: new Date().toISOString() })
+                .update({
+                  temp_open_member_id: memberProfile.id,
+                  temp_open_expires_at: null,
+                  temp_open_members: existingMembersMap,
+                  updated_at: new Date().toISOString()
+                })
                 .eq('id', closedRound.id);
 
               if (tempOpenErr) {
@@ -17272,14 +17286,31 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           continue;
         }
 
-        // If round status is closed/announced or past its close time, check temp_open_member_id
+        // Check member-specific deadline / extension
+        const memberExt = activeRound.temp_open_members?.[profile.id];
+        const isMultiTempExpired = memberExt?.expires_at && now >= new Date(memberExt.expires_at);
+
+        // If member had an individual close time that has already expired
+        if (memberExt?.expires_at && isMultiTempExpired) {
+          const formattedCloseTime = new Date(memberExt.expires_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+          await sendLineReply(
+            replyToken,
+            `❌ ขออภัยค่ะ สิ้นสุดเวลาส่งเลขของคุณแล้วค่ะ (ปิดรับ ${formattedCloseTime} น.)`
+          );
+          continue;
+        }
+
+        // If round status is closed/announced or past its close time, check temp_open_member_id & temp_open_members
         const closeTime = new Date(activeRound.close_time);
         if (activeRound.status !== 'open' || now >= closeTime) {
           // Check if this member has been granted temp open access
           const tempMemberId = activeRound.temp_open_member_id;
           const tempExpiry = activeRound.temp_open_expires_at;
           const isTempExpired = tempExpiry && now >= new Date(tempExpiry);
-          const hasTempAccess = tempMemberId && tempMemberId === profile.id && !isTempExpired;
+          const hasSingleTempAccess = tempMemberId && tempMemberId === profile.id && !isTempExpired;
+          const hasMultiTempAccess = !!memberExt && !isMultiTempExpired;
+
+          const hasTempAccess = hasSingleTempAccess || hasMultiTempAccess;
 
           if (!hasTempAccess) {
             await sendLineReply(

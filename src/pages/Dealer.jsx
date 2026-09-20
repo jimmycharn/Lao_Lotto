@@ -1706,8 +1706,8 @@ export default function Dealer() {
 
     // Helper to check if a round is still open (between open_time and close_time)
     const isRoundOpen = (round) => {
-        // If status is announced or closed, it's definitely closed
-        if (round.status === 'announced' || round.status === 'closed') return false
+        // If status is announced or closed, or result is announced, it's definitely closed
+        if (round.status === 'announced' || round.status === 'closed' || round.is_result_announced === true) return false
         // Check time-based open status
         const now = new Date()
         const openTime = new Date(round.open_time)
@@ -3730,6 +3730,12 @@ export default function Dealer() {
 
     // Close round - Instant Optimistic UI Update
     async function handleCloseRound(roundId) {
+        const targetRound = rounds.find(r => r.id === roundId)
+        if (targetRound?.status === 'announced' || targetRound?.is_result_announced === true) {
+            toast.error('งวดนี้ประกาศผลรางวัลแล้ว ไม่สามารถปิดงวดซ้ำได้')
+            return
+        }
+
         if (!confirm('ต้องการปิดงวดนี้?')) return
 
         const previousRounds = rounds
@@ -4134,6 +4140,10 @@ export default function Dealer() {
     // Reopen a closed round by extending close_time
     const handleReopenRound = async (round, e) => {
         e.stopPropagation()
+        if (round?.status === 'announced' || round?.is_result_announced === true) {
+            toast.error('งวดนี้ประกาศผลรางวัลแล้ว ไม่สามารถเปิดรับใหม่ได้')
+            return
+        }
         try {
             // Extend close_time to end of today (23:59)
             const now = new Date()
@@ -4181,7 +4191,9 @@ export default function Dealer() {
         const openTime = new Date(round.open_time)
         const closeTime = new Date(round.close_time)
 
-        if (round.status === 'announced') {
+        const isAnnounced = round.status === 'announced' || round.is_result_announced === true
+
+        if (isAnnounced) {
             return <span className="status-badge announced"><FiCheck /> ประกาศผลแล้ว</span>
         }
         // Check if round is closed by dealer (status = 'closed') OR by time
@@ -4189,7 +4201,7 @@ export default function Dealer() {
             return (
                 <span className="status-badge closed" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                     <FiLock /> ปิดรับแล้ว
-                    {showReopenButton && (
+                    {showReopenButton && !isAnnounced && (
                         <button 
                             className="btn-reopen"
                             onClick={(e) => handleReopenRound(round, e)}
@@ -5592,6 +5604,10 @@ export default function Dealer() {
                                                     onCreditUpdate={fetchDealerCredit}
                                                     isExpanded={expandedRoundId === round.id}
                                                     onToggle={() => setExpandedRoundId(expandedRoundId === round.id ? null : round.id)}
+                                                    onRoundUpdate={(updatedRound) => {
+                                                        setRounds(prev => prev.map(r => r.id === updatedRound.id ? updatedRound : r))
+                                                        setSelectedRound(prev => prev?.id === updatedRound.id ? updatedRound : prev)
+                                                    }}
                                                 />
                                             ))}
                                         </div>
