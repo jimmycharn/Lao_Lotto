@@ -17288,11 +17288,24 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         // Check member-specific deadline / extension
         const memberExt = activeRound.temp_open_members?.[profile.id];
-        const isMultiTempExpired = memberExt?.expires_at && now >= new Date(memberExt.expires_at);
+        const isMultiTempExpired = !!(memberExt?.expires_at && now >= new Date(memberExt.expires_at));
+
+        // Check if this member has been granted temp open access (single or multi)
+        const tempMemberId = activeRound.temp_open_member_id;
+        const tempExpiry = activeRound.temp_open_expires_at;
+        const isTempExpired = !!(tempExpiry && now >= new Date(tempExpiry));
+        const hasSingleTempAccess = !!(tempMemberId && tempMemberId === profile.id && !isTempExpired);
+        const hasMultiTempAccess = !!(memberExt && !isMultiTempExpired);
+        const hasTempAccess = hasSingleTempAccess || hasMultiTempAccess;
+
+        const memberEffectiveCloseTime: Date | null = memberExt?.expires_at
+          ? new Date(memberExt.expires_at)
+          : (tempMemberId === profile.id && tempExpiry ? new Date(tempExpiry) : null);
 
         // If member had an individual close time that has already expired
-        if (memberExt?.expires_at && isMultiTempExpired) {
-          const formattedCloseTime = new Date(memberExt.expires_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+        if ((memberExt?.expires_at && isMultiTempExpired) || (tempMemberId === profile.id && tempExpiry && isTempExpired)) {
+          const expiredAt = memberExt?.expires_at || tempExpiry;
+          const formattedCloseTime = new Date(expiredAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
           await sendLineReply(
             replyToken,
             `❌ ขออภัยค่ะ สิ้นสุดเวลาส่งเลขของคุณแล้วค่ะ (ปิดรับ ${formattedCloseTime} น.)`
@@ -17303,15 +17316,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         // If round status is closed/announced or past its close time, check temp_open_member_id & temp_open_members
         const closeTime = new Date(activeRound.close_time);
         if (activeRound.status !== 'open' || now >= closeTime) {
-          // Check if this member has been granted temp open access
-          const tempMemberId = activeRound.temp_open_member_id;
-          const tempExpiry = activeRound.temp_open_expires_at;
-          const isTempExpired = tempExpiry && now >= new Date(tempExpiry);
-          const hasSingleTempAccess = tempMemberId && tempMemberId === profile.id && !isTempExpired;
-          const hasMultiTempAccess = !!memberExt && !isMultiTempExpired;
-
-          const hasTempAccess = hasSingleTempAccess || hasMultiTempAccess;
-
           if (!hasTempAccess) {
             await sendLineReply(
               replyToken,
@@ -17469,7 +17473,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
           // 4 ตัวชุด price calculation
           if (betType === '4_set') {
-            const setPrice = activeRound.set_prices?.['4_top'] || 120;
+            const setPrice = activeRound.set_prices?.['4_set'] || activeRound.set_prices?.['4_top'] || 120;
             // amount field from parser represents set count
             const setCount = bet.amount || 1;
             straightAmt = setCount * setPrice;
@@ -17703,7 +17707,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         const currentExactSetsMap = new Map<string, number>();
         const current3SetTotalMap = new Map<string, number>();
-        const setPrice = activeRound.set_prices?.['4_top'] || 120;
+        const setPrice = activeRound.set_prices?.['4_set'] || activeRound.set_prices?.['4_top'] || 120;
 
         if (shouldLoadLimits && isSetBasedLottery) {
           for (const [key, val] of currentTotals.entries()) {
@@ -17725,12 +17729,19 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
           // Check specific close time first
           const specificCloseTimeStr = typeCloseTimesMap[betType];
-          const typeCloseTime = specificCloseTimeStr ? new Date(specificCloseTimeStr) : new Date(activeRound.close_time);
+          // If member has temp access / extension, the round's general close time does not close them out.
+          // Instead, their effective close time is memberEffectiveCloseTime (or none if unlimited temp access).
+          const defaultCloseTime = hasTempAccess
+            ? memberEffectiveCloseTime
+            : new Date(activeRound.close_time);
+          const typeCloseTime = specificCloseTimeStr && !hasTempAccess
+            ? new Date(specificCloseTimeStr)
+            : defaultCloseTime;
           const closeBehavior = typeCloseTimeBehaviorsMap[betType] || 'close_immediately';
-          const isPastTypeCloseTime = now >= typeCloseTime;
+          const isPastTypeCloseTime = typeCloseTime ? now >= typeCloseTime : false;
 
           if (isPastTypeCloseTime) {
-            if (specificCloseTimeStr && closeBehavior === 'return_excess') {
+            if (specificCloseTimeStr && !hasTempAccess && closeBehavior === 'return_excess') {
               // Past close time, but behavior is "return_excess" -> allowed to proceed.
               // Limits validation will be enforced.
             } else {
@@ -17816,6 +17827,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const commInfo = getCommissionInfo(userSettings?.lottery_settings, betType, lotteryType);
                 insert.commission_amount = commInfo.isFixed ? commInfo.rate * acceptedSets : (acceptedAmount * commInfo.rate) / 100;
                 insert.display_amount = `${acceptedAmount} บาท (${acceptedSets} ชุด)\u200C`;
+                if (acceptedSets < proposedSets) {
+                  insert.display_numbers = `${numbers}=${acceptedSets} 4ตัวชุด`;
+                }
                 finalInserts.push(insert);
 
                 currentExactSetsMap.set(numbers, currentExactSets + acceptedSets);
@@ -17869,6 +17883,15 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 insert.display_amount = (betType !== '4_set' && bonusPct > 0)
                   ? acceptedAmount.toString() + '\u200B'
                   : acceptedAmount.toString() + '\u200C';
+
+                if (excessAmount > 0) {
+                  const baseAccepted = (betType !== '4_set' && bonusPct > 0)
+                    ? Math.round(acceptedAmount / (1 + bonusPct / 100))
+                    : acceptedAmount;
+                  if (insert.display_numbers && /^(\d+)=[\d.]+(\s*.*)$/.test(insert.display_numbers)) {
+                    insert.display_numbers = insert.display_numbers.replace(/^(\d+)=[\d.]+(\s*.*)$/, `$1=${baseAccepted}$2`);
+                  }
+                }
                 
                 finalInserts.push(insert);
 
@@ -17912,7 +17935,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           totalBetAmount = processedInserts.reduce((sum, insert) => sum + insert.amount, 0);
 
           if (processedInserts.length === 0) {
-            const setPrice = activeRound?.set_prices?.['4_top'] || 120;
+            const setPrice = activeRound?.set_prices?.['4_set'] || activeRound?.set_prices?.['4_top'] || 120;
             // Group and summarize returned bets
             const groupedReturned = new Map<string, { numbers: string; betType: string; typeLabel: string; amount: number; reason?: string; displayNumbers?: string }>();
             returnedBets.forEach(rb => {
@@ -18027,7 +18050,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         const totalBonusAmount = totalBetAmount - totalBaseAmount;
 
         if (returnedBets && returnedBets.length > 0) {
-          const setPrice = activeRound?.set_prices?.['4_top'] || 120;
+          const setPrice = activeRound?.set_prices?.['4_set'] || activeRound?.set_prices?.['4_top'] || 120;
           const totalReturnedAmount = returnedBets.reduce((sum, rb) => sum + rb.amount, 0);
           const originalTotalAmount = totalBaseAmount + totalReturnedAmount;
 

@@ -480,6 +480,156 @@ describe('History tab upstream layoff transfers filtered by round card settlemen
     })
 })
 
+describe('Dealer history rounds filtered by combined sender search and settlement status', () => {
+    // Round 1 (24 ก.ย.): Beer owes dealer 4482 (pending)
+    // Round 2 (23 ก.ย.): Beer owes dealer 832 (pending)
+    // Round 3 (22 ก.ย.): Beer has paid 0 balance (settled), but Somchai owes dealer 199 (round has pending balance)
+    // Round 4 (21 ก.ย.): No Beer, only Somchai
+
+    const mockRoundHistory = [
+        { id: 'round-1', lottery_type: 'lao', round_date: '2026-09-24', total_entries: 10, total_amount: 18879 },
+        { id: 'round-2', lottery_type: 'lao', round_date: '2026-09-23', total_entries: 8, total_amount: 11971 },
+        { id: 'round-3', lottery_type: 'lao', round_date: '2026-09-22', total_entries: 6, total_amount: 11422 },
+        { id: 'round-4', lottery_type: 'lao', round_date: '2026-09-21', total_entries: 5, total_amount: 8000 }
+    ]
+
+    const mockRoundUserHistories = {
+        'round-1': [
+            { user_id: 'user-beer', total_amount: 10000, total_commission: 2000, total_winnings: 0, profiles: { full_name: 'นายเบีย ปากเซ' } }
+        ],
+        'round-2': [
+            { user_id: 'user-beer', total_amount: 5000, total_commission: 1000, total_winnings: 0, profiles: { full_name: 'นายเบีย ปากเซ' } }
+        ],
+        'round-3': [
+            { user_id: 'user-beer', total_amount: 3000, total_commission: 600, total_winnings: 0, profiles: { full_name: 'นายเบีย ปากเซ' } },
+            { user_id: 'user-somchai', total_amount: 1000, total_commission: 200, total_winnings: 0, profiles: { full_name: 'นายสมชาย' } }
+        ],
+        'round-4': [
+            { user_id: 'user-somchai', total_amount: 2000, total_commission: 400, total_winnings: 0, profiles: { full_name: 'นายสมชาย' } }
+        ]
+    }
+
+    // Payments:
+    // round-1: Beer owes 8000, paid 3518 -> currBal = 4482 (pending)
+    // round-2: Beer owes 4000, paid 3168 -> currBal = 832 (pending)
+    // round-3: Beer owes 2400, paid 2400 -> currBal = 0 (settled!). Somchai owes 800, paid 601 -> currBal = 199 (pending!)
+    const mockAllPayments = {
+        'round-1': [
+            { user_id: 'user-beer', amount: 3518, direction: 'member_to_dealer', status: 'completed' }
+        ],
+        'round-2': [
+            { user_id: 'user-beer', amount: 3168, direction: 'member_to_dealer', status: 'completed' }
+        ],
+        'round-3': [
+            { user_id: 'user-beer', amount: 2400, direction: 'member_to_dealer', status: 'completed' },
+            { user_id: 'user-somchai', amount: 601, direction: 'member_to_dealer', status: 'completed' }
+        ],
+        'round-4': []
+    }
+
+    const isMemberMatch = (uh, query) => {
+        const q = (query || '').trim().toLowerCase()
+        if (!q) return true
+        const name = (uh.profiles?.full_name || '').toLowerCase()
+        return name.includes(q)
+    }
+
+    const filterRounds = ({
+        rounds = mockRoundHistory,
+        senderSearch = '',
+        settlementFilter = 'all'
+    }) => {
+        const senderQuery = (senderSearch || '').trim().toLowerCase()
+
+        return rounds.filter(h => {
+            const uHist = mockRoundUserHistories[h.id] || []
+            const allPayments = mockAllPayments[h.id] || []
+
+            // Check round-level settlement status
+            let roundHasPending = false
+            for (const uh of uHist) {
+                const mPay = allPayments.filter(p => p.user_id === uh.user_id)
+                const init = calculateMemberInitialBalance(uh)
+                const curr = calculateMemberCurrentBalance(init, mPay)
+                if (Math.abs(curr) > 0.01) {
+                    roundHasPending = true
+                    break
+                }
+            }
+            const isRoundSettled = !roundHasPending
+
+            if (senderQuery) {
+                const matchingMembers = uHist.filter(uh => isMemberMatch(uh, senderQuery))
+                if (matchingMembers.length === 0) return false
+
+                if (settlementFilter === 'pending') {
+                    if (isRoundSettled) return false
+
+                    // Matched member must still have pending balance in this round!
+                    const hasPendingMember = matchingMembers.some(uh => {
+                        const mPay = allPayments.filter(p => p.user_id === uh.user_id)
+                        const init = calculateMemberInitialBalance(uh)
+                        const curr = calculateMemberCurrentBalance(init, mPay)
+                        return Math.abs(curr) > 0.01
+                    })
+                    if (!hasPendingMember) return false
+                } else if (settlementFilter === 'settled') {
+                    const hasSettledMember = matchingMembers.some(uh => {
+                        const mPay = allPayments.filter(p => p.user_id === uh.user_id)
+                        const init = calculateMemberInitialBalance(uh)
+                        const curr = calculateMemberCurrentBalance(init, mPay)
+                        return Math.abs(curr) <= 0.01
+                    })
+                    if (!hasSettledMember) return false
+                }
+            } else {
+                if (settlementFilter === 'settled' && !isRoundSettled) return false
+                if (settlementFilter === 'pending' && isRoundSettled) return false
+            }
+
+            return true
+        })
+    }
+
+    it('returns only rounds where Beer is still pending (excludes round-3 where Beer already settled)', () => {
+        const result = filterRounds({
+            senderSearch: 'เบีย',
+            settlementFilter: 'pending'
+        })
+        expect(result.map(r => r.id)).toEqual(['round-1', 'round-2'])
+        expect(result).toHaveLength(2)
+    })
+
+    it('returns round-3 where Beer has settled when filtering by settled and searching Beer', () => {
+        const result = filterRounds({
+            senderSearch: 'เบีย',
+            settlementFilter: 'settled'
+        })
+        expect(result.map(r => r.id)).toEqual(['round-3'])
+        expect(result).toHaveLength(1)
+    })
+
+    it('returns all 3 rounds where Beer participated when filtering by all and searching Beer', () => {
+        const result = filterRounds({
+            senderSearch: 'เบีย',
+            settlementFilter: 'all'
+        })
+        expect(result.map(r => r.id)).toEqual(['round-1', 'round-2', 'round-3'])
+        expect(result).toHaveLength(3)
+    })
+
+    it('returns all rounds with pending status when sender search is empty', () => {
+        const result = filterRounds({
+            senderSearch: '',
+            settlementFilter: 'pending'
+        })
+        // All 4 rounds have pending balances
+        expect(result.map(r => r.id)).toEqual(['round-1', 'round-2', 'round-3', 'round-4'])
+        expect(result).toHaveLength(4)
+    })
+})
+
+
 
 
 

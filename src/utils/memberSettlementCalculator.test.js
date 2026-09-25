@@ -13,7 +13,9 @@ import {
     calculateRoundOutstandingDetails,
     calculateTransferCommission,
     isRoundFullySettled,
-    synthesizeMissingRoundHistory
+    synthesizeMissingRoundHistory,
+    isUpstreamPaymentMatch,
+    filterUpstreamPaymentsForTransfer
 } from './memberSettlementCalculator'
 
 describe('memberSettlementCalculator', () => {
@@ -561,6 +563,113 @@ describe('calculateRoundOutstandingDetails', () => {
             expect(synthesizeMissingRoundHistory([])).toEqual([])
             expect(synthesizeMissingRoundHistory(null)).toEqual([])
             expect(synthesizeMissingRoundHistory(undefined)).toEqual([])
+        })
+    })
+
+    describe('isUpstreamPaymentMatch & filterUpstreamPaymentsForTransfer', () => {
+        it('matches payments exactly by dealer name (case-insensitive)', () => {
+            const payment = { upstream_dealer_name: 'พี่จิ๋ม อ้อมค่าย' }
+            expect(isUpstreamPaymentMatch(payment, 'พี่จิ๋ม อ้อมค่าย', 2)).toBe(true)
+            expect(isUpstreamPaymentMatch(payment, 'พี่จิ๋ม อ้อมค่าย  ', 2)).toBe(true)
+            expect(isUpstreamPaymentMatch(payment, 'DealerB', 2)).toBe(false)
+        })
+
+        it('matches any round upstream payment when effectiveTransfersCount is 1', () => {
+            const payment = { upstream_dealer_name: 'เจ้ามือรับตีออก', amount: 5605 }
+            // Even if the transfer name is 'เจ้ามือ' or dealer name
+            expect(isUpstreamPaymentMatch(payment, 'พี่จิ๋ม อ้อมค่าย', 1)).toBe(true)
+            expect(isUpstreamPaymentMatch(payment, 'เจ้ามือ', 1)).toBe(true)
+        })
+
+        it('matches payments for fallback summary transfer "เจ้ามือ (สรุปในประวัติ)"', () => {
+            const payment1 = { upstream_dealer_name: 'เจ้ามือรับตีออก', amount: 5605 }
+            const payment2 = { upstream_dealer_name: 'พี่จิ๋ม', amount: 3000 }
+            const payment3 = { upstream_dealer_name: null, amount: 2000 }
+
+            expect(isUpstreamPaymentMatch(payment1, 'เจ้ามือ (สรุปในประวัติ)', 1)).toBe(true)
+            expect(isUpstreamPaymentMatch(payment2, 'เจ้ามือ (สรุปในประวัติ)', 1)).toBe(true)
+            expect(isUpstreamPaymentMatch(payment3, 'เจ้ามือ (สรุปในประวัติ)', 1)).toBe(true)
+        })
+
+        it('properly segregates payments when there are multiple transfers', () => {
+            const payments = [
+                { upstream_dealer_name: 'Dealer A', amount: 1000 },
+                { upstream_dealer_name: 'Dealer B', amount: 2000 },
+                { upstream_dealer_name: null, amount: 500 }
+            ]
+
+            const filteredA = filterUpstreamPaymentsForTransfer(payments, 'Dealer A', 2)
+            expect(filteredA).toHaveLength(1)
+            expect(filteredA[0].amount).toBe(1000)
+
+            const filteredB = filterUpstreamPaymentsForTransfer(payments, 'Dealer B', 2)
+            expect(filteredB).toHaveLength(1)
+            expect(filteredB[0].amount).toBe(2000)
+        })
+
+        it('ensures calculateRoundOutstandingDetails and table row logic produce identical settled state for Thai historical round', () => {
+            // Scenario from user screenshot:
+            // Thai round 1 ก.ย. 2569
+            // outAmt: 8608, comm: 3003, winnings: 0 -> net layoff = 5605 (Dealer owes upstream 5,605)
+            // Recorded payment: 5,605 with upstream_dealer_name: 'เจ้ามือรับตีออก'
+            const history = {
+                id: 'history-thai-sep-1',
+                lottery_type: 'thai',
+                transferred_amount: 8608,
+                upstream_commission: 3003,
+                upstream_winnings: 0,
+                total_amount: 46182,
+                total_commission: 12621,
+                total_payout: 3000
+            }
+
+            const userHistories = [
+                { user_id: 'u1', total_amount: 46182, total_commission: 12621, total_winnings: 3000 }
+            ]
+            const memberPayments = [
+                { user_id: 'u1', amount: 46182 - 12621 - 3000, direction: 'member_to_dealer' }
+            ]
+            const upstreamPayments = [
+                {
+                    upstream_dealer_name: 'เจ้ามือรับตีออก',
+                    amount: 5605,
+                    direction: 'dealer_to_upstream'
+                }
+            ]
+
+            // 1. Header calculation: calculateRoundOutstandingDetails
+            const headerResult = calculateRoundOutstandingDetails({
+                history,
+                userHistories,
+                memberPayments,
+                transfers: [], // Historical round has no individual transfers in bet_transfers
+                upstreamPayments
+            })
+
+            expect(headerResult.isSettled).toBe(true)
+            expect(headerResult.netOutstanding).toBe(0)
+            expect(headerResult.dealerOwesUpstream).toBe(0)
+
+            // 2. Table row calculation (simulating Dealer.jsx accordion row)
+            const effectiveTransfers = [{
+                dealerName: "เจ้ามือ (สรุปในประวัติ)",
+                amount: 8608,
+                commission_earned: 3003,
+                winnings: 0
+            }]
+
+            const t = effectiveTransfers[0]
+            const upstreamName = t.dealerName || "เจ้ามือ"
+            const rowPayments = filterUpstreamPaymentsForTransfer(upstreamPayments, upstreamName, effectiveTransfers.length)
+            const initBal = calculateUpstreamInitialBalance(t)
+            const currBal = calculateUpstreamCurrentBalance(initBal, rowPayments)
+            const status = getUpstreamSettlementStatus(currBal)
+
+            // Both header and table MUST agree!
+            expect(rowPayments).toHaveLength(1)
+            expect(currBal).toBe(0)
+            expect(status.isSettled).toBe(true)
+            expect(status.formattedText).toBe('฿0')
         })
     })
 })

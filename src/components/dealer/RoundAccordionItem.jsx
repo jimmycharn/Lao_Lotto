@@ -1358,11 +1358,24 @@ export default function RoundAccordionItem({
             
             // If we have the original line stored, use it directly
             if (group.originalLine) {
+                // Defensive check: if it's 4_set, verify setCount in originalLine matches actual amount
+                if (firstItem.bet_type === '4_set') {
+                    const setPrice = round?.set_prices?.['4_set'] || round?.set_prices?.['4_top'] || 120
+                    const actualSets = Math.round((firstItem.amount || 0) / setPrice)
+                    if (actualSets > 0) {
+                        return `${firstItem.numbers}=${actualSets} 4ตัวชุด`
+                    }
+                }
                 return group.originalLine
             }
             
             // Fallback: reconstruct from individual fields
             const numbers = firstItem.numbers
+            if (firstItem.bet_type === '4_set') {
+                const setPrice = round?.set_prices?.['4_set'] || round?.set_prices?.['4_top'] || 120
+                const actualSets = Math.round((firstItem.amount || 0) / setPrice)
+                return `${numbers}=${actualSets > 0 ? actualSets : 1} 4ตัวชุด`
+            }
             const amount = firstItem.amount
             return `${numbers}=${amount}`
         })
@@ -4736,7 +4749,14 @@ export default function RoundAccordionItem({
                                                                                                     if (!byEntry[entryId]) {
                                                                                                         byEntry[entryId] = {
                                                                                                             id: entryId,
-                                                                                                            numbers: item.display_numbers || item.numbers,
+                                                                                                            numbers: (() => {
+                                                                                                                if (item.bet_type === '4_set') {
+                                                                                                                    const setPrice = round?.set_prices?.['4_set'] || round?.set_prices?.['4_top'] || 120
+                                                                                                                    const sets = Math.round((item.amount || 0) / setPrice)
+                                                                                                                    if (sets > 0) return `${item.numbers}=${sets} 4ตัวชุด`
+                                                                                                                }
+                                                                                                                return item.display_numbers || item.numbers
+                                                                                                            })(),
                                                                                                             bet_type: item.bet_type,
                                                                                                             display_bet_type: item.display_bet_type || BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type,
                                                                                                             amount: 0,

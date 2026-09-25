@@ -873,6 +873,10 @@ export default function UserDashboard() {
                 if (round.open_time && now < new Date(round.open_time)) return false
                 return now < new Date(ext.expires_at)
             }
+            if (round.temp_open_member_id === user.id && !round.temp_open_expires_at) {
+                if (round.open_time && now < new Date(round.open_time)) return false
+                return true
+            }
         }
 
         if (round.status !== 'open') return false
@@ -1546,14 +1550,29 @@ export default function UserDashboard() {
 
         // Check specific bet type close times
         const now = new Date()
+        const ext = selectedRound.temp_open_members?.[user?.id] || (
+            selectedRound.temp_open_member_id === user?.id && selectedRound.temp_open_expires_at
+                ? { expires_at: selectedRound.temp_open_expires_at }
+                : null
+        )
+        const hasMemberExt = !!(ext?.expires_at && now < new Date(ext.expires_at)) ||
+            (selectedRound.temp_open_member_id === user?.id && !selectedRound.temp_open_expires_at)
+        const memberEffectiveClose = ext?.expires_at ? new Date(ext.expires_at) : null
+
         const closedTypes = []
         const lk = selectedRound.lottery_type === 'lao' || selectedRound.lottery_type === 'hanoi' ? 'lao' : selectedRound.lottery_type
         for (const entry of entries) {
             const matchingLimit = selectedRound.type_limits?.find(tl => tl.bet_type === entry.betType)
-            const specificCloseTime = matchingLimit?.close_time ? new Date(matchingLimit.close_time) : new Date(selectedRound.close_time)
-            if (now >= specificCloseTime) {
+            const defaultCloseTime = hasMemberExt
+                ? memberEffectiveClose
+                : new Date(selectedRound.close_time)
+            const specificCloseTime = matchingLimit?.close_time && !hasMemberExt
+                ? new Date(matchingLimit.close_time)
+                : defaultCloseTime
+
+            if (specificCloseTime && now >= specificCloseTime) {
                 const behavior = matchingLimit?.close_time_behavior || 'close_immediately'
-                if (matchingLimit?.close_time && behavior === 'return_excess') {
+                if (matchingLimit?.close_time && !hasMemberExt && behavior === 'return_excess') {
                     // Skip blocking: let the normal limit checks handle this entry past its close time
                 } else {
                     const label = BET_TYPES_BY_LOTTERY[lk]?.[entry.betType]?.label || entry.betType
@@ -2121,7 +2140,18 @@ export default function UserDashboard() {
             return
         }
         const now = new Date()
-        if (selectedRound.close_time && now >= new Date(selectedRound.close_time)) {
+        const restoreExt = selectedRound.temp_open_members?.[user?.id] || (
+            selectedRound.temp_open_member_id === user?.id && selectedRound.temp_open_expires_at
+                ? { expires_at: selectedRound.temp_open_expires_at }
+                : null
+        )
+        const hasRestoreExt = !!(restoreExt?.expires_at && now < new Date(restoreExt.expires_at)) ||
+            (selectedRound.temp_open_member_id === user?.id && !selectedRound.temp_open_expires_at)
+        const effectiveRestoreClose = hasRestoreExt
+            ? (restoreExt?.expires_at ? new Date(restoreExt.expires_at) : null)
+            : (selectedRound.close_time ? new Date(selectedRound.close_time) : null)
+
+        if (effectiveRestoreClose && now >= effectiveRestoreClose) {
             toast.warning('ไม่สามารถเอากลับคืนได้ เนื่องจากเลยเวลาปิดรับแล้ว')
             return
         }
@@ -2216,11 +2246,24 @@ export default function UserDashboard() {
 
             // If we have the original line stored, use it directly
             if (group.originalLine) {
+                // Defensive check: if it's 4_set, verify setCount in originalLine matches actual amount
+                if (firstItem.bet_type === '4_set') {
+                    const setPrice = selectedRound?.set_prices?.['4_set'] || selectedRound?.set_prices?.['4_top'] || 120
+                    const actualSets = Math.round((firstItem.amount || 0) / setPrice)
+                    if (actualSets > 0) {
+                        return `${firstItem.numbers}=${actualSets} 4ตัวชุด`
+                    }
+                }
                 return group.originalLine
             }
 
             // Fallback: reconstruct from individual fields (for old data)
             const numbers = firstItem.numbers
+            if (firstItem.bet_type === '4_set') {
+                const setPrice = selectedRound?.set_prices?.['4_set'] || selectedRound?.set_prices?.['4_top'] || 120
+                const actualSets = Math.round((firstItem.amount || 0) / setPrice)
+                return `${numbers}=${actualSets > 0 ? actualSets : 1} 4ตัวชุด`
+            }
             const amount = firstItem.amount
 
             // Simple format for fallback
@@ -3652,10 +3695,20 @@ export default function UserDashboard() {
                                                                                 }
                                                                                 const clone = { ...sub }
                                                                                 clone._calc_commission = subCommission
+                                                                                if (clone.bet_type === '4_set') {
+                                                                                    const setPrice = round?.set_prices?.['4_set'] || round?.set_prices?.['4_top'] || 120
+                                                                                    const sets = Math.round((clone.amount || 0) / setPrice)
+                                                                                    if (sets > 0) clone.display_numbers = `${clone.numbers}=${sets} 4ตัวชุด`
+                                                                                }
                                                                                 acc.push(clone)
                                                                             } else {
                                                                                 const clone = { ...sub }
                                                                                 clone._calc_commission = subCommission
+                                                                                if (clone.bet_type === '4_set') {
+                                                                                    const setPrice = round?.set_prices?.['4_set'] || round?.set_prices?.['4_top'] || 120
+                                                                                    const sets = Math.round((clone.amount || 0) / setPrice)
+                                                                                    if (sets > 0) clone.display_numbers = `${clone.numbers}=${sets} 4ตัวชุด`
+                                                                                }
                                                                                 acc.push(clone)
                                                                             }
                                                                             return acc

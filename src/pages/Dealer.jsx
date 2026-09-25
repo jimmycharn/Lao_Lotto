@@ -96,7 +96,8 @@ import {
     calculateTransferCommission,
     calculateRoundOutstandingDetails,
     isRoundFullySettled,
-    synthesizeMissingRoundHistory
+    synthesizeMissingRoundHistory,
+    filterUpstreamPaymentsForTransfer
 } from '../utils/memberSettlementCalculator'
 
 // RoundAccordionItem is now imported from separate file
@@ -1163,56 +1164,79 @@ export default function Dealer() {
 
     const getRoundSettlementStatus = useCallback((history) => getRoundSettlementDetails(history).isSettled, [getRoundSettlementDetails])
 
+    const getRoundUserHistoriesAndPayments = useCallback((history) => {
+        if (!history) return { userHistories: [], payments: [] }
+        const targetRoundId = history.round_id || history.id
+        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
+                         (history.close_time ? String(history.close_time).split('T')[0] : null)
+        const details = historyDetails[history.id]
+
+        let uHist = []
+        if (details?.loaded && details.userHistories?.length > 0) {
+            uHist = details.userHistories
+        } else {
+            if (targetRoundId || history.round_id || history.id) {
+                uHist = (settlementOverview?.userHistories || []).filter(uh =>
+                    (targetRoundId && String(uh.round_id) === String(targetRoundId)) ||
+                    (history.round_id && String(uh.round_id) === String(history.round_id)) ||
+                    (history.id && String(uh.round_id) === String(history.id))
+                )
+            }
+            if (uHist.length === 0 && histDate) {
+                uHist = (settlementOverview?.userHistories || []).filter(uh =>
+                    uh.lottery_type === history.lottery_type && 
+                    (uh.round_date ? String(uh.round_date).split('T')[0] : null) === histDate
+                )
+            }
+        }
+
+        const detailsPayments = details?.payments || []
+        const detailsPaymentIds = new Set(detailsPayments.map(p => p.id).filter(Boolean))
+
+        let extraPayments = (settlementOverview?.memberPayments || []).filter(p => {
+            if (!p.id || detailsPaymentIds.has(p.id)) return false
+            return (
+                String(p.round_id) === String(targetRoundId) ||
+                String(p.round_id) === String(history.id) ||
+                (history.round_id && String(p.round_id) === String(history.round_id))
+            )
+        })
+        if (extraPayments.length === 0 && detailsPayments.length === 0 && histDate) {
+            extraPayments = (settlementOverview?.memberPayments || []).filter(p =>
+                p.lottery_type === history.lottery_type && 
+                (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
+            )
+        }
+
+        const allRoundPayments = [...detailsPayments, ...extraPayments]
+        return { userHistories: uHist, payments: allRoundPayments }
+    }, [historyDetails, settlementOverview])
+
     const filteredRoundHistory = useMemo(() => {
         const senderQuery = historySenderSearch.trim().toLowerCase()
 
-        let matchingRoundIds = null
-        if (senderQuery) {
-            matchingRoundIds = new Set()
+        const memberMap = new Map()
+        members.forEach(m => memberMap.set(m.id || m.user_id, m))
+        downstreamDealers?.forEach(m => memberMap.set(m.id || m.user_id, m))
+        pendingMembers?.forEach(m => memberMap.set(m.id || m.user_id, m))
 
-            const memberMap = new Map()
-            members.forEach(m => memberMap.set(m.id || m.user_id, m))
-            downstreamDealers?.forEach(m => memberMap.set(m.id || m.user_id, m))
-            pendingMembers?.forEach(m => memberMap.set(m.id || m.user_id, m))
+        const isMemberMatch = (uh) => {
+            const memberInfo = memberMap.get(uh.user_id)
+            const memberName = (uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || '').toLowerCase()
+            const lineName = (uh.profiles?.line_display_name || '').toLowerCase()
+            const email = (uh.profiles?.email || '').toLowerCase()
+            const extraName = (memberInfo?.full_name || memberInfo?.name || '').toLowerCase()
+            const extraLine = (memberInfo?.line_display_name || '').toLowerCase()
+            const memberCode = String(memberInfo?.member_code || uh.profiles?.member_code || '').toLowerCase()
+            const phone = (memberInfo?.phone || memberInfo?.phone_number || uh.profiles?.phone || '').toLowerCase()
 
-            const isMemberMatch = (uh) => {
-                const memberInfo = memberMap.get(uh.user_id)
-                const memberName = (uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || '').toLowerCase()
-                const lineName = (uh.profiles?.line_display_name || '').toLowerCase()
-                const email = (uh.profiles?.email || '').toLowerCase()
-                const extraName = (memberInfo?.full_name || memberInfo?.name || '').toLowerCase()
-                const extraLine = (memberInfo?.line_display_name || '').toLowerCase()
-                const memberCode = String(memberInfo?.member_code || uh.profiles?.member_code || '').toLowerCase()
-                const phone = (memberInfo?.phone || memberInfo?.phone_number || uh.profiles?.phone || '').toLowerCase()
-
-                return memberName.includes(senderQuery) ||
-                    lineName.includes(senderQuery) ||
-                    memberCode.includes(senderQuery) ||
-                    email.includes(senderQuery) ||
-                    extraName.includes(senderQuery) ||
-                    extraLine.includes(senderQuery) ||
-                    phone.includes(senderQuery)
-            }
-
-            // Check settlementOverview.userHistories
-            (settlementOverview?.userHistories || []).forEach(uh => {
-                if (isMemberMatch(uh)) {
-                    if (uh.round_id) matchingRoundIds.add(String(uh.round_id))
-                    if (uh.round_date && uh.lottery_type) matchingRoundIds.add(`${uh.lottery_type}_${uh.round_date}`)
-                }
-            })
-
-            // Also check historyDetails for any cached/fetched rounds
-            Object.entries(historyDetails).forEach(([hId, det]) => {
-                if (det?.userHistories) {
-                    det.userHistories.forEach(uh => {
-                        if (isMemberMatch(uh)) {
-                            matchingRoundIds.add(String(hId))
-                            if (uh.round_id) matchingRoundIds.add(String(uh.round_id))
-                        }
-                    })
-                }
-            })
+            return memberName.includes(senderQuery) ||
+                lineName.includes(senderQuery) ||
+                memberCode.includes(senderQuery) ||
+                email.includes(senderQuery) ||
+                extraName.includes(senderQuery) ||
+                extraLine.includes(senderQuery) ||
+                phone.includes(senderQuery)
         }
 
         return roundHistory.filter(h => {
@@ -1235,26 +1259,58 @@ export default function Dealer() {
             if (historyTypeFilter !== 'all') {
                 if (h.lottery_type !== historyTypeFilter) return false
             }
-            if (matchingRoundIds !== null) {
-                const hasMatch = (h.id && matchingRoundIds.has(String(h.id))) ||
-                    (h.round_id && matchingRoundIds.has(String(h.round_id))) ||
-                    (h.round_date && h.lottery_type && matchingRoundIds.has(`${h.lottery_type}_${h.round_date}`))
-                if (!hasMatch) return false
-            }
-            if (historySettlementFilter === 'settled') {
-                const sDetails = getRoundSettlementDetails(h)
-                if (!sDetails.isSettled) return false
-            } else if (historySettlementFilter === 'pending') {
-                const sDetails = getRoundSettlementDetails(h)
-                const hasActivity = sDetails.hasActivity ||
-                    (Number(h.total_entries || 0) > 0) ||
-                    (Number(h.total_amount || 0) > 0) ||
-                    (Number(h.transferred_amount || 0) > 0)
-                if (sDetails.isSettled || !hasActivity) return false
+
+            if (senderQuery) {
+                const { userHistories: uHist, payments: allPayments } = getRoundUserHistoriesAndPayments(h)
+                const matchingMembers = uHist.filter(isMemberMatch)
+                if (matchingMembers.length === 0) return false
+
+                if (historySettlementFilter === 'pending') {
+                    const sDetails = getRoundSettlementDetails(h)
+                    const hasActivity = sDetails.hasActivity ||
+                        (Number(h.total_entries || 0) > 0) ||
+                        (Number(h.total_amount || 0) > 0) ||
+                        (Number(h.transferred_amount || 0) > 0)
+                    if (sDetails.isSettled || !hasActivity) return false
+
+                    const hasPendingMember = matchingMembers.some(uh => {
+                        const mPayments = allPayments.filter(p => p.user_id === uh.user_id)
+                        const comm = (uh.total_commission !== undefined && uh.total_commission !== null)
+                            ? Number(uh.total_commission)
+                            : (Number(uh.total_amount || 0) > 0 ? Math.round(Number(uh.total_amount) * 0.20) : 0)
+                        const initBal = calculateMemberInitialBalance({ ...uh, total_commission: comm })
+                        const currBal = calculateMemberCurrentBalance(initBal, mPayments)
+                        return Math.abs(currBal) > 0.01
+                    })
+                    if (!hasPendingMember) return false
+                } else if (historySettlementFilter === 'settled') {
+                    const hasSettledMember = matchingMembers.some(uh => {
+                        const mPayments = allPayments.filter(p => p.user_id === uh.user_id)
+                        const comm = (uh.total_commission !== undefined && uh.total_commission !== null)
+                            ? Number(uh.total_commission)
+                            : (Number(uh.total_amount || 0) > 0 ? Math.round(Number(uh.total_amount) * 0.20) : 0)
+                        const initBal = calculateMemberInitialBalance({ ...uh, total_commission: comm })
+                        const currBal = calculateMemberCurrentBalance(initBal, mPayments)
+                        return Math.abs(currBal) <= 0.01
+                    })
+                    if (!hasSettledMember) return false
+                }
+            } else {
+                if (historySettlementFilter === 'settled') {
+                    const sDetails = getRoundSettlementDetails(h)
+                    if (!sDetails.isSettled) return false
+                } else if (historySettlementFilter === 'pending') {
+                    const sDetails = getRoundSettlementDetails(h)
+                    const hasActivity = sDetails.hasActivity ||
+                        (Number(h.total_entries || 0) > 0) ||
+                        (Number(h.total_amount || 0) > 0) ||
+                        (Number(h.transferred_amount || 0) > 0)
+                    if (sDetails.isSettled || !hasActivity) return false
+                }
             }
             return true
         })
-    }, [roundHistory, historyMonthFilter, historyTypeFilter, historySenderSearch, historySettlementFilter, settlementOverview, historyDetails, members, downstreamDealers, pendingMembers, getRoundSettlementDetails])
+    }, [roundHistory, historyMonthFilter, historyTypeFilter, historySenderSearch, historySettlementFilter, getRoundUserHistoriesAndPayments, members, downstreamDealers, pendingMembers, getRoundSettlementDetails])
 
     const historyTotals = useMemo(() => {
         return filteredRoundHistory.reduce((acc, h) => {
@@ -1311,25 +1367,23 @@ export default function Dealer() {
 
     const getFilteredHistoryUsers = useCallback((history) => {
         if (!history) return []
-        const details = historyDetails[history.id]
-        const userHistories = (details?.userHistories && details.userHistories.length > 0)
-            ? details.userHistories
-            : (settlementOverview?.userHistories || []).filter(uh =>
-                (history.round_id && String(uh.round_id) === String(history.round_id)) ||
-                (history.id && String(uh.round_id) === String(history.id))
-            )
+        const { userHistories, payments } = getRoundUserHistoriesAndPayments(history)
+
         const specificQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
         const roundSearchQuery = specificQuery || (historySenderSearch || '').trim().toLowerCase()
 
         let filtered = userHistories
         if (roundSearchQuery) {
+            const memberMap = new Map()
+            members.forEach(m => memberMap.set(m.id || m.user_id, m))
+            downstreamDealers?.forEach(m => memberMap.set(m.id || m.user_id, m))
+            pendingMembers?.forEach(m => memberMap.set(m.id || m.user_id, m))
+
             filtered = filtered.filter(uh => {
                 const memberName = (uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || '').toLowerCase()
                 const lineName = (uh.profiles?.line_display_name || '').toLowerCase()
                 const email = (uh.profiles?.email || '').toLowerCase()
-                const memberInfo = members.find(m => (m.id || m.user_id) === uh.user_id)
-                    || downstreamDealers?.find(m => (m.id || m.user_id) === uh.user_id)
-                    || pendingMembers?.find(m => (m.id || m.user_id) === uh.user_id)
+                const memberInfo = memberMap.get(uh.user_id)
                 const extraName = (memberInfo?.full_name || memberInfo?.name || '').toLowerCase()
                 const extraLine = (memberInfo?.line_display_name || '').toLowerCase()
                 const memberCode = String(memberInfo?.member_code || uh.profiles?.member_code || '').toLowerCase()
@@ -1345,37 +1399,17 @@ export default function Dealer() {
             })
         }
 
-        const memberSettlementFilter = roundMemberSettlementFilter[history.id] ?? 'pending'
+        const memberSettlementFilter = roundMemberSettlementFilter[history.id] || historySettlementFilter || 'pending'
 
         if (memberSettlementFilter !== 'all') {
-            const targetRoundId = history.round_id || history.id
-            const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
-                             (history.close_time ? String(history.close_time).split('T')[0] : null)
-            const detailsPayments = details?.payments || []
-            const detailsPaymentIds = new Set(detailsPayments.map(p => p.id).filter(Boolean))
-
-            let extraPayments = (settlementOverview?.memberPayments || []).filter(p => {
-                if (!p.id || detailsPaymentIds.has(p.id)) return false
-                return (
-                    String(p.round_id) === String(targetRoundId) ||
-                    String(p.round_id) === String(history.id) ||
-                    (history.round_id && String(p.round_id) === String(history.round_id))
-                )
-            })
-            if (extraPayments.length === 0 && detailsPayments.length === 0 && histDate) {
-                extraPayments = (settlementOverview?.memberPayments || []).filter(p =>
-                    p.lottery_type === history.lottery_type && 
-                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-                )
-            }
-
-            const allRoundPayments = [...detailsPayments, ...extraPayments]
-
             filtered = filtered.filter(uh => {
-                const memberPayments = allRoundPayments.filter(p => p.user_id === uh.user_id)
-                const initBal = calculateMemberInitialBalance(uh)
+                const memberPayments = payments.filter(p => p.user_id === uh.user_id)
+                const comm = (uh.total_commission !== undefined && uh.total_commission !== null)
+                    ? Number(uh.total_commission)
+                    : (Number(uh.total_amount || 0) > 0 ? Math.round(Number(uh.total_amount) * 0.20) : 0)
+                const initBal = calculateMemberInitialBalance({ ...uh, total_commission: comm })
                 const currBal = calculateMemberCurrentBalance(initBal, memberPayments)
-                const isMemberSettled = currBal === 0
+                const isMemberSettled = Math.abs(currBal) <= 0.01
 
                 if (memberSettlementFilter === 'settled') {
                     return isMemberSettled
@@ -1387,7 +1421,7 @@ export default function Dealer() {
         }
 
         return filtered
-    }, [historyDetails, settlementOverview, historyMemberSearchQuery, historySenderSearch, roundMemberSettlementFilter, members, downstreamDealers, pendingMembers])
+    }, [getRoundUserHistoriesAndPayments, historyMemberSearchQuery, historySenderSearch, roundMemberSettlementFilter, historySettlementFilter, members, downstreamDealers, pendingMembers])
 
     const getFilteredEffectiveTransfers = useCallback((history) => {
         if (!history) return []
@@ -1450,7 +1484,7 @@ export default function Dealer() {
                 winnings: outWin
             }] : [])
 
-        const roundFilter = roundMemberSettlementFilter[history.id] ?? 'pending'
+        const roundFilter = roundMemberSettlementFilter[history.id] || historySettlementFilter || 'pending'
         if (effectiveTransfers.length === 0 || roundFilter === 'all') {
             return effectiveTransfers
         }
@@ -1480,10 +1514,7 @@ export default function Dealer() {
 
         return effectiveTransfers.filter(t => {
             const upstreamName = t.dealerName || "เจ้ามือ"
-            const upstreamPayments = allUpstreamPayments.filter(p => 
-                p.upstream_dealer_name === upstreamName ||
-                (!p.upstream_dealer_name && effectiveTransfers.length === 1)
-            )
+            const upstreamPayments = filterUpstreamPaymentsForTransfer(allUpstreamPayments, upstreamName, effectiveTransfers.length)
             const initBal = calculateUpstreamInitialBalance(t)
             const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
             const isSettled = currBal === 0
@@ -1495,7 +1526,7 @@ export default function Dealer() {
             }
             return true
         })
-    }, [historyDetails, settlementOverview, upstreamSettingsMap, roundMemberSettlementFilter])
+    }, [historyDetails, settlementOverview, upstreamSettingsMap, roundMemberSettlementFilter, historySettlementFilter])
 
     const getHistoryCardContent = useCallback((cardIndex) => {
         const history = filteredRoundHistory[cardIndex]
@@ -4963,7 +4994,7 @@ export default function Dealer() {
                                                                                     }] : [])
                                                                                 
                                                                                 const roundSearchQuery = (historyMemberSearchQuery[history.id] || '').trim().toLowerCase()
-                                                                                const currentMemberFilter = roundMemberSettlementFilter[history.id] ?? 'pending'
+                                                                                const currentMemberFilter = roundMemberSettlementFilter[history.id] || historySettlementFilter || 'pending'
                                                                                 const filteredUserHistories = getFilteredHistoryUsers(history)
                                                                                 const filteredEffectiveTransfers = getFilteredEffectiveTransfers(history)
 
@@ -5108,8 +5139,8 @@ export default function Dealer() {
                                                                                                             {filteredUserHistories.length === 0 ? (
                                                                                                                 <tr>
                                                                                                                     <td colSpan={7} style={{ textAlign: "center", padding: "1.25rem", color: "var(--color-text-muted)", fontSize: "0.85rem" }}>
-                                                                                                                        {roundSearchQuery 
-                                                                                                                            ? `ไม่พบรายชื่อสมาชิกที่ตรงกับคำค้นหา "${roundSearchQuery}"`
+                                                                                                                        {(roundSearchQuery || (historySenderSearch || '').trim())
+                                                                                                                            ? `ไม่พบรายชื่อสมาชิกที่ตรงกับคำค้นหา "${(historyMemberSearchQuery[history.id] || historySenderSearch || '').trim()}"`
                                                                                                                             : (currentMemberFilter === 'settled' ? 'ไม่มีสมาชิกที่ชำระครบแล้วในงวดนี้' : (currentMemberFilter === 'pending' ? 'ไม่มีสมาชิกที่ค้างชำระในงวดนี้' : 'ไม่มีข้อมูลสมาชิกในงวดนี้'))
                                                                                                                         }
                                                                                                                     </td>
@@ -5400,10 +5431,7 @@ export default function Dealer() {
                                                                                                                     }
 
                                                                                                                     const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
-                                                                                                                    const upstreamPayments = allUpstreamPayments.filter(p => 
-                                                                                                                        p.upstream_dealer_name === upstreamName ||
-                                                                                                                        (!p.upstream_dealer_name && effectiveTransfers.length === 1)
-                                                                                                                    )
+                                                                                                                    const upstreamPayments = filterUpstreamPaymentsForTransfer(allUpstreamPayments, upstreamName, effectiveTransfers.length)
                                                                                                                     const initBal = calculateUpstreamInitialBalance(t)
                                                                                                                     const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
                                                                                                                     const settlementStatus = getUpstreamSettlementStatus(currBal)

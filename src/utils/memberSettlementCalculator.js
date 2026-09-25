@@ -310,6 +310,54 @@ export function getUpstreamPaymentPresetAmount(transfer, payments = [], paymentT
 }
 
 /**
+ * Determines whether an upstream payment matches a given transfer.
+ * Handles fallback cases when a transfer is synthesized from round_history (e.g. 'เจ้ามือ (สรุปในประวัติ)'),
+ * when payments use generic names (e.g. 'เจ้ามือรับตีออก', 'เจ้ามือ'),
+ * or when there is only a single transfer in the round.
+ *
+ * @param {Object} payment - Payment record from upstream_round_payments
+ * @param {string} upstreamName - Name of the dealer/transfer (e.g. t.dealerName)
+ * @param {number} [effectiveTransfersCount=1] - Total number of transfers for this round
+ * @returns {boolean}
+ */
+export function isUpstreamPaymentMatch(payment, upstreamName = '', effectiveTransfersCount = 1) {
+    if (!payment) return false
+    const pName = (payment.upstream_dealer_name || '').trim()
+    const uName = (upstreamName || '').trim()
+
+    // 1. Exact match (case-insensitive)
+    if (pName && uName && pName.toLowerCase() === uName.toLowerCase()) {
+        return true
+    }
+
+    // 2. If there is only 1 effective transfer in the round, or this is the fallback summary transfer,
+    // all upstream payments for this round belong to this transfer
+    if (effectiveTransfersCount === 1 || uName === 'เจ้ามือ (สรุปในประวัติ)' || pName === 'เจ้ามือ (สรุปในประวัติ)') {
+        return true
+    }
+
+    // 3. Fallback name matches when no specific name or generic name is provided
+    if (!pName && (uName === 'เจ้ามือรับตีออก' || uName === 'เจ้ามือ')) {
+        return true
+    }
+
+    return false
+}
+
+/**
+ * Filters upstream payments for a given transfer using unified matching logic.
+ *
+ * @param {Array<Object>} payments - Array of upstream payments
+ * @param {string} upstreamName - Name of the dealer/transfer
+ * @param {number} [effectiveTransfersCount=1] - Total number of transfers for this round
+ * @returns {Array<Object>}
+ */
+export function filterUpstreamPaymentsForTransfer(payments = [], upstreamName = '', effectiveTransfersCount = 1) {
+    if (!Array.isArray(payments) || payments.length === 0) return []
+    return payments.filter(p => isUpstreamPaymentMatch(p, upstreamName, effectiveTransfersCount))
+}
+
+/**
  * Calculates comprehensive settlement and outstanding balances for an entire lottery round.
  * Sums up:
  * - Members who owe dealer (memberOwesDealer)
@@ -443,10 +491,7 @@ export function calculateRoundOutstandingDetails({
     if (effectiveTransfers.length > 0) {
         for (const t of effectiveTransfers) {
             const upstreamName = t.dealerName || "เจ้ามือ"
-            const upPayments = upstreamPayments.filter(p => 
-                p.upstream_dealer_name === upstreamName ||
-                effectiveTransfers.length === 1
-            )
+            const upPayments = filterUpstreamPaymentsForTransfer(upstreamPayments, upstreamName, effectiveTransfers.length)
             const initBal = calculateUpstreamInitialBalance(t)
             const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)
             if (currBal > 0.01) {
