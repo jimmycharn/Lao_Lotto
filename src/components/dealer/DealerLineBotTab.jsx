@@ -1625,10 +1625,25 @@ export default function DealerLineBotTab({ user, profile }) {
                             <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
                                 <td style={{ padding: '0.75rem' }}>
                                     <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
-                                        /ยอดเกิน หรือ /excess
+                                        /ยอดเหลือ
                                     </code>
                                 </td>
-                                <td style={{ padding: '0.75rem' }}>ตรวจสอบรายการโพยที่ยอดซื้อเกินขีดจำกัดลิมิต (ยอดที่เตรียมตีออก)</td>
+                                <td style={{ padding: '0.75rem' }}>สรุปยอดถือสู้คงเหลือหลังหักการตีออก แยกตามประเภทเลข (แบบเดียวกับ /ยอดรวม)</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                    <span style={{ color: 'var(--color-primary)', fontSize: '0.75rem', background: 'rgba(212,175,55,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
+                                        🔑 สิทธิ์ดูยอดรวม
+                                    </span>
+                                </td>
+                                <td style={{ padding: '0.75rem', textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>✗ ไม่ได้</td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid rgba(128,128,128,0.1)', background: 'rgba(255,255,255,0.01)' }}>
+                                <td style={{ padding: '0.75rem' }}>
+                                    <code style={{ background: 'rgba(255,255,255,0.05)', padding: '0.2rem 0.4rem', borderRadius: '4px', fontSize: '0.8rem', fontFamily: 'monospace', color: 'var(--color-primary)' }}>
+                                        /ยอดเกิน
+                                    </code>
+                                </td>
+                                <td style={{ padding: '0.75rem' }}>สรุปยอดรับเกินลิมิตอั้นคงเหลือ แยกตามประเภทเลข (แบบเดียวกับ /ยอดรวม)</td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center', color: '#22c55e', fontWeight: 'bold' }}>✓ ได้</td>
                                 <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                     <span style={{ color: '#ff9f40', fontSize: '0.75rem', background: 'rgba(255,159,64,0.1)', padding: '0.15rem 0.35rem', borderRadius: '4px', fontWeight: 600 }}>
