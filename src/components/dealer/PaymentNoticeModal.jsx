@@ -611,10 +611,17 @@ export default function PaymentNoticeModal({
 
                             {mode === 'combine_all' && (
                                 <>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8' }}>
-                                        <span>{isUpstream ? 'ยอดตีออกค้างงวดปัจจุบัน:' : 'ยอดค้างงวดปัจจุบัน:'}</span>
-                                        <span style={{ fontWeight: 600 }}>฿{Number(summary.currentRoundDebt || 0).toLocaleString()}</span>
-                                    </div>
+                                    {summary.currentRoundPrize > 0 ? (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8' }}>
+                                            <span>{isUpstream ? 'ยอดถูกรางวัลงวดปัจจุบัน (คืน):' : 'ยอดงวดปัจจุบัน (เจ้ามือจ่าย):'}</span>
+                                            <span style={{ color: '#22c55e', fontWeight: 600 }}>-฿{Number(summary.currentRoundPrize).toLocaleString()}</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8' }}>
+                                            <span>{isUpstream ? 'ยอดตีออกค้างงวดปัจจุบัน:' : 'ยอดค้างงวดปัจจุบัน:'}</span>
+                                            <span style={{ fontWeight: 600 }}>฿{Number(summary.currentRoundDebt || 0).toLocaleString()}</span>
+                                        </div>
+                                    )}
                                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#94a3b8', marginTop: '0.2rem' }}>
                                         <span>{isUpstream ? 'รวมยอดค้างเก่าที่เลือก:' : 'รวมหนี้เก่าที่เลือก:'}</span>
                                         <span style={{ fontWeight: 600 }}>฿{Number(summary.selectedPastDebt || 0).toLocaleString()}</span>

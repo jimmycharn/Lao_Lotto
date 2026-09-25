@@ -186,6 +186,49 @@ describe('paymentNoticeHelper', () => {
             expect(msg).toBe(expected)
         })
 
+        it('formats combine_all correctly when dealer owes member in current round (matching user exact scenario)', () => {
+            const summary = calculatePaymentNoticeSummary({
+                mode: 'combine_all',
+                currentBalance: -4964,
+                currentWinnings: 5500,
+                selectedPastRounds: [
+                    { roundId: 'r1', lotteryType: 'lao', roundDate: '24 ก.ย. 2569', debt: 798 },
+                    { roundId: 'r2', lotteryType: 'lao', roundDate: '23 ก.ย. 2569', debt: 832 }
+                ]
+            })
+
+            expect(summary.netAmount).toBe(3334)
+            expect(summary.direction).toBe('dealer_to_member')
+            expect(summary.currentRoundPrize).toBe(4964)
+            expect(summary.currentRoundDebt).toBe(0)
+
+            const msg = formatPaymentNoticeMessage({
+                memberName: 'พี่ไอซ์',
+                roundDate: '25 ก.ย. 2569',
+                lotteryTypeName: 'หวยลาว',
+                mode: 'combine_all',
+                summary,
+                selectedPastRounds: [
+                    { roundId: 'r1', lotteryType: 'lao', roundDate: '24 ก.ย. 2569', debt: 798 },
+                    { roundId: 'r2', lotteryType: 'lao', roundDate: '23 ก.ย. 2569', debt: 832 }
+                ]
+            })
+
+            const expected = [
+                '👤 สมาชิก: พี่ไอซ์',
+                '📌 รูปแบบ: หักลบทั้งหมด',
+                '----------------------------',
+                '- เจ้ามือจ่าย(หวยลาว) 25 ก.ย. 2569: ฿4,964',
+                '- ยอดค้างงวด(หวยลาว) 24 ก.ย. 2569: ฿798',
+                '- ยอดค้างงวด(หวยลาว) 23 ก.ย. 2569: ฿832',
+                '----------------------------',
+                '💰 รวมยอดที่เจ้ามือต้องโอน: -฿3,334',
+                '🔴 เจ้ามือโอนคืนให้สมาชิก'
+            ].join('\n')
+
+            expect(msg).toBe(expected)
+        })
+
         it('formats single round debt with round date when provided', () => {
             const msg = formatPaymentNoticeMessage({
                 memberName: 'พี่แตง',

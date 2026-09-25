@@ -870,7 +870,9 @@ export function formatPaymentNoticeMessage({
                 lines.push(`- รางวัลงวดนี้ที่นำมาหักล้าง: ฿${Number(summary.currentRoundPrize).toLocaleString()}`)
             }
         } else if (mode === 'combine_all') {
-            if (Number(summary?.currentRoundDebt || 0) > 0 || sortedPast.length === 0) {
+            if (Number(summary?.currentRoundPrize || 0) > 0) {
+                lines.push(`- เจ้ามือจ่าย(${curLottery})${curDateFormatted}: ฿${Number(summary.currentRoundPrize).toLocaleString()}`)
+            } else if (Number(summary?.currentRoundDebt || 0) > 0 || sortedPast.length === 0) {
                 const debtLabel = '- ยอดค้างงวด'
                 lines.push(`${debtLabel}(${curLottery})${curDateFormatted}: ฿${Number(summary?.currentRoundDebt || 0).toLocaleString()}`)
             }
@@ -896,7 +898,8 @@ export function formatPaymentNoticeMessage({
             lines.push('🟢 สมาชิกโอนชำระให้เจ้ามือ')
         } else if (summary?.direction === 'dealer_to_member') {
             const title = (mode === 'combine_all' || mode === 'offset_prize_past_debt') ? '💰 รวมยอดที่เจ้ามือต้องโอน' : '💰 ยอดที่เจ้ามือต้องโอน'
-            lines.push(`${title}: ฿${netAmt}`)
+            const sign = mode === 'combine_all' ? '-' : ''
+            lines.push(`${title}: ${sign}฿${netAmt}`)
             lines.push('🔴 เจ้ามือโอนคืนให้สมาชิก')
         } else {
             lines.push(`💰 ยอดหักล้างพอดี: ฿0`)
