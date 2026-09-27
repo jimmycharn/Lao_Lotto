@@ -5,6 +5,7 @@ import { parseMultiLinePaste, ParsedBet, getPermutations, getUnique3DigitPermsFr
 import { buildBetItems, calculateScenarios, greedyRecommendations } from "./layoffCalculator.ts"
 import { isMemberCodeParam, matchMembersByCode, parseRoundDateParam, parseMemberAndRoundDateParam } from "./memberCode.ts"
 import { parseWinningNumbers, getWinningNumberFormatHelp } from "./winningNumbers.ts"
+import { isConversationMessage } from "./conversationHelper.ts"
 import { PDFDocument, rgb } from "npm:pdf-lib@1.17.1"
 import fontkit from "npm:@pdf-lib/fontkit@0.0.4"
 
@@ -7594,6 +7595,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         // Handle Text Message
         if (event.type === 'message' && event.message?.type === 'text') {
           const text = event.message.text.trim();
+
+          // ".." (double-dot) prefix = conversation mode.
+          // Messages starting with ".." are meant for human-to-human chat in the group.
+          // The bot should stay silent and not process them as commands or bets (works for everyone).
+          if (isConversationMessage(text)) {
+            console.log(`[LINE BOT CHAT] Ignoring conversation message from ${userId}: "${text.slice(0, 50)}..."`);
+            continue;
+          }
           
           if (text === 'ยกเลิกตีออก') {
             await sendLineReply(replyToken, `🚫 ยกเลิกการตีออกเรียบร้อยแล้วค่ะ`);
@@ -14868,6 +14877,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                         cmdRow("/หวย", "เช็คประเภทหวยของกลุ่ม หรือเปลี่ยนหวย (เช่น /หวยไทย, /หวยลาว)"),
                         cmdRow("/โพยปิด หรือ /โพยเปิด", "ปิด/เปิดแสดงผลใบโพยหลังส่งเลข (เฉพาะกลุ่มนี้)"),
                         cmdRow("/โพยย่อ หรือ /โพยเต็ม", "ตั้งค่าใบโพยแสดงเฉพาะผลรวม / หรือแจงทุกรายการ (เฉพาะกลุ่มนี้)"),
+                        cmdRow(".. [ข้อความ]", "พิมพ์ .. นำหน้าข้อความเพื่อคุยในกลุ่ม (บอทจะไม่ตอบกลับ)"),
                         cmdRow("/คำสั่ง หรือ /help", "แสดงรายการคำสั่งนี้")
                       ]
                     },
@@ -15044,6 +15054,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       cmdRow("/bind [รหัส]", "ผูกกลุ่ม LINE ด้วยรหัส (ใช้ในกลุ่ม)"),
 
                       sectionHeader("❓", "อื่นๆ"),
+                      cmdRow(".. [ข้อความ]", "พิมพ์ .. นำหน้าข้อความเพื่อคุยในกลุ่ม (บอทจะไม่ตอบกลับ)"),
                       cmdRow("/คำสั่ง หรือ /help", "แสดงรายการคำสั่งนี้")
                     ]
                   }
