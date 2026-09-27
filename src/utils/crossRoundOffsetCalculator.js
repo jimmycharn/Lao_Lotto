@@ -795,7 +795,11 @@ export function allocateSettlementPaymentsByMode({
         pastRoundPayments.push(pastPrizePayment)
     }
 
-    let remainingFunds = Math.round(slip + totalPastPrizeCredit)
+    // When curBal < 0 (dealer owes member in current round), that amount acts as
+    // additional funds available to clear past debts (it offsets against past debt
+    // instead of being paid out separately as a prize).
+    const curBalCredit = curBal < 0 ? Math.abs(curBal) : 0
+    let remainingFunds = Math.round(slip + totalPastPrizeCredit + curBalCredit)
 
     // Allocate to past debts FIFO
     for (const past of pastDebts) {
@@ -852,12 +856,15 @@ export function allocateSettlementPaymentsByMode({
         }
         remainingFunds -= curAllocated
     } else if (curBal < 0) {
+        // In combine_all mode, a negative current balance means the dealer owes the member.
+        // This is recorded as 'net_settlement' (เคลียร์ยอดสุทธิ) — NOT 'prize_payout' —
+        // because it's part of a combined cross-round settlement, not a standalone prize payout.
         currentRoundPayment = {
             dealer_id: dealerId,
             round_id: curRoundId,
             lottery_type: currentRound.lottery_type || null,
             round_date: curRoundDateIso,
-            payment_type: isUpstream ? 'prize_collection' : 'prize_payout',
+            payment_type: 'net_settlement',
             direction: isUpstream ? 'upstream_to_dealer' : 'dealer_to_member',
             amount: Math.abs(curBal),
             paid_at: paidAt,
