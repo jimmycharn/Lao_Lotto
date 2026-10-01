@@ -12,6 +12,7 @@ import {
     getUpstreamPaymentPresetAmount,
     calculateRoundOutstandingDetails,
     calculateTransferCommission,
+    calculateTransferWinning,
     isRoundFullySettled,
     synthesizeMissingRoundHistory,
     isUpstreamPaymentMatch,
@@ -670,6 +671,83 @@ describe('calculateRoundOutstandingDetails', () => {
             expect(currBal).toBe(0)
             expect(status.isSettled).toBe(true)
             expect(status.formattedText).toBe('฿0')
+        })
+
+        it('preserves history.upstream_winnings when raw transfers exist but individual transfers have winnings: 0', () => {
+            // Historical Thai round 1 Oct:
+            // Outgoing total amount: 53,888, comm: 11,646, winnings: 1,500
+            // Initial balance should be (53,888 - 11,646) - 1,500 = 40,742
+            const history = {
+                id: 'history-thai-oct-1',
+                lottery_type: 'thai',
+                transferred_amount: 53888,
+                upstream_commission: 11646,
+                upstream_winnings: 1500,
+                total_amount: 531563,
+                total_commission: 118332,
+                total_payout: 231250
+            }
+
+            // Raw transfers from bet_transfers table (no winnings column in DB, so winnings = 0)
+            const rawTransfers = [
+                {
+                    amount: 53888,
+                    commission_earned: 11646,
+                    bet_type: '2_top',
+                    numbers: '01',
+                    winnings: 0,
+                    target_dealer_name: 'เจ้ามือรับส่ง'
+                }
+            ]
+
+            const res = calculateRoundOutstandingDetails({
+                history,
+                userHistories: [],
+                memberPayments: [],
+                transfers: rawTransfers,
+                upstreamPayments: []
+            })
+
+            // Dealer owes upstream 40,742 (NOT 42,242 which would happen if winnings were lost)
+            expect(res.dealerOwesUpstream).toBe(40742)
+        })
+    })
+
+    describe('calculateTransferWinning', () => {
+        const winningNumbersThai = {
+            '6_top': '402701',
+            '3_top': '701',
+            '2_top': '01',
+            '2_bottom': '70'
+        }
+
+        it('calculates 2_top winning transfer correctly', () => {
+            const transfer = { bet_type: '2_top', numbers: '01', amount: 10 }
+            const win = calculateTransferWinning(transfer, winningNumbersThai, 'thai')
+            expect(win).toBe(10 * 65) // 650
+        })
+
+        it('calculates 2_bottom winning transfer correctly', () => {
+            const transfer = { bet_type: '2_bottom', numbers: '70', amount: 20 }
+            const win = calculateTransferWinning(transfer, winningNumbersThai, 'thai')
+            expect(win).toBe(20 * 65) // 1300
+        })
+
+        it('calculates 3_top winning transfer correctly with upstream custom payout', () => {
+            const transfer = { bet_type: '3_top', numbers: '701', amount: 10 }
+            const upstreamSettings = {
+                thai: {
+                    '3_top': { payout: 900 }
+                }
+            }
+            const win = calculateTransferWinning(transfer, winningNumbersThai, 'thai', 120, null, upstreamSettings)
+            expect(win).toBe(10 * 900) // 9000
+        })
+
+        it('returns 0 for non-winning transfer', () => {
+            const transfer = { bet_type: '2_top', numbers: '99', amount: 100 }
+            const win = calculateTransferWinning(transfer, winningNumbersThai, 'thai')
+            expect(win).toBe(0)
         })
     })
 })

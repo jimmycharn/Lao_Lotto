@@ -1816,7 +1816,8 @@ function splitTextByLimit(textStr: string, limit = 4000): string[] {
 // Helper: Send Reply Message to LINE
 async function sendLineReply(
   replyToken: string,
-  textOrPayload: string | Record<string, any> | Array<string | Record<string, any>>
+  textOrPayload: string | Record<string, any> | Array<string | Record<string, any>>,
+  pushDestination?: string
 ): Promise<void> {
   if (!LINE_CHANNEL_ACCESS_TOKEN) {
     console.error("LINE_CHANNEL_ACCESS_TOKEN not configured");
@@ -1841,6 +1842,10 @@ async function sendLineReply(
     messages = [message];
   }
 
+  if (messages.length > 5) {
+    messages = messages.slice(0, 5);
+  }
+
   const response = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
@@ -1856,42 +1861,47 @@ async function sendLineReply(
     const errText = await response.text();
     console.error(`Failed to send LINE reply: ${response.status} - ${errText}`);
 
-    // If it was a Flex message and failed, try falling back to sending the altText as plain text!
-    if (typeof textOrPayload !== "string" && textOrPayload.type === "flex" && textOrPayload.altText) {
-      console.warn("Flex message failed. Falling back to plain text altText.");
-      const fallbackResponse = await fetch("https://api.line.me/v2/bot/message/reply", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${LINE_CHANNEL_ACCESS_TOKEN}`
-        },
-        body: JSON.stringify({
-          replyToken,
-          messages: [
-            {
-              type: "text",
-              text: `⚠️ [บอท: การ์ดข้อความเกิดข้อผิดพลาด - แสดงผลแบบข้อความธรรมดา]:\n\n${textOrPayload.altText}\n\n(รายละเอียดข้อผิดพลาด: ${errText})`
-            }
-          ]
-        })
-      });
-      if (!fallbackResponse.ok) {
-        const fallbackErr = await fallbackResponse.text();
-        console.error(`Fallback failed: ${fallbackResponse.status} - ${fallbackErr}`);
+    // If reply failed and pushDestination is available, fall back to pushMessage!
+    if (pushDestination) {
+      console.warn(`LINE reply failed, attempting push fallback to destination: ${pushDestination}`);
+      try {
+        await sendLinePush(pushDestination, textOrPayload);
+        return;
+      } catch (pushFallbackErr) {
+        console.error("sendLineReply push fallback failed:", pushFallbackErr);
       }
     }
   }
 }
 
 // Helper: Send LINE Push Message (proactive, no reply token needed)
-async function sendLinePush(to: string, textOrPayload: string | Record<string, any>, dealerId?: string): Promise<void> {
-  const message = typeof textOrPayload === "string"
-    ? { type: "text", text: textOrPayload }
-    : textOrPayload;
-
+async function sendLinePush(
+  to: string,
+  textOrPayload: string | Record<string, any> | Array<string | Record<string, any>>,
+  dealerId?: string
+): Promise<void> {
   if (!LINE_CHANNEL_ACCESS_TOKEN) {
     console.error("LINE_CHANNEL_ACCESS_TOKEN not configured");
     return;
+  }
+
+  let messages: Array<any> = [];
+  if (Array.isArray(textOrPayload)) {
+    messages = textOrPayload.map(item => {
+      if (typeof item === "string") {
+        return { type: "text", text: item };
+      }
+      return item;
+    });
+  } else {
+    const message = typeof textOrPayload === "string"
+      ? { type: "text", text: textOrPayload }
+      : textOrPayload;
+    messages = [message];
+  }
+
+  if (messages.length > 5) {
+    messages = messages.slice(0, 5);
   }
 
   try {
@@ -1903,7 +1913,7 @@ async function sendLinePush(to: string, textOrPayload: string | Record<string, a
       },
       body: JSON.stringify({
         to,
-        messages: [message]
+        messages
       })
     });
 
@@ -4065,18 +4075,125 @@ async function generateRoundSummaryFlex(
     summaryText += `--------------------------\n`;
     summaryText += `2. รายละเอียดแต่ละคน\n`;
 
-    const memberBubbleContents: any[] = [];
+    // Helper function to create individual member summary card box
+    const createMemberSummaryBox = (u: any, idx: number) => {
+      const net = u.totalWin - (u.totalBet - u.totalCommission);
+      const roundedNet = Math.round(net);
+      const roundedBet = Math.round(u.totalBet);
+      const roundedComm = Math.round(u.totalCommission);
+      const roundedRemaining = roundedBet - roundedComm;
+      const roundedWin = Math.round(u.totalWin);
+
+      let netLabel = '';
+      let netColor = '#888888';
+      if (roundedNet > 0) {
+        netLabel = `ต้องจ่าย ฿${roundedNet.toLocaleString('th-TH')}`;
+        netColor = '#ef4444';
+      } else if (roundedNet < 0) {
+        netLabel = `ต้องเก็บ ฿${Math.abs(roundedNet).toLocaleString('th-TH')}`;
+        netColor = '#10b981';
+      } else {
+        netLabel = 'เสมอ';
+        netColor = '#64748b';
+      }
+
+      return {
+        "type": "box",
+        "layout": "vertical",
+        "backgroundColor": "#ffffff",
+        "cornerRadius": "md",
+        "paddingAll": "md",
+        "margin": "md",
+        "contents": [
+          {
+            "type": "box",
+            "layout": "horizontal",
+            "contents": [
+              {
+                "type": "text",
+                "size": "sm",
+                "flex": 7,
+                "wrap": true,
+                "contents": [
+                  {
+                    "type": "span",
+                    "text": `${idx + 1}. คุณ ${u.userName}`,
+                    "weight": "bold",
+                    "color": "#0f172a"
+                  },
+                  ...(u.memberCode ? [
+                    {
+                      "type": "span",
+                      "text": ` (${u.memberCode})`,
+                      "size": "xs",
+                      "weight": "regular",
+                      "color": "#64748b"
+                    }
+                  ] : [])
+                ]
+              },
+              {
+                "type": "text",
+                "text": netLabel,
+                "weight": "bold",
+                "size": "sm",
+                "color": netColor,
+                "align": "end",
+                "flex": 5
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "horizontal",
+            "margin": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": `แทง: ฿${roundedBet.toLocaleString('th-TH')}`,
+                "size": "xs",
+                "color": "#64748b",
+                "flex": 5
+              },
+              {
+                "type": "text",
+                "text": `เหลือ: ฿${roundedRemaining.toLocaleString('th-TH')}`,
+                "size": "xs",
+                "color": "#10b981",
+                "weight": "bold",
+                "align": "end",
+                "flex": 6
+              }
+            ]
+          },
+          {
+            "type": "box",
+            "layout": "horizontal",
+            "margin": "xs",
+            "contents": [
+              {
+                "type": "text",
+                "text": `คอม: ฿${roundedComm.toLocaleString('th-TH')}`,
+                "size": "xs",
+                "color": "#64748b",
+                "flex": 5
+              },
+              {
+                "type": "text",
+                "text": isAnnounced ? `ถูก: ${u.winCount} ครั้ง/฿${roundedWin.toLocaleString('th-TH')}` : "ถูก: -",
+                "size": "xs",
+                "color": "#64748b",
+                "align": "end",
+                "flex": 6
+              }
+            ]
+          }
+        ]
+      };
+    };
 
     if (sortedUserSummaries.length === 0) {
       summaryText += `ยังไม่มียอดแทงส่งเข้ามาค่ะ\n`;
-      memberBubbleContents.push({
-        "type": "text",
-        "text": "ยังไม่มียอดแทงส่งเข้ามาค่ะ",
-        "size": "sm",
-        "color": "#64748b",
-        "align": "center",
-        "margin": "md"
-      });
     } else {
       sortedUserSummaries.forEach((u, idx) => {
         const net = u.totalWin - (u.totalBet - u.totalCommission);
@@ -4087,16 +4204,12 @@ async function generateRoundSummaryFlex(
         const roundedWin = Math.round(u.totalWin);
 
         let netLabel = '';
-        let netColor = '#888888';
         if (roundedNet > 0) {
           netLabel = `ต้องจ่าย ฿${roundedNet.toLocaleString('th-TH')}`;
-          netColor = '#ef4444';
         } else if (roundedNet < 0) {
           netLabel = `ต้องเก็บ ฿${Math.abs(roundedNet).toLocaleString('th-TH')}`;
-          netColor = '#10b981';
         } else {
           netLabel = 'เสมอ';
-          netColor = '#64748b';
         }
 
         const memberCodeStr = u.memberCode ? ` (${u.memberCode})` : '';
@@ -4105,100 +4218,6 @@ async function generateRoundSummaryFlex(
         summaryText += `- ยอดแทง: ฿${roundedBet.toLocaleString('th-TH')} | ค่าคอม: ฿${roundedComm.toLocaleString('th-TH')} | เหลือ: ฿${roundedRemaining.toLocaleString('th-TH')}\n`;
         summaryText += `- ถูก/ยอดได้: ${isAnnounced ? `${u.winCount} ครั้ง/฿${roundedWin.toLocaleString('th-TH')}` : '-'}\n`;
         summaryText += `- สรุป: ${netLabel}\n\n`;
-
-        memberBubbleContents.push({
-          "type": "box",
-          "layout": "vertical",
-          "backgroundColor": "#ffffff",
-          "cornerRadius": "md",
-          "paddingAll": "md",
-          "margin": "md",
-          "contents": [
-            {
-              "type": "box",
-              "layout": "horizontal",
-              "contents": [
-                {
-                  "type": "text",
-                  "size": "sm",
-                  "flex": 7,
-                  "wrap": true,
-                  "contents": [
-                    {
-                      "type": "span",
-                      "text": `คุณ ${u.userName}`,
-                      "weight": "bold",
-                      "color": "#0f172a"
-                    },
-                    ...(u.memberCode ? [
-                      {
-                        "type": "span",
-                        "text": ` (${u.memberCode})`,
-                        "size": "xs",
-                        "weight": "regular",
-                        "color": "#64748b"
-                      }
-                    ] : [])
-                  ]
-                },
-                {
-                  "type": "text",
-                  "text": netLabel,
-                  "weight": "bold",
-                  "size": "sm",
-                  "color": netColor,
-                  "align": "end",
-                  "flex": 5
-                }
-              ]
-            },
-            {
-              "type": "box",
-              "layout": "horizontal",
-              "margin": "xs",
-              "contents": [
-                {
-                  "type": "text",
-                  "text": `แทง: ฿${roundedBet.toLocaleString('th-TH')}`,
-                  "size": "xs",
-                  "color": "#64748b",
-                  "flex": 5
-                },
-                {
-                  "type": "text",
-                  "text": `เหลือ: ฿${roundedRemaining.toLocaleString('th-TH')}`,
-                  "size": "xs",
-                  "color": "#10b981",
-                  "weight": "bold",
-                  "align": "end",
-                  "flex": 6
-                }
-              ]
-            },
-            {
-              "type": "box",
-              "layout": "horizontal",
-              "margin": "xs",
-              "contents": [
-                {
-                  "type": "text",
-                  "text": `คอม: ฿${roundedComm.toLocaleString('th-TH')}`,
-                  "size": "xs",
-                  "color": "#64748b",
-                  "flex": 5
-                },
-                {
-                  "type": "text",
-                  "text": isAnnounced ? `ถูก: ${u.winCount} ครั้ง/฿${roundedWin.toLocaleString('th-TH')}` : "ถูก: -",
-                  "size": "xs",
-                  "color": "#64748b",
-                  "align": "end",
-                  "flex": 6
-                }
-              ]
-            }
-          ]
-        });
       });
     }
 
@@ -4316,7 +4335,28 @@ async function generateRoundSummaryFlex(
       });
     }
 
-    flexMessage = {
+    // Determine pagination to prevent exceeding LINE Flex 30 KB hard cap per Bubble
+    const totalMembers = sortedUserSummaries.length;
+    const totalCards = totalMembers <= 10
+      ? 1
+      : Math.min(5, 1 + Math.ceil((totalMembers - 10) / 15));
+
+    const card1Members = totalMembers === 0
+      ? [{
+          "type": "text",
+          "text": "ยังไม่มียอดแทงส่งเข้ามาค่ะ",
+          "size": "sm",
+          "color": "#64748b",
+          "align": "center",
+          "margin": "md"
+        }]
+      : sortedUserSummaries.slice(0, 10).map((u, i) => createMemberSummaryBox(u, i));
+
+    const card1SectionTitle = totalCards > 1
+      ? `2. รายละเอียดสมาชิก (หน้า 1/${totalCards})`
+      : `2. รายละเอียดสมาชิก`;
+
+    const card1: any = {
       "type": "flex",
       "altText": summaryText.trim().length > 390 ? summaryText.trim().slice(0, 387) + '...' : summaryText.trim(),
       "contents": {
@@ -4373,18 +4413,97 @@ async function generateRoundSummaryFlex(
               "contents": [
                 {
                   "type": "text",
-                  "text": "2. รายละเอียดสมาชิก",
+                  "text": card1SectionTitle,
                   "weight": "bold",
                   "size": "sm",
                   "color": "#0f172a"
                 }
               ]
             },
-            ...memberBubbleContents
+            ...card1Members
           ]
         }
       }
     };
+
+    if (totalCards === 1) {
+      flexMessage = card1;
+    } else {
+      const cards: any[] = [card1];
+      for (let p = 2; p <= totalCards; p++) {
+        const start = 10 + (p - 2) * 15;
+        const end = Math.min(totalMembers, start + 15);
+        const batch = sortedUserSummaries.slice(start, end);
+        const batchContents: any[] = batch.map((u, i) => createMemberSummaryBox(u, start + i));
+
+        if (p === 5 && totalMembers > 70) {
+          batchContents.push({
+            "type": "box",
+            "layout": "vertical",
+            "margin": "md",
+            "backgroundColor": "#fef3c7",
+            "cornerRadius": "md",
+            "paddingAll": "md",
+            "contents": [
+              {
+                "type": "text",
+                "text": `⚠️ แสดง 70 คนแรก (จากทั้งหมด ${totalMembers} คน)`,
+                "size": "xs",
+                "weight": "bold",
+                "color": "#92400e"
+              },
+              {
+                "type": "text",
+                "text": "💡 ตรวจสอบสรุปรายคนได้ด้วยคำสั่ง /สรุป [รหัสสมาชิก] หรือดูรายงานเต็มบนเว็บไซต์",
+                "size": "xxs",
+                "color": "#b45309",
+                "margin": "xs",
+                "wrap": true
+              }
+            ]
+          });
+        }
+
+        cards.push({
+          "type": "flex",
+          "altText": `👥 รายละเอียดสมาชิก (หน้า ${p}/${totalCards}) - งวดวันที่ ${getRoundDisplayDate(activeRound, false)}`,
+          "contents": {
+            "type": "bubble",
+            "size": "giga",
+            "header": {
+              "type": "box",
+              "layout": "vertical",
+              "backgroundColor": "#4338ca",
+              "paddingAll": "md",
+              "contents": [
+                {
+                  "type": "text",
+                  "text": `👥 รายละเอียดสมาชิก (หน้า ${p}/${totalCards})`,
+                  "weight": "bold",
+                  "size": "sm",
+                  "color": "#ffffff"
+                },
+                {
+                  "type": "text",
+                  "text": `สมาชิกคนที่ ${start + 1} - ${end} (งวดวันที่ ${getRoundDisplayDate(activeRound, false)})`,
+                  "size": "xs",
+                  "color": "#c7d2fe",
+                  "margin": "xs"
+                }
+              ]
+            },
+            "body": {
+              "type": "box",
+              "layout": "vertical",
+              "backgroundColor": "#f8fafc",
+              "paddingAll": "md",
+              "contents": batchContents
+            }
+          }
+        });
+      }
+      flexMessage = cards;
+    }
   }
 
   return { summaryText, flexMessage };
@@ -10311,7 +10430,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 profile
               );
 
-              await sendLineReply(replyToken, flexMessage);
+              await sendLineReply(replyToken, flexMessage, groupId || userId);
               continue;
             }
 

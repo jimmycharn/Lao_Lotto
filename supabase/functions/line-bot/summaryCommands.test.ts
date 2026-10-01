@@ -202,4 +202,67 @@ describe('Summary Commands (/ยอดเหลือ and /ยอดเกิน
       expect(sorted[2][0]).toBe('3_tod'); // order 110
     });
   });
+
+  describe('/สรุป Flex Message Member Pagination logic', () => {
+    function calculatePagination(totalMembers: number) {
+      const totalCards = totalMembers <= 10
+        ? 1
+        : Math.min(5, 1 + Math.ceil((totalMembers - 10) / 15));
+
+      const pages = [
+        { page: 1, start: 0, end: Math.min(totalMembers, 10), totalPages: totalCards }
+      ];
+
+      for (let p = 2; p <= totalCards; p++) {
+        const start = 10 + (p - 2) * 15;
+        const end = Math.min(totalMembers, start + 15);
+        pages.push({ page: p, start, end, totalPages: totalCards });
+      }
+
+      return pages;
+    }
+
+    it('returns 1 card when members <= 10', () => {
+      expect(calculatePagination(0)).toHaveLength(1);
+      expect(calculatePagination(5)).toHaveLength(1);
+      expect(calculatePagination(10)).toHaveLength(1);
+      expect(calculatePagination(10)[0].totalPages).toBe(1);
+      expect(calculatePagination(10)[0].end).toBe(10);
+    });
+
+    it('returns 2 cards when members are 11 to 25', () => {
+      const res11 = calculatePagination(11);
+      expect(res11).toHaveLength(2);
+      expect(res11[0].end).toBe(10);
+      expect(res11[1].start).toBe(10);
+      expect(res11[1].end).toBe(11);
+
+      const res25 = calculatePagination(25);
+      expect(res25).toHaveLength(2);
+      expect(res25[1].end).toBe(25);
+    });
+
+    it('returns 3 cards when members are 26 to 40', () => {
+      const res26 = calculatePagination(26);
+      expect(res26).toHaveLength(3);
+      expect(res26[2].start).toBe(25);
+      expect(res26[2].end).toBe(26);
+
+      const res40 = calculatePagination(40);
+      expect(res40).toHaveLength(3);
+      expect(res40[2].end).toBe(40);
+    });
+
+    it('caps at 5 cards max when members exceed 70', () => {
+      const res70 = calculatePagination(70);
+      expect(res70).toHaveLength(5);
+      expect(res70[4].end).toBe(70);
+
+      const res100 = calculatePagination(100);
+      expect(res100).toHaveLength(5);
+      expect(res100[4].end).toBe(70);
+      expect(res100[4].totalPages).toBe(5);
+    });
+  });
 });
+

@@ -1,3 +1,9 @@
+import {
+    DEFAULT_PAYOUTS,
+    calculate4SetPrizes,
+    getLotteryTypeKey
+} from '../constants/lotteryTypes'
+
 /**
  * Calculates the initial dealer profit / net balance for a member in a round.
  * Initial Balance = (total_amount - total_commission) - total_winnings
@@ -221,6 +227,122 @@ export function calculateTransferCommission(t, setPrice = 120, upstreamSource = 
     } else {
         return Math.round(amt * 0.25)
     }
+}
+
+/**
+ * Calculates winning prize for an upstream transfer ticket against winning numbers.
+ * Matches RoundAccordionItem and database calculate_round_transfers_summary logic.
+ */
+export function calculateTransferWinning(t, winningNumbers, lotteryType = 'thai', setPrice = 120, setPrizes = null, upstreamSettings = null) {
+    if (!t || !winningNumbers) return 0
+    const wn = winningNumbers
+    const lt = lotteryType || t.lottery_type || 'thai'
+    const w4set = wn['4_set'] || ''
+    const w3top = wn['3_top'] || (lt !== 'thai' && w4set.length >= 3 ? w4set.slice(1) : '') || ''
+    const w2top = wn['2_top'] || (lt !== 'thai' && w4set.length >= 2 ? w4set.slice(2) : '') || ''
+    const w2bottom = wn['2_bottom'] || (lt === 'lao' && w4set.length >= 2 ? w4set.slice(0, 2) : '') || ''
+    const w3topSorted = w3top ? w3top.split('').sort().join('') : ''
+
+    const floatCheck = (src, target) => {
+        let temp = target
+        for (const ch of src) {
+            const idx = temp.indexOf(ch)
+            if (idx === -1) return false
+            temp = temp.slice(0, idx) + temp.slice(idx + 1)
+        }
+        return true
+    }
+
+    const num = String(t.numbers || '').trim()
+    const bt = t.bet_type
+    let isWinner = false
+    let prize = 0
+
+    // Resolve payout rate: check upstreamSettings, then fallback to DEFAULT_PAYOUTS
+    let payoutRate = DEFAULT_PAYOUTS[bt] || 1
+    if (upstreamSettings) {
+        let connSettings = null
+        const dName = (t?.upstream_dealer?.full_name || t?.target_dealer_name || t?.dealerName || '').trim()
+        const dId = t?.upstream_dealer_id
+        if (upstreamSettings.lottery_settings) {
+            connSettings = upstreamSettings.lottery_settings
+        } else if (upstreamSettings.thai || upstreamSettings.lao || upstreamSettings.hanoi || upstreamSettings.stock) {
+            connSettings = upstreamSettings
+        } else if (Array.isArray(upstreamSettings)) {
+            const found = upstreamSettings.find(d =>
+                (d.upstream_name && d.upstream_name.trim() === dName) ||
+                (dId && d.upstream_dealer_id === dId) ||
+                (d.id === dId)
+            )
+            connSettings = found?.lottery_settings || null
+        } else if (typeof upstreamSettings === 'object') {
+            connSettings = (dName && (upstreamSettings[dName]?.lottery_settings || upstreamSettings[dName])) ||
+                           (dId && (upstreamSettings[dId]?.lottery_settings || upstreamSettings[dId])) ||
+                           null
+        }
+        if (connSettings) {
+            const lKey = getLotteryTypeKey(lt)
+            const s = connSettings[lKey] || connSettings[lt] || connSettings
+            if (s && s[bt] && s[bt].payout !== undefined) {
+                payoutRate = Number(s[bt].payout) || payoutRate
+            }
+        }
+    }
+
+    if (bt === 'run_top' && w3top && num.length === 1) {
+        isWinner = w3top.includes(num)
+    } else if (bt === 'run_bottom' && w2bottom && num.length === 1) {
+        isWinner = w2bottom.includes(num)
+    } else if (bt === 'front_top_1' && w3top && w3top.length === 3 && num.length === 1) {
+        isWinner = num === w3top[0]
+    } else if (bt === 'middle_top_1' && w3top && w3top.length === 3 && num.length === 1) {
+        isWinner = num === w3top[1]
+    } else if (bt === 'back_top_1' && w3top && w3top.length === 3 && num.length === 1) {
+        isWinner = num === w3top[2]
+    } else if (bt === 'front_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) {
+        isWinner = num === w2bottom[0]
+    } else if (bt === 'back_bottom_1' && w2bottom && w2bottom.length === 2 && num.length === 1) {
+        isWinner = num === w2bottom[1]
+    } else if (bt === 'pak_top' && w3top && w3top.length === 3 && num.length === 1) {
+        isWinner = w3top.includes(num)
+    } else if (bt === 'pak_bottom' && w2bottom && w2bottom.length === 2 && num.length === 1) {
+        isWinner = w2bottom.includes(num)
+    } else if (bt === '2_bottom' && w2bottom && num.length === 2) {
+        isWinner = num === w2bottom
+    } else if (bt === '2_top' && w2top && num.length === 2) {
+        isWinner = num === w2top
+    } else if (bt === '2_front' && w3top && w3top.length === 3 && num.length === 2) {
+        isWinner = num === w3top.slice(0, 2)
+    } else if ((bt === '2_center' || bt === '2_spread') && w3top && w3top.length === 3 && num.length === 2) {
+        isWinner = num === (w3top[0] + w3top[2])
+    } else if (bt === '2_run' && w3top && num.length === 2) {
+        isWinner = w3top.includes(num[0]) && w3top.includes(num[1])
+    } else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) {
+        isWinner = num === w3top
+    } else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) {
+        isWinner = num.split('').sort().join('') === w3topSorted
+    } else if (bt === '4_float' && w3top && w3top.length === 3 && num.length === 4) {
+        isWinner = floatCheck(w3top, num)
+    } else if (bt === '5_float' && w3top && w3top.length === 3 && num.length === 5) {
+        isWinner = floatCheck(w3top, num)
+    } else if (bt === '4_set' && w4set && num.length === 4) {
+        const { totalPrize } = calculate4SetPrizes(num, w4set, setPrizes || undefined)
+        if (totalPrize > 0) {
+            isWinner = true
+            prize = totalPrize
+        }
+    }
+
+    if (isWinner) {
+        if (bt === '4_set') {
+            const numSets = Math.max(1, Math.floor((t.amount || 0) / (setPrice || 120)))
+            return Math.round(prize * numSets)
+        } else {
+            return Math.round((t.amount || 0) * payoutRate)
+        }
+    }
+
+    return 0
 }
 
 /**
@@ -465,7 +587,8 @@ export function calculateRoundOutstandingDetails({
             groupedMap[dName].amount += Number(t.amount || 0)
             const comm = calculateTransferCommission(t, 120, upstreamSettings || t.upstream_settings, history?.lottery_type)
             groupedMap[dName].commission_earned += comm
-            groupedMap[dName].winnings += Number(t.winnings || 0)
+            const transferWin = Number(t.winnings || 0) || calculateTransferWinning(t, history?.winning_numbers, history?.lottery_type, 120, null, upstreamSettings || t.upstream_settings)
+            groupedMap[dName].winnings += transferWin
         })
     }
 
@@ -475,6 +598,30 @@ export function calculateRoundOutstandingDetails({
         ? Number(history.upstream_commission)
         : Math.round(outAmt * (isThai ? 0.30 : (25 / 120)))
     const outWin = Number(history?.upstream_winnings || 0)
+
+    // Fallback: If grouped transfers did not compute winnings but round history has upstream_winnings > 0,
+    // preserve and distribute outWin so upstream settlement balance remains accurate
+    const totalGroupedWin = Object.values(groupedMap).reduce((s, g) => s + (g.winnings || 0), 0)
+    if (totalGroupedWin === 0 && outWin > 0) {
+        const groupKeys = Object.keys(groupedMap)
+        if (groupKeys.length === 1) {
+            groupedMap[groupKeys[0]].winnings = outWin
+        } else if (groupKeys.length > 1) {
+            const totalAmt = Object.values(groupedMap).reduce((s, g) => s + (g.amount || 0), 0)
+            if (totalAmt > 0) {
+                let assigned = 0
+                groupKeys.forEach((k, idx) => {
+                    if (idx === groupKeys.length - 1) {
+                        groupedMap[k].winnings = outWin - assigned
+                    } else {
+                        const share = Math.round(outWin * (groupedMap[k].amount / totalAmt))
+                        groupedMap[k].winnings = share
+                        assigned += share
+                    }
+                })
+            }
+        }
+    }
 
     const effectiveTransfers = Object.values(groupedMap).length > 0
         ? Object.values(groupedMap)

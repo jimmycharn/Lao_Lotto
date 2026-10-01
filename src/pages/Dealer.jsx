@@ -94,6 +94,7 @@ import {
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
     calculateTransferCommission,
+    calculateTransferWinning,
     calculateRoundOutstandingDetails,
     isRoundFullySettled,
     synthesizeMissingRoundHistory,
@@ -504,11 +505,16 @@ export default function Dealer() {
                         }
                     }
 
-                    transfers = transData.map(t => ({
-                        ...t,
-                        commission_earned: calculateTransferCommission(t, 120, activeSettings, historyItem.lottery_type),
-                        winnings: t.winnings || 0
-                    }))
+                    transfers = transData.map(t => {
+                        const lType = t.lottery_type || historyItem.lottery_type || 'thai'
+                        const comm = calculateTransferCommission(t, 120, activeSettings, lType)
+                        const win = Number(t.winnings || 0) || calculateTransferWinning(t, historyItem.winning_numbers, lType, 120, historyItem.set_prices, activeSettings)
+                        return {
+                            ...t,
+                            commission_earned: comm,
+                            winnings: win
+                        }
+                    })
                 }
             }
 
@@ -1332,7 +1338,10 @@ export default function Dealer() {
                 if (roundTransfers.length > 0) {
                     outAmt = roundTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
                     outComm = roundTransfers.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, h.lottery_type), 0)
-                    outWin = roundTransfers.reduce((sum, t) => sum + (t.winnings || 0), 0)
+                    const rawWin = roundTransfers.reduce((sum, t) => {
+                        return sum + (Number(t.winnings || 0) || calculateTransferWinning(t, h.winning_numbers, h.lottery_type, 120, h.set_prices, upstreamSettingsMap))
+                    }, 0)
+                    outWin = rawWin > 0 ? rawWin : (h.upstream_winnings || 0)
                 }
             } else if (!outComm && outAmt > 0) {
                 outComm = Math.round(outAmt * (25 / 120))
@@ -1458,7 +1467,7 @@ export default function Dealer() {
                 }
                 const amt = Number(t.amount || 0)
                 const comm = calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type)
-                const win = Number(t.winnings || 0)
+                const win = Number(t.winnings || 0) || calculateTransferWinning(t, history.winning_numbers, history.lottery_type, 120, history.set_prices, upstreamSettingsMap)
 
                 groupedMap[dName].entriesCount += 1
                 groupedMap[dName].amount += amt
@@ -1472,6 +1481,29 @@ export default function Dealer() {
             ? Number(history.upstream_commission) 
             : Math.round(outAmt * (25 / 120))
         const outWin = Number(history.upstream_winnings || 0)
+
+        // Preserve outWin if individual transfer records didn't calculate winnings
+        const totalGroupedWin = Object.values(groupedMap).reduce((s, g) => s + (g.winnings || 0), 0)
+        if (totalGroupedWin === 0 && outWin > 0) {
+            const groupKeys = Object.keys(groupedMap)
+            if (groupKeys.length === 1) {
+                groupedMap[groupKeys[0]].winnings = outWin
+            } else if (groupKeys.length > 1) {
+                const totalAmt = Object.values(groupedMap).reduce((s, g) => s + (g.amount || 0), 0)
+                if (totalAmt > 0) {
+                    let assigned = 0
+                    groupKeys.forEach((k, idx) => {
+                        if (idx === groupKeys.length - 1) {
+                            groupedMap[k].winnings = outWin - assigned
+                        } else {
+                            const share = Math.round(outWin * (groupedMap[k].amount / totalAmt))
+                            groupedMap[k].winnings = share
+                            assigned += share
+                        }
+                    })
+                }
+            }
+        }
 
         const effectiveTransfers = Object.values(groupedMap).length > 0
             ? Object.values(groupedMap)
@@ -2532,11 +2564,16 @@ export default function Dealer() {
                         .eq('round_id', round.id)
 
                     if (transfers && transfers.length > 0) {
-                        activeRoundTransfers.push(...transfers.map(t => ({
-                            ...t,
-                            commission_earned: calculateTransferCommission(t, 120, activeUpstreamSettings, round.lottery_type),
-                            winnings: Number(t.winnings || 0)
-                        })))
+                        activeRoundTransfers.push(...transfers.map(t => {
+                            const lType = t.lottery_type || round.lottery_type || 'thai'
+                            const comm = calculateTransferCommission(t, 120, activeUpstreamSettings, lType)
+                            const win = Number(t.winnings || 0) || calculateTransferWinning(t, round.winning_numbers, lType, 120, round.set_prices, activeUpstreamSettings)
+                            return {
+                                ...t,
+                                commission_earned: comm,
+                                winnings: win
+                            }
+                        }))
                     }
 
                     const totalEntries = submissions?.length || 0
@@ -2705,10 +2742,12 @@ export default function Dealer() {
                 if (!seenTransferKeys.has(key)) {
                     seenTransferKeys.add(key)
                     const lType = t.lottery_type || roundLotteryTypeMap[t.round_id] || 'thai'
+                    const rWn = roundWinningNumbersMap[t.round_id] || null
+                    const win = Number(t.winnings || 0) || (rWn ? calculateTransferWinning(t, rWn, lType, 120, null, activeUpstreamSettings) : 0)
                     allTransfersCombined.push({
                         ...t,
                         commission_earned: calculateTransferCommission(t, 120, activeUpstreamSettings, lType),
-                        winnings: Number(t.winnings || 0)
+                        winnings: win
                     })
                 }
             }
@@ -4674,7 +4713,10 @@ export default function Dealer() {
                                                         if (rawTransfers.length > 0) {
                                                             hOutAmt = rawTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
                                                             hOutComm = rawTransfers.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type), 0)
-                                                            hOutWin = rawTransfers.reduce((sum, t) => sum + (t.winnings || 0), 0)
+                                                            const rawWin = rawTransfers.reduce((sum, t) => {
+                                                                return sum + (Number(t.winnings || 0) || calculateTransferWinning(t, history.winning_numbers, history.lottery_type, 120, history.set_prices, upstreamSettingsMap))
+                                                            }, 0)
+                                                            hOutWin = rawWin > 0 ? rawWin : (history.upstream_winnings || 0)
                                                         } else if (!hOutComm && hOutAmt > 0) {
                                                             hOutComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(hOutAmt * (25 / 120))
                                                         }
@@ -4969,7 +5011,7 @@ export default function Dealer() {
                                                                                         }
                                                                                         const amt = Number(t.amount || 0)
                                                                                         const comm = calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type)
-                                                                                        const win = Number(t.winnings || 0)
+                                                                                        const win = Number(t.winnings || 0) || calculateTransferWinning(t, history.winning_numbers, history.lottery_type, 120, history.set_prices, upstreamSettingsMap)
 
                                                                                         groupedMap[dName].entriesCount += 1
                                                                                         groupedMap[dName].amount += amt
@@ -4981,6 +5023,29 @@ export default function Dealer() {
                                                                                 const outAmt = Number(history.transferred_amount || 0)
                                                                                  const outComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(outAmt * (25 / 120))
                                                                                 const outWin = Number(history.upstream_winnings || 0)
+
+                                                                                // Preserve outWin if individual transfer records didn't calculate winnings
+                                                                                const totalGroupedWin = Object.values(groupedMap).reduce((s, g) => s + (g.winnings || 0), 0)
+                                                                                if (totalGroupedWin === 0 && outWin > 0) {
+                                                                                    const groupKeys = Object.keys(groupedMap)
+                                                                                    if (groupKeys.length === 1) {
+                                                                                        groupedMap[groupKeys[0]].winnings = outWin
+                                                                                    } else if (groupKeys.length > 1) {
+                                                                                        const totalAmt = Object.values(groupedMap).reduce((s, g) => s + (g.amount || 0), 0)
+                                                                                        if (totalAmt > 0) {
+                                                                                            let assigned = 0
+                                                                                            groupKeys.forEach((k, idx) => {
+                                                                                                if (idx === groupKeys.length - 1) {
+                                                                                                    groupedMap[k].winnings = outWin - assigned
+                                                                                                } else {
+                                                                                                    const share = Math.round(outWin * (groupedMap[k].amount / totalAmt))
+                                                                                                    groupedMap[k].winnings = share
+                                                                                                    assigned += share
+                                                                                                }
+                                                                                            })
+                                                                                        }
+                                                                                    }
+                                                                                }
 
                                                                                 const effectiveTransfers = Object.values(groupedMap).length > 0 
                                                                                     ? Object.values(groupedMap) 
