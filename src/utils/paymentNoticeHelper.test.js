@@ -630,7 +630,7 @@ describe('paymentNoticeHelper', () => {
 
             expect(summary.netAmount).toBe(487)
             expect(summary.direction).toBe('upstream_to_dealer')
-            expect(summary.modeLabel).toBe('หักลบรางวัลกับยอดเก่า')
+            expect(summary.modeLabel).toBe('หักลบรางวัลกับยอดค้างชำระ')
         })
 
         it('formats LINE message correctly when dealer owes upstream', () => {
@@ -704,7 +704,7 @@ describe('paymentNoticeHelper', () => {
                 lotteryTypeName: 'thai',
                 mode: 'offset_prize_past_debt',
                 summary: {
-                    modeLabel: 'หักลบรางวัลกับยอดเก่า',
+                    modeLabel: 'หักลบรางวัลกับยอดค้างชำระ',
                     netAmount: 5605,
                     direction: 'dealer_to_upstream',
                     currentRoundDebt: 0,
@@ -721,15 +721,60 @@ describe('paymentNoticeHelper', () => {
             })
 
             expect(msg).toContain('🏢 เจ้ามือรับตีออก: พี่จิ้ม อ้อมค่าย')
-            expect(msg).toContain('📌 รูปแบบ: หักลบรางวัลกับยอดเก่า')
+            expect(msg).toContain('📌 รูปแบบ: หักลบรางวัลกับยอดค้างชำระ')
             expect(msg).toContain('🎯 ประเภทหวย: หวยไทย')
             expect(msg).toContain('----------------------------')
-            expect(msg).toContain('- ยอดตีออก งวด 1 ก.ย. 2569: ฿5,605')
+            expect(msg).toContain('- ค้างชำระตีออกงวด 1 ก.ย. 2569: ฿5,605')
             expect(msg).toContain('----------------------------')
             expect(msg).toContain('💰 รวมยอดที่ต้องโอน: ฿5,605')
             expect(msg).toContain('🔴 ต้องโอนชำระให้กับ:  พี่จิ้ม อ้อมค่าย')
             expect(msg).toContain('💳 บัญชีโอนเงิน:')
             expect(msg).toContain('ไทยพาณิชย์ 9972081291')
+        })
+
+        it('formats LINE message matching user screenshot with Pee Jim Aom Khai and 16 Sep 2569', () => {
+            const summary = calculatePaymentNoticeSummary({
+                mode: 'offset_prize_past_debt',
+                currentBalance: 0,
+                currentWinnings: 0,
+                selectedPastRounds: [
+                    { roundDate: '2026-09-16', debt: 6092, lottery_type: 'thai' }
+                ],
+                isUpstream: true
+            })
+
+            const msg = formatPaymentNoticeMessage({
+                memberName: 'พี่จิ้ม อ้อมค่าย',
+                roundDate: '2026-10-02',
+                lotteryTypeName: 'หวยไทย',
+                mode: 'offset_prize_past_debt',
+                summary,
+                selectedPastRounds: [
+                    { roundDate: '2026-09-16', debt: 6092, lottery_type: 'thai' }
+                ],
+                bankAccount: {
+                    bank_name: 'ธนาคารกรุงไทย',
+                    bank_account: '3890058868',
+                    account_name: 'โชติกา นุ่มนวล'
+                },
+                isUpstream: true
+            })
+
+            const expectedLines = [
+                '🏢 เจ้ามือรับตีออก: พี่จิ้ม อ้อมค่าย',
+                '📌 รูปแบบ: หักลบรางวัลกับยอดค้างชำระ',
+                '🎯 ประเภทหวย: หวยไทย',
+                '----------------------------',
+                '- ค้างชำระตีออกงวด 16 ก.ย. 2569: ฿6,092',
+                '----------------------------',
+                '💰 รวมยอดที่ต้องโอน: ฿6,092',
+                '🔴 ต้องโอนชำระให้กับ:  พี่จิ้ม อ้อมค่าย',
+                '',
+                '💳 บัญชีโอนเงิน:',
+                'ธนาคารกรุงไทย 3890058868 (โชติกา นุ่มนวล)'
+            ]
+
+            expect(msg).toBe(expectedLines.join('\n'))
         })
     })
 

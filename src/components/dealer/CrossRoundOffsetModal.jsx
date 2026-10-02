@@ -52,10 +52,10 @@ export default function CrossRoundOffsetModal({
     const curBal = Number(currentBalance || 0)
 
     // 4 Modes: 'current_debt' | 'current_prize' | 'offset_prize_past_debt' | 'combine_all'
-    // Default to 'offset_prize_past_debt' (หักลบรางวัลกับหนี้เก่า) when past unpaid rounds exist
+    // Default to 'offset_prize_past_debt' when prizes exist, or 'combine_all' when pure debt
     const [mode, setMode] = useState(() => {
         if (hasPastRounds) {
-            return 'offset_prize_past_debt'
+            return (prizeToOffset > 0 || sortedPastRounds.some(r => (r.netWinnings || 0) > 0)) ? 'offset_prize_past_debt' : 'combine_all'
         }
         if (curBal > 0) return 'current_debt'
         if (hasPrizeToPay) return 'current_prize'
@@ -67,9 +67,9 @@ export default function CrossRoundOffsetModal({
         if (!hasPastRounds && (mode === 'offset_prize_past_debt' || mode === 'combine_all')) {
             setMode(curBal > 0 ? 'current_debt' : (hasPrizeToPay ? 'current_prize' : 'current_debt'))
         } else if (mode === 'current_prize' && !hasPrizeToPay) {
-            setMode(hasPastRounds ? 'offset_prize_past_debt' : 'current_debt')
+            setMode(hasPastRounds ? ((prizeToOffset > 0 || sortedPastRounds.some(r => (r.netWinnings || 0) > 0)) ? 'offset_prize_past_debt' : 'combine_all') : 'current_debt')
         }
-    }, [hasPastRounds, curBal, hasPrizeToPay, mode])
+    }, [hasPastRounds, curBal, hasPrizeToPay, mode, prizeToOffset, sortedPastRounds])
 
     // Default select all past unpaid rounds
     const [selectedRoundIds, setSelectedRoundIds] = useState(() =>
@@ -555,7 +555,7 @@ export default function CrossRoundOffsetModal({
                                         tabIndex={-1}
                                         onChange={() => hasPrizeToPay && handleModeChange('current_prize')}
                                     />
-                                    <span>รางวัลงวดนี้</span>
+                                    <span>{isUpstream ? 'รับคืนรางวัลงวดนี้' : 'รางวัลงวดนี้'}</span>
                                 </div>
                                 <div
                                     ref={el => modeCardRefs.current['offset_prize_past_debt'] = el}
@@ -567,7 +567,7 @@ export default function CrossRoundOffsetModal({
                                     onClick={() => hasPastRounds && handleModeChange('offset_prize_past_debt')}
                                     onKeyDown={(e) => hasPastRounds && handleModeCardKeyDown(e, 'offset_prize_past_debt')}
                                     style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
-                                    title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
+                                    title={!hasPastRounds ? (isUpstream ? 'ไม่มีรายการคงค้างงวดเก่า' : 'ไม่มีรายการหนี้งวดเก่า') : ''}
                                 >
                                     <input
                                         type="checkbox"
@@ -589,7 +589,7 @@ export default function CrossRoundOffsetModal({
                                     onClick={() => hasPastRounds && handleModeChange('combine_all')}
                                     onKeyDown={(e) => hasPastRounds && handleModeCardKeyDown(e, 'combine_all')}
                                     style={!hasPastRounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
-                                    title={!hasPastRounds ? 'ไม่มีรายการหนี้งวดเก่า' : ''}
+                                    title={!hasPastRounds ? (isUpstream ? 'ไม่มีรายการคงค้างงวดเก่า' : 'ไม่มีรายการหนี้งวดเก่า') : ''}
                                 >
                                     <input
                                         type="checkbox"
@@ -604,9 +604,9 @@ export default function CrossRoundOffsetModal({
                             </div>
                             <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.4rem', fontStyle: 'italic' }}>
                                 {mode === 'current_debt' && 'ℹ️ บันทึกชำระเฉพาะยอดคงค้างของงวดปัจจุบันเท่านั้น (ไม่รวมยอดงวดเก่า)'}
-                                {mode === 'current_prize' && 'ℹ️ บันทึกจ่ายเฉพาะเงินถูกรางวัลของงวดปัจจุบันเท่านั้น'}
-                                {mode === 'offset_prize_past_debt' && 'ℹ️ นำเงินรางวัลจากงวดนี้ไปหักลบกับหนี้งวดก่อนหน้าที่เลือก'}
-                                {mode === 'combine_all' && 'ℹ️ รวมยอดคงค้างงวดนี้และหนี้งวดก่อนหน้าเข้าด้วยกันเพื่อเคลียร์ทั้งหมด'}
+                                {mode === 'current_prize' && (isUpstream ? 'ℹ️ บันทึกรับเฉพาะเงินถูกรางวัลของงวดปัจจุบันเท่านั้น' : 'ℹ️ บันทึกจ่ายเฉพาะเงินถูกรางวัลของงวดปัจจุบันเท่านั้น')}
+                                {mode === 'offset_prize_past_debt' && (isUpstream ? 'ℹ️ นำเงินรางวัลจากงวดนี้ไปหักลบกับยอดคงค้างงวดก่อนหน้าที่เลือก' : 'ℹ️ นำเงินรางวัลจากงวดนี้ไปหักลบกับหนี้งวดก่อนหน้าที่เลือก')}
+                                {mode === 'combine_all' && (isUpstream ? 'ℹ️ รวมยอดคงค้างงวดนี้และงวดก่อนหน้าเข้าด้วยกันเพื่อเคลียร์ทั้งหมด' : 'ℹ️ รวมยอดคงค้างงวดนี้และหนี้งวดก่อนหน้าเข้าด้วยกันเพื่อเคลียร์ทั้งหมด')}
                             </div>
                         </div>
 

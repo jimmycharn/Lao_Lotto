@@ -623,6 +623,28 @@ export function calculateRoundOutstandingDetails({
         }
     }
 
+    // Reconcile commission_earned from round_history if recorded
+    if (Number(history?.upstream_commission || 0) > 0) {
+        const groupKeys = Object.keys(groupedMap)
+        if (groupKeys.length === 1) {
+            groupedMap[groupKeys[0]].commission_earned = outComm
+        } else if (groupKeys.length > 1) {
+            const totalAmt = Object.values(groupedMap).reduce((s, g) => s + (g.amount || 0), 0)
+            if (totalAmt > 0) {
+                let assigned = 0
+                groupKeys.forEach((k, idx) => {
+                    if (idx === groupKeys.length - 1) {
+                        groupedMap[k].commission_earned = outComm - assigned
+                    } else {
+                        const share = Math.round(outComm * (groupedMap[k].amount / totalAmt))
+                        groupedMap[k].commission_earned = share
+                        assigned += share
+                    }
+                })
+            }
+        }
+    }
+
     const effectiveTransfers = Object.values(groupedMap).length > 0
         ? Object.values(groupedMap)
         : (outAmt > 0 ? [{

@@ -1529,7 +1529,7 @@ export function extractInlineContext(line, contextMode) {
             return { cleaned: floatSuffix[1].trim(), mode };
         }
     }
-    const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\s+(\d[\d*=\-+]*)$/);
+    const floatMiddle = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?\s*(?:[=:\-\s]|\s*=\s*|\s*:\s*|\s*-\s*|\s+)\s*(\d[\d*=\-+]*)$/);
     if (floatMiddle) {
         const kw = floatMiddle[2];
         let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
@@ -1612,6 +1612,13 @@ export function extractInlineContext(line, contextMode) {
         const mode = (modeStr === 'บน' || modeStr === 'บ') ? 'top' : 'bottom';
         return { cleaned: `${numCtxEqSingle[1]}=${numCtxEqSingle[3].trim()}`, mode };
     }
+    const numCtxEqFloat = s.match(/^(\d+)\s*(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?\s*[=:]\s*(.+)$/);
+    if (numCtxEqFloat) {
+        const kw = numCtxEqFloat[2];
+        let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        mode = refineFloatMode(mode, s);
+        return { cleaned: `${numCtxEqFloat[1]}=${numCtxEqFloat[3].trim()}`, mode };
+    }
     const noSpaceBoth = s.match(/^(\d+)(บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ)\.?([=\d].*)$/);
     if (noSpaceBoth) {
         return { cleaned: `${noSpaceBoth[1]} ${noSpaceBoth[3].trim()}`, mode: 'both' };
@@ -1625,8 +1632,10 @@ export function extractInlineContext(line, contextMode) {
     const noSpaceFloat = s.match(/^(\d+)(วิ่งบน|ลอยบน|วิ่งล่าง|ลอยล่าง|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?([=\d].*)$/);
     if (noSpaceFloat) {
         const kw = noSpaceFloat[2];
-        const mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
-        return { cleaned: `${noSpaceFloat[1]}=${noSpaceFloat[3].trim()}`, mode };
+        let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
+        mode = refineFloatMode(mode, s);
+        const rest = noSpaceFloat[3].replace(/^[=:\s]+/, '');
+        return { cleaned: `${noSpaceFloat[1]}=${rest.trim()}`, mode };
     }
     return { cleaned: line, mode: null };
 }

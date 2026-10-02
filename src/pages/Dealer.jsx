@@ -1505,6 +1505,28 @@ export default function Dealer() {
             }
         }
 
+        // Preserve outComm from round_history if recorded
+        if (outComm > 0) {
+            const groupKeys = Object.keys(groupedMap)
+            if (groupKeys.length === 1) {
+                groupedMap[groupKeys[0]].commission_earned = outComm
+            } else if (groupKeys.length > 1) {
+                const totalAmt = Object.values(groupedMap).reduce((s, g) => s + (g.amount || 0), 0)
+                if (totalAmt > 0) {
+                    let assigned = 0
+                    groupKeys.forEach((k, idx) => {
+                        if (idx === groupKeys.length - 1) {
+                            groupedMap[k].commission_earned = outComm - assigned
+                        } else {
+                            const share = Math.round(outComm * (groupedMap[k].amount / totalAmt))
+                            groupedMap[k].commission_earned = share
+                            assigned += share
+                        }
+                    })
+                }
+            }
+        }
+
         const effectiveTransfers = Object.values(groupedMap).length > 0
             ? Object.values(groupedMap)
             : (outAmt > 0 ? [{
@@ -2744,11 +2766,93 @@ export default function Dealer() {
                     const lType = t.lottery_type || roundLotteryTypeMap[t.round_id] || 'thai'
                     const rWn = roundWinningNumbersMap[t.round_id] || null
                     const win = Number(t.winnings || 0) || (rWn ? calculateTransferWinning(t, rWn, lType, 120, null, activeUpstreamSettings) : 0)
+                    const resolvedDealerName = t.target_dealer_name || t.upstream_dealer_name || t.upstream_dealer?.full_name || t.dealerName || ''
                     allTransfersCombined.push({
                         ...t,
+                        lottery_type: lType,
+                        target_dealer_name: resolvedDealerName,
+                        dealerName: resolvedDealerName,
                         commission_earned: calculateTransferCommission(t, 120, activeUpstreamSettings, lType),
                         winnings: win
                     })
+                }
+            }
+
+            // Include transfers from archived rounds in combinedHistory if not already present in bet_transfers
+            const roundsWithTransfers = new Set(allTransfersCombined.map(t => String(t.round_id || t.id)))
+            for (const h of combinedHistory) {
+                const rId = String(h.round_id || h.id || '')
+                if (!rId || roundsWithTransfers.has(rId)) continue
+                const outAmt = Number(h.transferred_amount || 0)
+                if (outAmt > 0) {
+                    const lType = h.lottery_type || roundLotteryTypeMap[rId] || 'thai'
+                    const matchingPayment = (allUpstreamPayments || []).find(p => String(p.round_id || p.roundId) === rId && p.upstream_dealer_name)
+                    const fallbackName = matchingPayment?.upstream_dealer_name || 'เจ้ามือรับตีออก'
+                    const fallbackId = matchingPayment?.upstream_dealer_id || null
+                    allTransfersCombined.push({
+                        id: `archived_transfer_${rId}`,
+                        round_id: h.round_id || h.id,
+                        amount: outAmt,
+                        commission_earned: Number(h.upstream_commission || 0) || Math.round(outAmt * (25 / 120)),
+                        winnings: Number(h.upstream_winnings || 0),
+                        lottery_type: lType,
+                        target_dealer_name: fallbackName,
+                        dealerName: fallbackName,
+                        upstream_dealer_id: fallbackId,
+                        is_archived_summary: true
+                    })
+                }
+            }
+
+            // For rounds in combinedHistory with authoritative upstream_commission or upstream_winnings, reconcile in allTransfersCombined
+            for (const h of combinedHistory) {
+                const rId = String(h.round_id || h.id || '')
+                if (!rId) continue
+                const histComm = Number(h.upstream_commission || 0)
+                const histWin = Number(h.upstream_winnings || 0)
+                if (histComm > 0 || histWin > 0) {
+                    const roundTransfers = allTransfersCombined.filter(t => 
+                        String(t.round_id) === rId || String(t.id) === rId ||
+                        (h.round_id && String(t.round_id) === String(h.round_id)) ||
+                        (h.id && String(t.round_id) === String(h.id))
+                    )
+                    if (roundTransfers.length === 1) {
+                        if (histComm > 0) roundTransfers[0].commission_earned = histComm
+                        if (histWin > 0 && (!roundTransfers[0].winnings || Number(roundTransfers[0].winnings) === 0)) {
+                            roundTransfers[0].winnings = histWin
+                        }
+                    } else if (roundTransfers.length > 1) {
+                        const totalAmt = roundTransfers.reduce((s, t) => s + (t.amount || 0), 0)
+                        if (totalAmt > 0) {
+                            if (histComm > 0) {
+                                let assignedComm = 0
+                                roundTransfers.forEach((t, idx) => {
+                                    if (idx === roundTransfers.length - 1) {
+                                        t.commission_earned = histComm - assignedComm
+                                    } else {
+                                        const share = Math.round(histComm * ((t.amount || 0) / totalAmt))
+                                        t.commission_earned = share
+                                        assignedComm += share
+                                    }
+                                })
+                            }
+                            if (histWin > 0) {
+                                const totalWin = roundTransfers.reduce((s, t) => s + (t.winnings || 0), 0)
+                                if (totalWin === 0) {
+                                    let assignedWin = 0
+                                    roundTransfers.forEach((t, idx) => {
+                                        if (idx === roundTransfers.length - 1) {
+                                            t.winnings = histWin - assignedWin
+                                        } else {
+                                            const share = Math.round(histWin * ((t.amount || 0) / totalAmt))
+                                            t.winnings = share
+                                            assignedWin += share
+                                        }
+                                    })
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -5040,6 +5144,28 @@ export default function Dealer() {
                                                                                                 } else {
                                                                                                     const share = Math.round(outWin * (groupedMap[k].amount / totalAmt))
                                                                                                     groupedMap[k].winnings = share
+                                                                                                    assigned += share
+                                                                                                }
+                                                                                            })
+                                                                                        }
+                                                                                    }
+                                                                                }
+
+                                                                                // Preserve outComm from round_history if recorded
+                                                                                if (outComm > 0) {
+                                                                                    const groupKeys = Object.keys(groupedMap)
+                                                                                    if (groupKeys.length === 1) {
+                                                                                        groupedMap[groupKeys[0]].commission_earned = outComm
+                                                                                    } else if (groupKeys.length > 1) {
+                                                                                        const totalAmt = Object.values(groupedMap).reduce((s, g) => s + (g.amount || 0), 0)
+                                                                                        if (totalAmt > 0) {
+                                                                                            let assigned = 0
+                                                                                            groupKeys.forEach((k, idx) => {
+                                                                                                if (idx === groupKeys.length - 1) {
+                                                                                                    groupedMap[k].commission_earned = outComm - assigned
+                                                                                                } else {
+                                                                                                    const share = Math.round(outComm * (groupedMap[k].amount / totalAmt))
+                                                                                                    groupedMap[k].commission_earned = share
                                                                                                     assigned += share
                                                                                                 }
                                                                                             })

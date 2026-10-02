@@ -25,4 +25,31 @@ describe('line-bot pasteParser - parenthetical multipliers with operator', () =>
       })
     }
   })
+
+  it('should parse inline float bets with equals/colon/spaces correctly (e.g. 9 ลอยล่าง=500)', () => {
+    const cases = [
+      { text: '9 ลอยล่าง=500', numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' },
+      { text: '9 ลอยล่าง = 500', numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' },
+      { text: '9 ลอยล่าง 500', numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' },
+      { text: '9 ลอยล่าง:500', numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' },
+      { text: '9 ลอยล่าง-500', numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' },
+      { text: '9ลอยล่าง=500', numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' },
+      { text: '9 วิ่งล่าง=500', numbers: '9', amount: 500, betType: 'run_bottom', typeLabel: 'ลอยล่าง' },
+      { text: '9 ลอยบน=500', numbers: '9', amount: 500, betType: 'run_top', typeLabel: 'ลอยบน' },
+      { text: '9 วิ่งบน=500', numbers: '9', amount: 500, betType: 'run_top', typeLabel: 'ลอยบน' },
+      { text: '123 โต๊ด=50', numbers: '123', amount: 50, betType: '3_tod', typeLabel: 'โต๊ด' },
+      { text: '123โต๊ด=50', numbers: '123', amount: 50, betType: '3_tod', typeLabel: 'โต๊ด' },
+    ]
+
+    for (const c of cases) {
+      const res = parseMultiLinePaste(c.text, 'thai')
+      expect(res).toHaveLength(1)
+      expect(res[0]).toMatchObject({
+        numbers: c.numbers,
+        amount: c.amount,
+        betType: c.betType,
+        typeLabel: c.typeLabel
+      })
+    }
+  })
 })

@@ -469,7 +469,7 @@ export default function PaymentNoticeModal({
                                         disabled={!hasPastRounds}
                                         onChange={() => hasPastRounds && setMode('offset_prize_past_debt')}
                                     />
-                                    <span>{isUpstream ? 'หักลบรางวัลกับยอดเก่า' : 'หักลบรางวัลกับหนี้เก่า'}</span>
+                                    <span>{isUpstream ? 'หักลบรางวัลกับยอดค้างชำระ' : 'หักลบรางวัลกับหนี้เก่า'}</span>
                                 </div>
                                 <div
                                     className={`notice-mode-card ${mode === 'combine_all' ? 'active' : ''} ${!hasPastRounds ? 'disabled' : ''}`}

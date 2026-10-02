@@ -132,9 +132,10 @@ export default function UpstreamSettlementInline({
     const [showOffsetModal, setShowOffsetModal] = useState(false)
 
     const pastUnpaidRounds = useMemo(() => {
-        const dealerName = transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName
+        const dealerName = transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName || transfer?.upstream_dealer?.full_name
         return findUpstreamPastUnpaidRounds({
             dealerName,
+            targetTransfer: transfer,
             currentRoundId: round?.round_id || round?.id,
             currentRoundDate: roundDateIso,
             transfers: settlementOverview?.transfers || [],
@@ -1284,7 +1285,7 @@ export default function UpstreamSettlementInline({
                     currentWinnings={totalWinnings}
                     availableWinnings={availableWinnings}
                     isUpstream={true}
-                    upstreamDealerName={transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName}
+                    upstreamDealerName={transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName || transfer?.upstream_dealer?.full_name}
                 />
             )}
 

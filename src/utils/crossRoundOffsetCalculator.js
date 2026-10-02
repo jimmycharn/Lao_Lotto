@@ -417,7 +417,132 @@ export function findMemberPastUnpaidRounds({
  * @param {Array<Object>} [params.upstreamPayments=[]]
  * @param {Array<Object>} [params.roundHistory=[]]
  * @param {string} [params.lotteryType] - Optional lottery type filter (e.g. 'lao', 'thai', or 'all')
- * @returns {Array<{ roundId: string, roundDate: string, lotteryType: string, debt: number, upstreamDealerName: string }>}
+/**
+ * Normalizes a Thai name for robust comparison by:
+ * - Converting to lower case and trimming
+ * - Removing all whitespace
+ * - Removing Thai tone marks: ไม้เอก (\u0E48), ไม้โท (\u0E49), ไม้ตรี (\u0E4A), ไม้จัตวา (\u0E4B), ทัณฑฆาต/การันต์ (\u0E4C)
+ * - Normalizing upper vowels (ิ \u0E34, ี \u0E35, ึ \u0E36, ื \u0E37) so variations like จิ๋ม, จิ้ม, จึ๋ม evaluate identically
+ */
+export function normalizeThaiName(str) {
+    if (!str) return ''
+    return String(str)
+        .toLowerCase()
+        .replace(/\s+/g, '')
+        .replace(/[\u0E48-\u0E4C]/g, '')
+        .replace(/[\u0E34-\u0E37]/g, '\u0E34')
+}
+
+/**
+ * Robustly matches an upstream transfer / payment / record with a target dealer name or transfer object.
+ * Handles:
+ * - ID match (upstream_dealer_id, connection_id)
+ * - Exact name match
+ * - Whitespace differences
+ * - Thai tone-mark differences (e.g. พี่จิ๋ม vs พี่จิ้ม)
+ * - Thai vowel variations (e.g. พี่จิ๋ม vs พี่จึ๋ม)
+ * - Substring matching (e.g. "พี่จิ๋ม" in "พี่จิ๋ม อ้อมค่าย")
+ * - Significant keyword matching (words >= 3 chars, e.g. "อ้อมค่าย")
+ * - Joined table full_name (upstream_dealer: { full_name })
+ * - Fallback for generic summary names ('เจ้ามือ (สรุปในประวัติ)', 'เจ้ามือรับตีออก', 'เจ้ามือ')
+ */
+export function isMatchingUpstreamDealer(candidate, targetDealerName, targetTransfer = null) {
+    if (!candidate) return false
+
+    // 1. Match by upstream_dealer_id if available
+    const candUpstreamId = candidate.upstream_dealer_id || candidate.upstream_dealer?.id
+    const targetUpstreamId = targetTransfer?.upstream_dealer_id || candidate.upstreamDealerId || null
+    if (candUpstreamId && targetUpstreamId && String(candUpstreamId) === String(targetUpstreamId)) {
+        return true
+    }
+
+    // 2. Match by connection_id if available
+    const candConnId = candidate.connection_id
+    const targetConnId = targetTransfer?.connection_id
+    if (candConnId && targetConnId && String(candConnId) === String(targetConnId)) {
+        return true
+    }
+
+    if (!targetDealerName) return false
+
+    const cleanTarget = String(targetDealerName).trim().toLowerCase()
+    const targetNoSpace = cleanTarget.replace(/\s+/g, '')
+    const targetNormalizedThai = normalizeThaiName(cleanTarget)
+
+    // Collect candidate name strings
+    const nameCandidates = [
+        candidate.target_dealer_name,
+        candidate.upstream_dealer_name,
+        candidate.dealerName,
+        candidate.upstreamDealerName,
+        candidate.upstream_dealer?.full_name,
+        candidate.target_dealer?.full_name,
+        typeof candidate === 'string' ? candidate : null
+    ].filter(Boolean).map(n => String(n).trim())
+
+    if (nameCandidates.length === 0) {
+        return false
+    }
+
+    const ignoredPrefixes = new Set(['พี่', 'ป้า', 'น้า', 'อา', 'ลุง', 'คุณ', 'เฮีย', 'เจ๊', 'เจ้ามือ', 'รับตีออก'])
+    const targetWords = cleanTarget.split(/\s+/).filter(w => w.length >= 3 && !ignoredPrefixes.has(w))
+
+    for (const c of nameCandidates) {
+        const cleanC = c.toLowerCase()
+        const cNoSpace = cleanC.replace(/\s+/g, '')
+        const cNormalizedThai = normalizeThaiName(cleanC)
+
+        // Exact match
+        if (cleanC === cleanTarget) return true
+
+        // Whitespace-insensitive match
+        if (cNoSpace === targetNoSpace) return true
+
+        // Thai tone-mark & vowel variant match
+        if (cNormalizedThai === targetNormalizedThai) return true
+
+        // Substring match if meaningful length
+        if (cleanC.length >= 3 && cleanTarget.length >= 3) {
+            if (cleanTarget.includes(cleanC) || cleanC.includes(cleanTarget)) return true
+            if (targetNormalizedThai.includes(cNormalizedThai) || cNormalizedThai.includes(targetNormalizedThai)) return true
+        }
+
+        // Significant keyword match (e.g. "อ้อมค่าย")
+        const cWords = cleanC.split(/\s+/).filter(w => w.length >= 3 && !ignoredPrefixes.has(w))
+        for (const tw of targetWords) {
+            const twNorm = normalizeThaiName(tw)
+            for (const cw of cWords) {
+                const cwNorm = normalizeThaiName(cw)
+                if (cw === tw || cwNorm === twNorm || (twNorm.length >= 3 && cwNorm.includes(twNorm)) || (cwNorm.length >= 3 && twNorm.includes(cwNorm))) {
+                    return true
+                }
+            }
+        }
+
+        // Generic fallback names when single upstream or summary
+        if (cleanC === 'เจ้ามือ (สรุปในประวัติ)' || cleanC === 'เจ้ามือรับตีออก' || cleanC === 'เจ้ามือ') {
+            return true
+        }
+    }
+
+    return false
+}
+
+/**
+ * Finds all past rounds where there is an outstanding balance between dealer and upstream dealer (currentBalance !== 0).
+ * Prioritizes the true round closing date from roundHistory.
+ * Results are sorted descending (most recent past round on top, down to oldest).
+ * 
+ * @param {Object} params
+ * @param {string} params.dealerName
+ * @param {string} [params.currentRoundId]
+ * @param {string} [params.currentRoundDate]
+ * @param {Array<Object>} [params.transfers=[]]
+ * @param {Array<Object>} [params.upstreamPayments=[]]
+ * @param {Array<Object>} [params.roundHistory=[]]
+ * @param {string} [params.lotteryType] - Optional lottery type filter (e.g. 'lao', 'thai', or 'all')
+ * @param {Object} [params.targetTransfer=null] - Optional current transfer object for ID matching
+ * @returns {Array<{ roundId: string, roundDate: string, lotteryType: string, debt: number, upstreamDealerName: string, upstreamDealerId: string|null }>}
  */
 export function findUpstreamPastUnpaidRounds({
     dealerName,
@@ -426,11 +551,11 @@ export function findUpstreamPastUnpaidRounds({
     transfers = [],
     upstreamPayments = [],
     roundHistory = [],
-    lotteryType = null
+    lotteryType = null,
+    targetTransfer = null
 }) {
     if (!dealerName) return []
     const results = []
-    const normalizedTarget = dealerName.trim().toLowerCase()
     const normalizedLotteryFilter = (lotteryType && lotteryType !== 'all')
         ? String(lotteryType).trim().toLowerCase()
         : null
@@ -439,7 +564,7 @@ export function findUpstreamPastUnpaidRounds({
     const roundLotteryTypeMap = {}
     if (Array.isArray(roundHistory)) {
         for (const r of roundHistory) {
-            const cDate = getRoundCloseDate(r)
+            const cDate = getRoundCloseDate(r) || (r.round_date ? String(r.round_date).split('T')[0] : '')
             const lType = r.lottery_type || r.lotteryType
             if (r.round_id) {
                 if (cDate) roundCloseDateMap[String(r.round_id)] = cDate
@@ -455,8 +580,7 @@ export function findUpstreamPastUnpaidRounds({
     // Group transfers by round_id
     const roundMap = {}
     for (const t of transfers) {
-        const tName = (t.target_dealer_name || t.upstream_dealer_name || t.dealerName || '').trim().toLowerCase()
-        if (tName !== normalizedTarget) continue
+        if (!isMatchingUpstreamDealer(t, dealerName, targetTransfer)) continue
 
         const roundId = t.round_id || t.id
         if (currentRoundId && String(roundId) === String(currentRoundId)) continue
@@ -465,7 +589,7 @@ export function findUpstreamPastUnpaidRounds({
         if (currentRoundDate && resolvedDate && resolvedDate > currentRoundDate) continue
 
         const roundLotteryType = roundLotteryTypeMap[String(roundId)] || t.lottery_type || t.lotteryType || ''
-        if (normalizedLotteryFilter) {
+        if (normalizedLotteryFilter && roundLotteryType) {
             if (String(roundLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
                 continue
             }
@@ -476,7 +600,8 @@ export function findUpstreamPastUnpaidRounds({
                 roundId,
                 roundDate: resolvedDate,
                 lotteryType: roundLotteryType,
-                upstreamDealerName: t.target_dealer_name || t.upstream_dealer_name || dealerName,
+                upstreamDealerName: t.target_dealer_name || t.upstream_dealer_name || t.upstream_dealer?.full_name || dealerName,
+                upstreamDealerId: t.upstream_dealer_id || targetTransfer?.upstream_dealer_id || null,
                 amount: 0,
                 commission_earned: 0,
                 winnings: 0
@@ -494,13 +619,115 @@ export function findUpstreamPastUnpaidRounds({
         }
     }
 
+    // Also inspect past rounds from roundHistory that had transfers (transferred_amount > 0)
+    // but might not be in transfers array (e.g. archived rounds where bet_transfers was deleted)
+    if (Array.isArray(roundHistory)) {
+        for (const rh of roundHistory) {
+            const rhRoundId = rh.round_id || rh.id
+            if (!rhRoundId) continue
+            if (currentRoundId && String(rhRoundId) === String(currentRoundId)) continue
+            // Look up whether this round is already in roundMap
+            const targetMapKey = roundMap[rhRoundId] 
+                ? rhRoundId 
+                : (rh.round_id && roundMap[rh.round_id] ? rh.round_id : (rh.id && roundMap[rh.id] ? rh.id : null))
+
+            if (targetMapKey) {
+                const existing = roundMap[targetMapKey]
+                const histComm = Number(rh.upstream_commission || 0)
+                const histWin = Number(rh.upstream_winnings || 0)
+                const histAmt = Number(rh.transferred_amount || 0)
+
+                // If roundHistory has authoritative upstream_commission > 0, align commission_earned
+                if (histComm > 0) {
+                    const roundTransfers = transfers.filter(tr => {
+                        const trId = tr.round_id || tr.id
+                        return String(trId) === String(rhRoundId) || 
+                            (rh.round_id && String(trId) === String(rh.round_id)) || 
+                            (rh.id && String(trId) === String(rh.id))
+                    })
+                    const totalRoundAmt = roundTransfers.reduce((s, tr) => s + Number(tr.amount || 0), 0)
+                    if (totalRoundAmt > 0 && Math.abs(totalRoundAmt - existing.amount) > 1 && histAmt > 0) {
+                        existing.commission_earned = Math.round(histComm * (existing.amount / histAmt))
+                    } else {
+                        existing.commission_earned = histComm
+                    }
+                }
+
+                // If roundHistory has authoritative upstream_winnings > 0 and transfers had 0 winnings
+                if (histWin > 0 && (!existing.winnings || Number(existing.winnings) === 0)) {
+                    const roundTransfers = transfers.filter(tr => {
+                        const trId = tr.round_id || tr.id
+                        return String(trId) === String(rhRoundId) || 
+                            (rh.round_id && String(trId) === String(rh.round_id)) || 
+                            (rh.id && String(trId) === String(rh.id))
+                    })
+                    const totalRoundAmt = roundTransfers.reduce((s, tr) => s + Number(tr.amount || 0), 0)
+                    if (totalRoundAmt > 0 && Math.abs(totalRoundAmt - existing.amount) > 1 && histAmt > 0) {
+                        existing.winnings = Math.round(histWin * (existing.amount / histAmt))
+                    } else {
+                        existing.winnings = histWin
+                    }
+                }
+
+                if (histAmt > 0 && (!existing.amount || Number(existing.amount) === 0)) {
+                    existing.amount = histAmt
+                }
+
+                continue
+            }
+
+            const outAmt = Number(rh.transferred_amount || 0)
+            if (outAmt <= 0) continue
+
+            const resolvedDate = getRoundCloseDate(rh) || (rh.round_date ? String(rh.round_date).split('T')[0] : '')
+            if (currentRoundDate && resolvedDate && resolvedDate > currentRoundDate) continue
+
+            const roundLotteryType = rh.lottery_type || rh.lotteryType || roundLotteryTypeMap[String(rhRoundId)] || ''
+            if (normalizedLotteryFilter && roundLotteryType) {
+                if (String(roundLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
+                    continue
+                }
+            }
+
+            // Check if this archived round had payments to this upstream dealer
+            const hasMatchingPayment = upstreamPayments.some(p => {
+                const pRound = p.round_id || p.roundId
+                return String(pRound) === String(rhRoundId) && isMatchingUpstreamDealer(p, dealerName, targetTransfer)
+            })
+
+            const hasOtherDealerInRound = upstreamPayments.some(p => {
+                const pRound = p.round_id || p.roundId
+                return String(pRound) === String(rhRoundId) && p.upstream_dealer_name && !isMatchingUpstreamDealer(p, dealerName, targetTransfer)
+            })
+
+            if (hasMatchingPayment || !hasOtherDealerInRound) {
+                const outComm = Number(rh.upstream_commission || 0) > 0 
+                    ? Number(rh.upstream_commission) 
+                    : Math.round(outAmt * (25 / 120))
+                const outWin = Number(rh.upstream_winnings || 0)
+
+                roundMap[rhRoundId] = {
+                    roundId: rhRoundId,
+                    roundDate: resolvedDate,
+                    lotteryType: roundLotteryType,
+                    upstreamDealerName: dealerName,
+                    upstreamDealerId: targetTransfer?.upstream_dealer_id || null,
+                    amount: outAmt,
+                    commission_earned: outComm,
+                    winnings: outWin
+                }
+            }
+        }
+    }
+
     for (const roundId of Object.keys(roundMap)) {
         const aggregatedTransfer = roundMap[roundId]
         const initial = calculateUpstreamInitialBalance(aggregatedTransfer)
         const roundPayments = upstreamPayments.filter(p => {
             const pRound = p.round_id || p.roundId
-            const pName = (p.upstream_dealer_name || '').trim().toLowerCase()
-            return String(pRound) === String(roundId) && (pName === normalizedTarget || !p.upstream_dealer_name)
+            if (String(pRound) !== String(roundId)) return false
+            if (!p.upstream_dealer_name) return true
+            return isMatchingUpstreamDealer(p, dealerName, aggregatedTransfer)
         })
         const currentBalance = calculateUpstreamCurrentBalance(initial, roundPayments)
 
@@ -510,7 +737,8 @@ export function findUpstreamPastUnpaidRounds({
                 roundDate: aggregatedTransfer.roundDate,
                 lotteryType: aggregatedTransfer.lotteryType,
                 debt: currentBalance,
-                upstreamDealerName: aggregatedTransfer.upstreamDealerName
+                upstreamDealerName: aggregatedTransfer.upstreamDealerName,
+                upstreamDealerId: aggregatedTransfer.upstreamDealerId
             })
         }
     }
@@ -581,7 +809,7 @@ export function calculateCrossRoundPaymentSummary({
         const direction = isUpstream ? 'upstream_to_dealer' : 'dealer_to_member'
         return {
             mode,
-            modeLabel: 'รางวัลงวดนี้',
+            modeLabel: isUpstream ? 'รับคืนรางวัลงวดนี้' : 'รางวัลงวดนี้',
             currentRoundDebt: 0,
             currentRoundPrize: prize,
             pastDebtsTotal: 0,

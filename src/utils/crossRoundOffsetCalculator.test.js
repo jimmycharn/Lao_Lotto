@@ -10,7 +10,9 @@ import {
     parsePaymentNotes,
     buildPaymentNotes,
     formatThaiDate,
-    formatThaiDateDDMMYYYY
+    formatThaiDateDDMMYYYY,
+    normalizeThaiName,
+    isMatchingUpstreamDealer
 } from './crossRoundOffsetCalculator'
 
 describe('crossRoundOffsetCalculator', () => {
@@ -496,6 +498,149 @@ describe('crossRoundOffsetCalculator', () => {
 
             expect(allRounds).toHaveLength(2)
         })
+
+        it('matches upstream dealer with tone mark and vowel variations (e.g. พี่จิ๋ม vs พี่จิ้ม)', () => {
+            const transfers = [
+                { round_id: 'r-past-1', target_dealer_name: 'พี่จิ้ม อ้อมค่าย', amount: 7447, commission_earned: 2561, winnings: 0, round_date: '2026-09-16', lottery_type: 'thai' }
+            ]
+
+            const unpaid = findUpstreamPastUnpaidRounds({
+                dealerName: 'พี่จิ๋ม อ้อมค่าย',
+                currentRoundId: 'r-current',
+                currentRoundDate: '2026-10-01',
+                transfers
+            })
+
+            expect(unpaid).toHaveLength(1)
+            expect(unpaid[0].roundId).toBe('r-past-1')
+            expect(unpaid[0].debt).toBe(4886) // 7447 - 2561 = 4886
+        })
+
+        it('matches upstream dealer via joined upstream_dealer.full_name', () => {
+            const transfers = [
+                {
+                    round_id: 'r-past-2',
+                    upstream_dealer_id: 'up-123',
+                    upstream_dealer: { full_name: 'พี่จิ๋ม อ้อมค่าย' },
+                    amount: 5000,
+                    commission_earned: 1000,
+                    winnings: 0,
+                    round_date: '2026-09-16',
+                    lottery_type: 'thai'
+                }
+            ]
+
+            const unpaid = findUpstreamPastUnpaidRounds({
+                dealerName: 'พี่จิ้ม อ้อมค่าย',
+                currentRoundId: 'r-current',
+                transfers,
+                targetTransfer: { upstream_dealer_id: 'up-123' }
+            })
+
+            expect(unpaid).toHaveLength(1)
+            expect(unpaid[0].roundId).toBe('r-past-2')
+            expect(unpaid[0].debt).toBe(4000)
+        })
+
+        it('discovers past unpaid rounds from roundHistory when bet_transfers was deleted/archived', () => {
+            const roundHistory = [
+                {
+                    round_id: 'r-archived-1',
+                    round_date: '2026-09-01',
+                    lottery_type: 'thai',
+                    transferred_amount: 10000,
+                    upstream_commission: 2000,
+                    upstream_winnings: 0
+                }
+            ]
+            const upstreamPayments = [
+                {
+                    round_id: 'r-archived-1',
+                    upstream_dealer_name: 'พี่จิ๋ม อ้อมค่าย',
+                    amount: 3000,
+                    payment_type: 'net_settlement',
+                    direction: 'dealer_to_upstream'
+                }
+            ]
+
+            const unpaid = findUpstreamPastUnpaidRounds({
+                dealerName: 'พี่จิ๋ม อ้อมค่าย',
+                currentRoundId: 'r-current',
+                currentRoundDate: '2026-10-01',
+                transfers: [], // bet_transfers was cleaned up/archived
+                upstreamPayments,
+                roundHistory
+            })
+
+            expect(unpaid).toHaveLength(1)
+            expect(unpaid[0].roundId).toBe('r-archived-1')
+            // Initial balance = 10000 - 2000 = 8000; paid = 3000; remaining debt = 5000
+            expect(unpaid[0].debt).toBe(5000)
+        })
+
+        it('reconciles commission_earned and winnings from roundHistory when dynamic transfers commission differs (e.g. 13232 vs 13189)', () => {
+            const transfers = [
+                {
+                    round_id: 'r-16mar',
+                    target_dealer_name: 'เจ้ามือ (สรุปในประวัติ)',
+                    amount: 17643,
+                    commission_earned: 4454, // Dynamic ticket recalculation
+                    winnings: 0,
+                    round_date: '2026-03-16',
+                    lottery_type: 'thai'
+                }
+            ]
+            const roundHistory = [
+                {
+                    round_id: 'r-16mar',
+                    round_date: '2026-03-16',
+                    lottery_type: 'thai',
+                    transferred_amount: 17643,
+                    upstream_commission: 4411, // Authoritative archived round snapshot
+                    upstream_winnings: 9000
+                }
+            ]
+            const upstreamPayments = [
+                {
+                    round_id: 'r-16mar',
+                    upstream_dealer_name: 'เจ้ามือ (สรุปในประวัติ)',
+                    amount: 9000,
+                    payment_type: 'prize_collection',
+                    direction: 'upstream_to_dealer'
+                }
+            ]
+
+            const unpaid = findUpstreamPastUnpaidRounds({
+                dealerName: 'เจ้ามือ (สรุปในประวัติ)',
+                currentRoundId: 'r-1apr',
+                currentRoundDate: '2026-04-01',
+                transfers,
+                upstreamPayments,
+                roundHistory
+            })
+
+            expect(unpaid).toHaveLength(1)
+            expect(unpaid[0].roundId).toBe('r-16mar')
+            expect(unpaid[0].debt).toBe(13232) // Not 13189
+        })
+    })
+
+    describe('normalizeThaiName & isMatchingUpstreamDealer', () => {
+        it('normalizes Thai tone marks and upper vowels consistently', () => {
+            expect(normalizeThaiName('พี่จิ๋ม')).toBe(normalizeThaiName('พี่จิ้ม'))
+            expect(normalizeThaiName('พี่จิ๋ม อ้อมค่าย')).toBe(normalizeThaiName('พี่จิ้มอ้อมค่าย'))
+            expect(normalizeThaiName('พี่จึ๋ม')).toBe(normalizeThaiName('พี่จิ๋ม'))
+            expect(normalizeThaiName('')).toBe('')
+            expect(normalizeThaiName(null)).toBe('')
+        })
+
+        it('matches candidates across tone marks, prefixes, and keywords', () => {
+            expect(isMatchingUpstreamDealer({ target_dealer_name: 'พี่จิ้ม อ้อมค่าย' }, 'พี่จิ๋ม อ้อมค่าย')).toBe(true)
+            expect(isMatchingUpstreamDealer({ upstream_dealer_name: 'อ้อมค่าย' }, 'พี่จิ๋ม อ้อมค่าย')).toBe(true)
+            expect(isMatchingUpstreamDealer({ upstream_dealer: { full_name: 'พี่จิ้ม อ้อมค่าย' } }, 'พี่จิ๋ม')).toBe(true)
+            expect(isMatchingUpstreamDealer({ target_dealer_name: 'เจ้ามือรับตีออก' }, 'พี่จิ๋ม')).toBe(true)
+            expect(isMatchingUpstreamDealer({ target_dealer_name: 'คนละคน' }, 'พี่จิ๋ม')).toBe(false)
+        })
     })
 
     describe('calculateCrossRoundPaymentSummary', () => {
@@ -579,6 +724,27 @@ describe('crossRoundOffsetCalculator', () => {
             expect(summary.mode).toBe('combine_all')
             expect(summary.suggestedSlipAmount).toBe(3500) // 2000 + 1500 = 3500
             expect(summary.direction).toBe('member_to_dealer')
+        })
+
+        it('calculates isUpstream modes with correct labels and directions', () => {
+            const prizeSummary = calculateCrossRoundPaymentSummary({
+                mode: 'current_prize',
+                currentBalance: 0,
+                currentWinnings: 2000,
+                isUpstream: true
+            })
+            expect(prizeSummary.modeLabel).toBe('รับคืนรางวัลงวดนี้')
+            expect(prizeSummary.direction).toBe('upstream_to_dealer')
+
+            const combineSummary = calculateCrossRoundPaymentSummary({
+                mode: 'combine_all',
+                currentBalance: 4886,
+                currentWinnings: 0,
+                selectedPastRounds: [{ roundId: 'past-1', debt: 3000 }],
+                isUpstream: true
+            })
+            expect(combineSummary.suggestedSlipAmount).toBe(7886)
+            expect(combineSummary.direction).toBe('dealer_to_upstream')
         })
     })
 

@@ -67,7 +67,7 @@ export function calculatePaymentNoticeSummary({
 
         return {
             mode,
-            modeLabel: isUpstream ? 'หักลบรางวัลกับยอดเก่า' : 'หักลบรางวัลกับหนี้เก่า',
+            modeLabel: isUpstream ? 'หักลบรางวัลกับยอดค้างชำระ' : 'หักลบรางวัลกับหนี้เก่า',
             netAmount: Math.abs(diff),
             direction,
             currentRoundDebt: curBal > 0 ? curBal : 0,
@@ -777,7 +777,7 @@ export function formatPaymentNoticeMessage({
                     const pastDate = resolveDisplayRoundDate(r.roundDate || r.round_date || getRoundCloseDate(r))
                     const pastDebt = Number(r.debt || 0)
                     if (pastDebt > 0) {
-                        lines.push(`- ยอดตีออก งวด ${pastDate}: ฿${pastDebt.toLocaleString()}`)
+                        lines.push(`- ค้างชำระตีออกงวด ${pastDate}: ฿${pastDebt.toLocaleString()}`)
                     } else if (pastDebt < 0) {
                         lines.push(`- ยอดถูกรางวัลค้างรับ งวด ${pastDate}: -฿${Math.abs(pastDebt).toLocaleString()}`)
                     }
@@ -797,7 +797,7 @@ export function formatPaymentNoticeMessage({
                     const pastDate = resolveDisplayRoundDate(r.roundDate || r.round_date || getRoundCloseDate(r))
                     const pastDebt = Number(r.debt || 0)
                     if (pastDebt > 0) {
-                        lines.push(`- ยอดตีออก งวด ${pastDate}: ฿${pastDebt.toLocaleString()}`)
+                        lines.push(`- ค้างชำระตีออกงวด ${pastDate}: ฿${pastDebt.toLocaleString()}`)
                     } else if (pastDebt < 0) {
                         lines.push(`- ยอดถูกรางวัลค้างรับ งวด ${pastDate}: -฿${Math.abs(pastDebt).toLocaleString()}`)
                     }
