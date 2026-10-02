@@ -711,6 +711,96 @@ describe('calculateRoundOutstandingDetails', () => {
             // Dealer owes upstream 40,742 (NOT 42,242 which would happen if winnings were lost)
             expect(res.dealerOwesUpstream).toBe(40742)
         })
+
+        it('correctly calculates Lao upstream fallback commission (25/120) and marks round as settled when fully paid', () => {
+            // Scenario from user screenshots:
+            // Lao round 26 Jan 2569: transferred_amount = 2760, upstream_commission in history is 0 or unrecorded.
+            // Commission calculated with Lao fallback: 2760 * (25 / 120) = 575.
+            // Upstream payment recorded: 2,185 (2760 - 575).
+            const history = {
+                id: 'round-lao-26-jan',
+                lottery_type: 'lao',
+                transferred_amount: 2760,
+                upstream_commission: 0,
+                upstream_winnings: 0
+            }
+
+            const transfers = [
+                {
+                    round_id: 'round-lao-26-jan',
+                    amount: 2760,
+                    dealerName: 'เจ้ามือ (สรุปในประวัติ)',
+                    is_archived_summary: true,
+                    commission_earned: 575,
+                    winnings: 0
+                }
+            ]
+
+            const upstreamPayments = [
+                {
+                    round_id: 'round-lao-26-jan',
+                    amount: 2185,
+                    upstream_dealer_name: 'เจ้ามือ (สรุปในประวัติ)',
+                    direction: 'dealer_to_upstream'
+                }
+            ]
+
+            const res = calculateRoundOutstandingDetails({
+                history,
+                userHistories: [],
+                memberPayments: [],
+                transfers,
+                upstreamPayments
+            })
+
+            expect(res.dealerOwesUpstream).toBe(0)
+            expect(res.upstreamOwesDealer).toBe(0)
+            expect(res.netOutstanding).toBe(0)
+            expect(res.isSettled).toBe(true)
+        })
+
+        it('correctly calculates Lao upstream fallback commission even when transfer has no commission_earned', () => {
+            const history = {
+                id: 'round-lao-7-feb',
+                lottery_type: 'lao',
+                transferred_amount: 240,
+                upstream_commission: 0,
+                upstream_winnings: 0
+            }
+
+            // Transfer without pre-computed commission
+            const transfers = [
+                {
+                    round_id: 'round-lao-7-feb',
+                    amount: 240,
+                    target_dealer_name: 'เจ้ามือ (สรุปในประวัติ)',
+                    winnings: 0
+                }
+            ]
+
+            // 240 - Math.round(240 * (25 / 120) = 50) = 190
+            const upstreamPayments = [
+                {
+                    round_id: 'round-lao-7-feb',
+                    amount: 190,
+                    upstream_dealer_name: 'เจ้ามือ (สรุปในประวัติ)',
+                    direction: 'dealer_to_upstream'
+                }
+            ]
+
+            const res = calculateRoundOutstandingDetails({
+                history,
+                userHistories: [],
+                memberPayments: [],
+                transfers,
+                upstreamPayments
+            })
+
+            expect(res.dealerOwesUpstream).toBe(0)
+            expect(res.upstreamOwesDealer).toBe(0)
+            expect(res.netOutstanding).toBe(0)
+            expect(res.isSettled).toBe(true)
+        })
     })
 
     describe('calculateTransferWinning', () => {

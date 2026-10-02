@@ -141,8 +141,8 @@ export function getPaymentPresetAmount(memberHistory, payments = [], paymentType
  * 3 digits = 30%, 2 digits = 28%, 1 digit / run = 12%, other = 25%.
  */
 export function calculateTransferCommission(t, setPrice = 120, upstreamSource = null, lotteryType = 'thai') {
-    // If t already has a valid pre-computed commission_earned, and no explicit upstreamSource override is provided, use it
-    if (!upstreamSource && t?.commission_earned !== undefined && t?.commission_earned !== null && Number(t.commission_earned) > 0) {
+    // If t is an archived summary or has no bet_type with pre-computed commission_earned, preserve it
+    if ((t?.is_archived_summary || !t?.bet_type || !upstreamSource) && t?.commission_earned !== undefined && t?.commission_earned !== null && Number(t.commission_earned) > 0) {
         return Number(t.commission_earned)
     }
     const amt = Number(t?.amount || 0)
@@ -225,7 +225,7 @@ export function calculateTransferCommission(t, setPrice = 120, upstreamSource = 
     } else if (t?.bet_type === '1_top' || t?.bet_type === '1_bottom' || t?.bet_type === 'run_top') {
         return Math.round(amt * 0.12)
     } else {
-        return Math.round(amt * 0.25)
+        return (lKey === 'lao' || lKey === 'hanoi') ? Math.round(amt * (25 / 120)) : Math.round(amt * 0.25)
     }
 }
 
@@ -593,8 +593,10 @@ export function calculateRoundOutstandingDetails({
     }
 
     const outAmt = Number(history?.transferred_amount || 0)
-    const isThai = String(history?.lottery_type || '').toLowerCase().includes('thai')
-    const outComm = Number(history?.upstream_commission || 0) > 0
+    const rawLotteryType = String(history?.lottery_type || history?.id || (transfers[0]?.lottery_type) || '').toLowerCase()
+    const isThai = rawLotteryType.includes('thai')
+    const hasAuthoritativeComm = Number(history?.upstream_commission || 0) > 0
+    const outComm = hasAuthoritativeComm
         ? Number(history.upstream_commission)
         : Math.round(outAmt * (isThai ? 0.30 : (25 / 120)))
     const outWin = Number(history?.upstream_winnings || 0)
@@ -623,8 +625,11 @@ export function calculateRoundOutstandingDetails({
         }
     }
 
-    // Reconcile commission_earned from round_history if recorded
-    if (Number(history?.upstream_commission || 0) > 0) {
+    // Reconcile commission_earned from round_history if recorded, or if transfers are archived summaries / had 0 commission
+    const totalGroupedComm = Object.values(groupedMap).reduce((s, g) => s + (g.commission_earned || 0), 0)
+    const shouldReconcileComm = hasAuthoritativeComm || (totalGroupedComm === 0 && outComm > 0) || (transfers.length > 0 && transfers.every(t => t.is_archived_summary) && outComm > 0)
+
+    if (shouldReconcileComm && outComm > 0) {
         const groupKeys = Object.keys(groupedMap)
         if (groupKeys.length === 1) {
             groupedMap[groupKeys[0]].commission_earned = outComm

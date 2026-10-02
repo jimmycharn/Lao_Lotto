@@ -1477,9 +1477,10 @@ export default function Dealer() {
         }
 
         const outAmt = Number(history.transferred_amount || 0)
+        const isThai = String(history.lottery_type || '').toLowerCase().includes('thai')
         const outComm = Number(history.upstream_commission || 0) > 0 
             ? Number(history.upstream_commission) 
-            : Math.round(outAmt * (25 / 120))
+            : Math.round(outAmt * (isThai ? 0.30 : (25 / 120)))
         const outWin = Number(history.upstream_winnings || 0)
 
         // Preserve outWin if individual transfer records didn't calculate winnings
@@ -2789,11 +2790,12 @@ export default function Dealer() {
                     const matchingPayment = (allUpstreamPayments || []).find(p => String(p.round_id || p.roundId) === rId && p.upstream_dealer_name)
                     const fallbackName = matchingPayment?.upstream_dealer_name || 'เจ้ามือรับตีออก'
                     const fallbackId = matchingPayment?.upstream_dealer_id || null
+                    const isLTypeThai = String(lType).toLowerCase().includes('thai')
                     allTransfersCombined.push({
                         id: `archived_transfer_${rId}`,
                         round_id: h.round_id || h.id,
                         amount: outAmt,
-                        commission_earned: Number(h.upstream_commission || 0) || Math.round(outAmt * (25 / 120)),
+                        commission_earned: Number(h.upstream_commission || 0) || Math.round(outAmt * (isLTypeThai ? 0.30 : (25 / 120))),
                         winnings: Number(h.upstream_winnings || 0),
                         lottery_type: lType,
                         target_dealer_name: fallbackName,
@@ -2808,7 +2810,11 @@ export default function Dealer() {
             for (const h of combinedHistory) {
                 const rId = String(h.round_id || h.id || '')
                 if (!rId) continue
-                const histComm = Number(h.upstream_commission || 0)
+                const outAmt = Number(h.transferred_amount || 0)
+                const isThaiH = String(h.lottery_type || '').toLowerCase().includes('thai')
+                const histComm = Number(h.upstream_commission || 0) > 0 
+                    ? Number(h.upstream_commission) 
+                    : (outAmt > 0 ? Math.round(outAmt * (isThaiH ? 0.30 : (25 / 120))) : 0)
                 const histWin = Number(h.upstream_winnings || 0)
                 if (histComm > 0 || histWin > 0) {
                     const roundTransfers = allTransfersCombined.filter(t => 
@@ -4811,18 +4817,23 @@ export default function Dealer() {
                                                         const hInProfit = hInAmt - hInComm - hInPay
 
                                                         let hOutAmt = history.transferred_amount || 0
-                                                        let hOutComm = history.upstream_commission || 0
+                                                        const isThaiHistory = String(history.lottery_type || '').toLowerCase().includes('thai')
+                                                        const outCommFallback = Number(history.upstream_commission || 0) > 0 
+                                                            ? Number(history.upstream_commission) 
+                                                            : (hOutAmt > 0 ? Math.round(hOutAmt * (isThaiHistory ? 0.30 : (25 / 120))) : 0)
+                                                        let hOutComm = outCommFallback
                                                         let hOutWin = history.upstream_winnings || 0
 
                                                         if (rawTransfers.length > 0) {
                                                             hOutAmt = rawTransfers.reduce((sum, t) => sum + (t.amount || 0), 0)
-                                                            hOutComm = rawTransfers.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type), 0)
+                                                            const rawComm = rawTransfers.reduce((sum, t) => sum + calculateTransferCommission(t, 120, upstreamSettingsMap, history.lottery_type), 0)
+                                                            hOutComm = outCommFallback > 0 ? outCommFallback : rawComm
                                                             const rawWin = rawTransfers.reduce((sum, t) => {
                                                                 return sum + (Number(t.winnings || 0) || calculateTransferWinning(t, history.winning_numbers, history.lottery_type, 120, history.set_prices, upstreamSettingsMap))
                                                             }, 0)
                                                             hOutWin = rawWin > 0 ? rawWin : (history.upstream_winnings || 0)
                                                         } else if (!hOutComm && hOutAmt > 0) {
-                                                            hOutComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(hOutAmt * (25 / 120))
+                                                            hOutComm = outCommFallback
                                                         }
 
                                                         const hOutProfit = -hOutAmt + hOutComm + hOutWin
@@ -5125,7 +5136,8 @@ export default function Dealer() {
                                                                                 }
 
                                                                                 const outAmt = Number(history.transferred_amount || 0)
-                                                                                 const outComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(outAmt * (25 / 120))
+                                                                                const isThaiHist = String(history.lottery_type || '').toLowerCase().includes('thai')
+                                                                                const outComm = Number(history.upstream_commission || 0) > 0 ? Number(history.upstream_commission) : Math.round(outAmt * (isThaiHist ? 0.30 : (25 / 120)))
                                                                                 const outWin = Number(history.upstream_winnings || 0)
 
                                                                                 // Preserve outWin if individual transfer records didn't calculate winnings

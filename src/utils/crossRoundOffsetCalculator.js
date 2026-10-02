@@ -633,11 +633,14 @@ export function findUpstreamPastUnpaidRounds({
 
             if (targetMapKey) {
                 const existing = roundMap[targetMapKey]
-                const histComm = Number(rh.upstream_commission || 0)
-                const histWin = Number(rh.upstream_winnings || 0)
+                const isRhThai = String(rh.lottery_type || rh.lotteryType || '').toLowerCase().includes('thai')
                 const histAmt = Number(rh.transferred_amount || 0)
+                const histComm = Number(rh.upstream_commission || 0) > 0 
+                    ? Number(rh.upstream_commission) 
+                    : (histAmt > 0 ? Math.round(histAmt * (isRhThai ? 0.30 : (25 / 120))) : 0)
+                const histWin = Number(rh.upstream_winnings || 0)
 
-                // If roundHistory has authoritative upstream_commission > 0, align commission_earned
+                // If roundHistory has authoritative or calculated upstream_commission > 0, align commission_earned
                 if (histComm > 0) {
                     const roundTransfers = transfers.filter(tr => {
                         const trId = tr.round_id || tr.id
@@ -701,9 +704,10 @@ export function findUpstreamPastUnpaidRounds({
             })
 
             if (hasMatchingPayment || !hasOtherDealerInRound) {
+                const isRhThai = String(rh.lottery_type || rh.lotteryType || roundLotteryType || '').toLowerCase().includes('thai')
                 const outComm = Number(rh.upstream_commission || 0) > 0 
                     ? Number(rh.upstream_commission) 
-                    : Math.round(outAmt * (25 / 120))
+                    : Math.round(outAmt * (isRhThai ? 0.30 : (25 / 120)))
                 const outWin = Number(rh.upstream_winnings || 0)
 
                 roundMap[rhRoundId] = {
