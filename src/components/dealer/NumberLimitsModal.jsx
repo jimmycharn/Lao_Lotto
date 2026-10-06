@@ -575,7 +575,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                             <div style={{ flex: '1 1 120px', minWidth: '100px' }}>
                                 {newLimit.limit_type === 'rate_limit' ? (
                                     <>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.3rem' }}>
                                             <label style={{ ...labelStyle, marginBottom: 0 }}>วงเงินรับสูงสุด</label>
                                             <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.8rem', userSelect: 'none' }}>
                                                 <input
@@ -602,7 +602,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                 gap: '0.35rem',
                                                 minHeight: '34px'
                                             }}>
-                                                <span>✓ ยึดวงเงินรับตามประเภทเลข</span>
+                                                <span>✓ อั้นตามประเภทเลข</span>
                                             </div>
                                         ) : (
                                             <input
@@ -965,7 +965,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                                         <span style={{ fontWeight: '500', minWidth: '55px', fontSize: '0.8rem' }}>{BET_TYPES[limit.bet_type]}</span>
                                                                         <span style={{ opacity: 0.7, fontSize: '0.8rem' }}>
                                                                             {isDef ? (
-                                                                                <span style={{ color: '#eab308', fontWeight: '500' }}>วงเงิน: อั้นปกติ</span>
+                                                                                <span style={{ color: '#eab308', fontWeight: '500' }}>วงเงิน: อั้นตามประเภทเลข</span>
                                                                             ) : (
                                                                                 `${round.currency_symbol}${limit.max_amount?.toLocaleString()}`
                                                                             )}
