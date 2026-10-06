@@ -1,0 +1,4 @@
+project_id = "nmumnletxkeflmsythsn"
+
+[functions.line-bot]
+verify_jwt = false

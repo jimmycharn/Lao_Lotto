@@ -28,7 +28,7 @@ import {
     normalizeBetType,
     getLimitLookupBetType
 } from '../../constants/lotteryTypes'
-import { findMatchingLimit } from '../../utils/numberLimits'
+import { findMatchingLimit, isRateLimitDefault } from '../../utils/numberLimits'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
 
@@ -504,7 +504,8 @@ export default function SubmissionsModal({ round, onClose, fetchDealerCredit }) 
 
             // Get limit: first check number_limits (using findMatchingLimit), then type_limits
             const numberLimit = findMatchingLimit(numberLimits, limitLookupBetType, group.numbers)
-            const numLimit = numberLimit !== undefined && numberLimit !== null ? Number(numberLimit.max_amount) : undefined
+            const isRateLimitDef = isRateLimitDefault(numberLimit)
+            const numLimit = (numberLimit !== undefined && numberLimit !== null && !isRateLimitDef) ? Number(numberLimit.max_amount) : undefined
             const typeLimit = typeLimits[limitLookupBetType]
             const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999)
 

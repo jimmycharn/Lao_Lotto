@@ -63,6 +63,7 @@ import {
     getDefaultSetPricesForType,
     getLotteryTypeKey
 } from '../constants/lotteryTypes'
+import { isRateLimitDefault } from '../utils/numberLimits'
 
 // Import separated modal components
 import ResultsModal from '../components/dealer/ResultsModal'
@@ -7920,7 +7921,8 @@ function SubmissionsModal({ round, onClose }) {
                 return nlBetType === limitLookupBetType && nl.numbers === group.numbers
             })
             const typeLimit = typeLimits[limitLookupBetType]
-            const limit = numberLimit ? numberLimit.max_amount : (typeLimit || 999999999)
+            const isRateLimitDef = isRateLimitDefault(numberLimit)
+            const limit = (numberLimit && !isRateLimitDef) ? numberLimit.max_amount : (typeLimit || 999999999)
 
             // Calculate already transferred amount for this number
             const transferredAmount = transfers

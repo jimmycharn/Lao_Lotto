@@ -109,6 +109,16 @@ export function getEffectivePayoutPercent(limit) {
 }
 
 /**
+ * Check if a number limit is a "rate limit only" with default limit (อั้นปกติ)
+ */
+export function isRateLimitDefault(limit) {
+    if (!limit) return false
+    const isRate = limit.limit_type === 'rate_limit' || limit.time_condition?.is_rate_limit === true
+    const isDef = limit.use_default_limit === true || limit.time_condition?.use_default_limit === true
+    return isRate && isDef
+}
+
+/**
  * Check a single submission line against number limits
  * Returns: { status, limit, currentTotal, maxAllowed, remaining, overflow, payoutPercent }
  * 
@@ -120,7 +130,6 @@ export function getEffectivePayoutPercent(limit) {
  */
 export function checkSingleSubmission(numberLimits, currentTotals, betType, numbers, amount) {
     const limit = findMatchingLimit(numberLimits, betType, numbers)
-
 
     if (!limit) {
         return {
@@ -134,13 +143,29 @@ export function checkSingleSubmission(numberLimits, currentTotals, betType, numb
         }
     }
 
+    const payoutPercent = getEffectivePayoutPercent(limit)
+    const amountNum = parseFloat(amount) || 0
+
+    // If rate limit with default limit (อั้นปกติ):
+    // The specific number does NOT have a custom max_amount cap (it adheres to standard type limits),
+    // but payout is restricted to payoutPercent!
+    if (isRateLimitDefault(limit)) {
+        return {
+            status: payoutPercent < 100 ? 'limited' : 'ok',
+            limit,
+            currentTotal: 0,
+            maxAllowed: Infinity,
+            remaining: Infinity,
+            overflow: 0,
+            payoutPercent
+        }
+    }
+
     const normalizedNums = normalizeNumber(numbers, betType)
     const key = `${betType}|${normalizedNums}`
     const currentTotal = currentTotals.get(key) || 0
     const maxAllowed = parseFloat(limit.max_amount) || 0
     const remaining = Math.max(maxAllowed - currentTotal, 0)
-    const payoutPercent = getEffectivePayoutPercent(limit)
-    const amountNum = parseFloat(amount) || 0
     // Default to 'blocked' if limit_type column doesn't exist (pre-migration 113)
     const limitType = limit.limit_type || 'blocked'
 

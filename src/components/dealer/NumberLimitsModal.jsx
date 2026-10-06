@@ -59,12 +59,17 @@ export default function NumberLimitsModal({ round, onClose }) {
     const [newLimit, setNewLimit] = useState({
         numbers: '',
         max_amount: 0,
-        limit_type: 'limited', // 'limited' = เลขอั้น, 'blocked' = เลขปิด
+        limit_type: 'limited', // 'limited' = เลขอั้น, 'blocked' = เลขปิด, 'rate_limit' = จำกัดอัตราจ่าย
+        use_default_limit: true, // For rate_limit: checkbox "อั้นปกติ"
         payout_percent: 50,
         include_reversed: true,
         selected_bet_types: [], // Default: none selected
         select_all: false
     })
+
+    // Store user-selected bet types remembered per digit length:
+    // e.g. { 2: ['2_top', '2_front', '2_center', '2_bottom'] }
+    const [rememberedTypesByLength, setRememberedTypesByLength] = useState({})
 
     // Determine which bet type keys are enabled based on the number input length
     const numberLength = (newLimit.numbers || '').length
@@ -74,20 +79,36 @@ export default function NumberLimitsModal({ round, onClose }) {
         return new Set(matched.flatMap(g => g.types.map(t => t.key)))
     }, [numberLength, betTypeGroups])
 
-    // Auto-clear selected bet types that no longer match when number changes
+    // Update selected bet types when number length / enabledBetKeys change
     useEffect(() => {
         if (enabledBetKeys.size === 0) {
             setNewLimit(prev => ({ ...prev, selected_bet_types: [], select_all: false }))
-        } else {
-            // Default: select all enabled bet types (ทั้งหมด)
-            const allEnabled = [...enabledBetKeys]
-            setNewLimit(prev => ({
-                ...prev,
-                selected_bet_types: allEnabled,
-                select_all: true
-            }))
+            return
         }
-    }, [enabledBetKeys])
+
+        const allEnabled = [...enabledBetKeys]
+        const remembered = rememberedTypesByLength[numberLength]
+
+        if (Array.isArray(remembered) && remembered.length > 0) {
+            // Filter remembered types to only valid keys for this digit length
+            const validSelected = remembered.filter(k => enabledBetKeys.has(k))
+            if (validSelected.length > 0) {
+                setNewLimit(prev => ({
+                    ...prev,
+                    selected_bet_types: validSelected,
+                    select_all: validSelected.length === enabledBetKeys.size
+                }))
+                return
+            }
+        }
+
+        // Default: select all enabled bet types (ทั้งหมด)
+        setNewLimit(prev => ({
+            ...prev,
+            selected_bet_types: allEnabled,
+            select_all: true
+        }))
+    }, [enabledBetKeys, numberLength])
 
     useEffect(() => {
         fetchLimits()
@@ -123,10 +144,17 @@ export default function NumberLimitsModal({ round, onClose }) {
     // Toggle select all bet types (only visible/enabled ones)
     function handleToggleSelectAll(checked) {
         const enabledKeys = [...enabledBetKeys]
+        const nextTypes = checked ? enabledKeys : []
+        if (numberLength > 0) {
+            setRememberedTypesByLength(prev => ({
+                ...prev,
+                [numberLength]: nextTypes
+            }))
+        }
         setNewLimit(prev => ({
             ...prev,
             select_all: checked,
-            selected_bet_types: checked ? enabledKeys : []
+            selected_bet_types: nextTypes
         }))
     }
 
@@ -136,10 +164,19 @@ export default function NumberLimitsModal({ round, onClose }) {
             const types = prev.selected_bet_types.includes(betType)
                 ? prev.selected_bet_types.filter(t => t !== betType)
                 : [...prev.selected_bet_types, betType]
+            const isAllSelected = types.length === enabledBetKeys.size
+
+            if (numberLength > 0) {
+                setRememberedTypesByLength(rPrev => ({
+                    ...rPrev,
+                    [numberLength]: types
+                }))
+            }
+
             return {
                 ...prev,
                 selected_bet_types: types,
-                select_all: types.length === availableBetTypes.length
+                select_all: isAllSelected
             }
         })
     }
@@ -150,7 +187,9 @@ export default function NumberLimitsModal({ round, onClose }) {
             toast.warning('กรุณากรอกเลข')
             return
         }
-        if ((newLimit.max_amount === '' || newLimit.max_amount === null || newLimit.max_amount === undefined) && newLimit.limit_type !== 'blocked') {
+        const isRateLimit = newLimit.limit_type === 'rate_limit'
+        const isDefaultLimit = isRateLimit && newLimit.use_default_limit
+        if (!isDefaultLimit && newLimit.limit_type !== 'blocked' && (newLimit.max_amount === '' || newLimit.max_amount === null || newLimit.max_amount === undefined)) {
             toast.warning('กรุณากรอกวงเงินสูงสุด')
             return
         }
@@ -166,27 +205,50 @@ export default function NumberLimitsModal({ round, onClose }) {
                 ? generateReversedNumbers(newLimit.numbers)
                 : []
 
+            const timeCondition = {
+                use_default_limit: isDefaultLimit,
+                is_rate_limit: isRateLimit
+            }
+
             // Create one record per selected bet type
             const records = newLimit.selected_bet_types.map(betType => ({
                 round_id: round.id,
                 bet_type: betType,
                 numbers: newLimit.numbers,
-                max_amount: parseFloat(newLimit.max_amount) || 0,
-                limit_type: newLimit.limit_type,
-                payout_percent: parseFloat(newLimit.payout_percent) || 100,
+                max_amount: isDefaultLimit ? 0 : (parseFloat(newLimit.max_amount) || 0),
+                limit_type: isRateLimit ? 'rate_limit' : newLimit.limit_type,
+                use_default_limit: isDefaultLimit,
+                payout_percent: newLimit.limit_type === 'blocked' ? 100 : (parseFloat(newLimit.payout_percent) || 50),
                 include_reversed: newLimit.include_reversed,
                 reversed_numbers: reversedNumbers,
-                time_condition: null,
+                time_condition: timeCondition,
                 is_active: true
             }))
 
-            const { error } = await supabase
+            let { error } = await supabase
                 .from('number_limits')
                 .upsert(records, { onConflict: 'round_id,bet_type,numbers' })
 
-            if (error) throw error
+            // Fallback if DB check constraint rejects 'rate_limit' or use_default_limit column not present yet
+            if (error && (error.message?.includes('limit_type') || error.message?.includes('use_default_limit') || error.message?.includes('constraint'))) {
+                console.warn('[NumberLimits] Fallback insert without limit_type check constraint error:', error)
+                const fallbackRecords = records.map(r => {
+                    const { use_default_limit, ...rest } = r
+                    return {
+                        ...rest,
+                        limit_type: isRateLimit ? 'limited' : r.limit_type
+                    }
+                })
+                const retryRes = await supabase
+                    .from('number_limits')
+                    .upsert(fallbackRecords, { onConflict: 'round_id,bet_type,numbers' })
+                if (retryRes.error) throw retryRes.error
+            } else if (error) {
+                throw error
+            }
 
-            toast.success(`เพิ่มเลข${newLimit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'} ${newLimit.numbers} สำเร็จ (${newLimit.selected_bet_types.length} ประเภท)`)
+            const limitTypeName = isRateLimit ? 'จำกัดอัตราจ่าย' : (newLimit.limit_type === 'blocked' ? 'ปิด' : 'อั้น')
+            toast.success(`เพิ่มเลข${limitTypeName} ${newLimit.numbers} สำเร็จ (${newLimit.selected_bet_types.length} ประเภท)`)
             fetchLimits()
             // Keep number and select all for rapid continuous entry
             setTimeout(() => {
@@ -262,11 +324,14 @@ export default function NumberLimitsModal({ round, onClose }) {
 
     function startEdit(limit) {
         setEditingId(limit.id)
+        const isRate = limit.limit_type === 'rate_limit' || limit.time_condition?.is_rate_limit === true
+        const isDef = limit.use_default_limit === true || limit.time_condition?.use_default_limit === true
         setEditForm({
             max_amount: limit.max_amount,
             payout_percent: limit.payout_percent || 100,
-            limit_type: limit.limit_type || 'limited',
-            has_time_condition: !!limit.time_condition,
+            limit_type: isRate ? 'rate_limit' : (limit.limit_type || 'limited'),
+            use_default_limit: isDef,
+            has_time_condition: !!limit.time_condition?.after_time,
             after_time: limit.time_condition?.after_time || '',
             time_payout_percent: limit.time_condition?.payout_percent || 50
         })
@@ -274,24 +339,44 @@ export default function NumberLimitsModal({ round, onClose }) {
 
     async function handleSaveEdit(id) {
         try {
-            const timeCondition = editForm.has_time_condition && editForm.after_time
-                ? {
+            const isRate = editForm.limit_type === 'rate_limit'
+            const isDef = isRate && editForm.use_default_limit
+
+            const timeCondition = {
+                use_default_limit: isDef,
+                is_rate_limit: isRate,
+                ...(editForm.has_time_condition && editForm.after_time ? {
                     after_time: editForm.after_time,
                     payout_percent: parseFloat(editForm.time_payout_percent) || 50
-                }
-                : null
+                } : {})
+            }
 
-            const { error } = await supabase
+            const payload = {
+                max_amount: isDef ? 0 : (parseFloat(editForm.max_amount) || 0),
+                payout_percent: editForm.limit_type === 'blocked' ? 100 : (parseFloat(editForm.payout_percent) || 50),
+                limit_type: isRate ? 'rate_limit' : editForm.limit_type,
+                use_default_limit: isDef,
+                time_condition: timeCondition
+            }
+
+            let { error } = await supabase
                 .from('number_limits')
-                .update({
-                    max_amount: parseFloat(editForm.max_amount) || 0,
-                    payout_percent: parseFloat(editForm.payout_percent) || 100,
-                    limit_type: editForm.limit_type,
-                    time_condition: timeCondition
-                })
+                .update(payload)
                 .eq('id', id)
 
-            if (error) throw error
+            if (error && (error.message?.includes('limit_type') || error.message?.includes('use_default_limit') || error.message?.includes('constraint'))) {
+                const { use_default_limit, ...rest } = payload
+                const retryRes = await supabase
+                    .from('number_limits')
+                    .update({
+                        ...rest,
+                        limit_type: isRate ? 'limited' : editForm.limit_type
+                    })
+                    .eq('id', id)
+                if (retryRes.error) throw retryRes.error
+            } else if (error) {
+                throw error
+            }
 
             setEditingId(null)
             fetchLimits()
@@ -468,10 +553,19 @@ export default function NumberLimitsModal({ round, onClose }) {
                                 <select
                                     style={inputStyle}
                                     value={newLimit.limit_type}
-                                    onChange={e => setNewLimit({ ...newLimit, limit_type: e.target.value })}
+                                    onChange={e => {
+                                        const nextType = e.target.value
+                                        setNewLimit(prev => ({
+                                            ...prev,
+                                            limit_type: nextType,
+                                            use_default_limit: nextType === 'rate_limit' ? true : false,
+                                            payout_percent: nextType === 'blocked' ? 100 : (prev.payout_percent || 50)
+                                        }))
+                                    }}
                                 >
                                     <option value="limited">🔶 อั้น (รับเกินได้)</option>
                                     <option value="blocked">🔴 ปิด (ปิดรับ)</option>
+                                    <option value="rate_limit">🟡 จำกัดอัตราจ่าย</option>
                                 </select>
                             </div>
                         </div>
@@ -479,32 +573,82 @@ export default function NumberLimitsModal({ round, onClose }) {
                         {/* Row 2: Max Amount + Payout % (same row) */}
                         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.6rem' }}>
                             <div style={{ flex: '1 1 120px', minWidth: '100px' }}>
-                                <label style={labelStyle}>วงเงินรับสูงสุด ({round.currency_symbol})</label>
-                                <input
-                                    type="number"
-                                    inputMode="numeric"
-                                    style={inputStyle}
-                                    placeholder="0"
-                                    value={newLimit.max_amount}
-                                    onChange={e => setNewLimit({ ...newLimit, max_amount: e.target.value })}
-                                    onKeyDown={e => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault()
-                                            if (!saving) {
-                                                handleAddLimit()
-                                            }
-                                        }
-                                    }}
-                                />
+                                {newLimit.limit_type === 'rate_limit' ? (
+                                    <>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
+                                            <label style={{ ...labelStyle, marginBottom: 0 }}>วงเงินรับสูงสุด</label>
+                                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', fontSize: '0.8rem', userSelect: 'none' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={newLimit.use_default_limit}
+                                                    onChange={e => setNewLimit({ ...newLimit, use_default_limit: e.target.checked })}
+                                                    style={{ width: '15px', height: '15px', accentColor: '#eab308' }}
+                                                />
+                                                <span style={{ fontWeight: '600', color: newLimit.use_default_limit ? '#eab308' : 'var(--color-text)' }}>
+                                                    อั้นปกติ
+                                                </span>
+                                            </label>
+                                        </div>
+                                        {newLimit.use_default_limit ? (
+                                            <div style={{
+                                                padding: '0.45rem 0.6rem',
+                                                borderRadius: '6px',
+                                                background: 'rgba(234, 179, 8, 0.1)',
+                                                border: '1px dashed rgba(234, 179, 8, 0.35)',
+                                                fontSize: '0.78rem',
+                                                color: '#eab308',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.35rem',
+                                                minHeight: '34px'
+                                            }}>
+                                                <span>✓ ยึดวงเงินรับตามประเภทเลข</span>
+                                            </div>
+                                        ) : (
+                                            <input
+                                                type="number"
+                                                inputMode="numeric"
+                                                style={inputStyle}
+                                                placeholder="0"
+                                                value={newLimit.max_amount}
+                                                onChange={e => setNewLimit({ ...newLimit, max_amount: e.target.value })}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault()
+                                                        if (!saving) handleAddLimit()
+                                                    }
+                                                }}
+                                            />
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <label style={labelStyle}>วงเงินรับสูงสุด ({round.currency_symbol})</label>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            style={inputStyle}
+                                            placeholder="0"
+                                            value={newLimit.max_amount}
+                                            onChange={e => setNewLimit({ ...newLimit, max_amount: e.target.value })}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault()
+                                                    if (!saving) handleAddLimit()
+                                                }
+                                            }}
+                                        />
+                                    </>
+                                )}
                             </div>
-                            {newLimit.limit_type === 'limited' && (
+                            {(newLimit.limit_type === 'limited' || newLimit.limit_type === 'rate_limit') && (
                                 <div style={{ flex: '0 0 110px', minWidth: '90px' }}>
                                     <label style={labelStyle}>อัตราจ่าย %</label>
                                     <input
                                         type="number"
                                         inputMode="numeric"
                                         style={inputStyle}
-                                        placeholder="100"
+                                        placeholder="50"
                                         min="0"
                                         max="100"
                                         value={newLimit.payout_percent}
@@ -592,12 +736,25 @@ export default function NumberLimitsModal({ round, onClose }) {
                         <button
                             className="btn btn-primary full-width"
                             onClick={e => { e.target.blur(); handleAddLimit() }}
-                            disabled={saving || !newLimit.numbers || newLimit.selected_bet_types.length === 0 || (newLimit.limit_type !== 'blocked' && newLimit.max_amount !== 0 && (newLimit.max_amount === '' || newLimit.max_amount === null || newLimit.max_amount === undefined))}
+                            disabled={
+                                saving ||
+                                !newLimit.numbers ||
+                                newLimit.selected_bet_types.length === 0 ||
+                                (
+                                    newLimit.limit_type !== 'blocked' &&
+                                    !(newLimit.limit_type === 'rate_limit' && newLimit.use_default_limit) &&
+                                    newLimit.max_amount !== 0 &&
+                                    (newLimit.max_amount === '' || newLimit.max_amount === null || newLimit.max_amount === undefined)
+                                )
+                            }
                             style={{ marginTop: '0.3rem' }}
                         >
                             {saving ? 'กำลังบันทึก...' : (
                                 <>
-                                    <FiPlus /> เพิ่มเลข{newLimit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'} {newLimit.numbers || ''}
+                                    <FiPlus /> เพิ่มเลข{
+                                        newLimit.limit_type === 'rate_limit' ? 'จำกัดอัตราจ่าย' :
+                                        newLimit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'
+                                    } {newLimit.numbers || ''}
                                     {newLimit.selected_bet_types.length > 0 && ` (${newLimit.selected_bet_types.length} ประเภท)`}
                                 </>
                             )}
@@ -724,21 +881,38 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                     <div style={{ display: 'flex', gap: '0.3rem', flex: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                                                         <span style={{ fontWeight: '500', minWidth: '70px' }}>{BET_TYPES[limit.bet_type]}</span>
                                                         <select
-                                                            style={{ ...inputStyle, width: '90px', padding: '0.3rem' }}
+                                                            style={{ ...inputStyle, width: '115px', padding: '0.3rem' }}
                                                             value={editForm.limit_type}
-                                                            onChange={e => setEditForm({ ...editForm, limit_type: e.target.value })}
+                                                            onChange={e => setEditForm({ ...editForm, limit_type: e.target.value, use_default_limit: e.target.value === 'rate_limit' ? true : false })}
                                                         >
                                                             <option value="limited">อั้น</option>
                                                             <option value="blocked">ปิด</option>
+                                                            <option value="rate_limit">จำกัดอัตราจ่าย</option>
                                                         </select>
-                                                        <input
-                                                            type="number"
-                                                            style={{ ...inputStyle, width: '70px', padding: '0.3rem' }}
-                                                            value={editForm.max_amount}
-                                                            onChange={e => setEditForm({ ...editForm, max_amount: e.target.value })}
-                                                            placeholder="วงเงิน"
-                                                        />
-                                                        {editForm.limit_type === 'limited' && (
+
+                                                        {editForm.limit_type === 'rate_limit' && (
+                                                            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', cursor: 'pointer', userSelect: 'none' }}>
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={editForm.use_default_limit}
+                                                                    onChange={e => setEditForm({ ...editForm, use_default_limit: e.target.checked })}
+                                                                    style={{ accentColor: '#eab308' }}
+                                                                />
+                                                                <span style={{ color: editForm.use_default_limit ? '#eab308' : 'inherit', fontWeight: '500' }}>อั้นปกติ</span>
+                                                            </label>
+                                                        )}
+
+                                                        {!(editForm.limit_type === 'rate_limit' && editForm.use_default_limit) && (
+                                                            <input
+                                                                type="number"
+                                                                style={{ ...inputStyle, width: '70px', padding: '0.3rem' }}
+                                                                value={editForm.max_amount}
+                                                                onChange={e => setEditForm({ ...editForm, max_amount: e.target.value })}
+                                                                placeholder="วงเงิน"
+                                                            />
+                                                        )}
+
+                                                        {(editForm.limit_type === 'limited' || editForm.limit_type === 'rate_limit') && (
                                                             <input
                                                                 type="number"
                                                                 style={{ ...inputStyle, width: '55px', padding: '0.3rem' }}
@@ -766,31 +940,49 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                     /* View Mode */
                                                     <>
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
-                                                            <span style={{
-                                                                fontSize: '0.65rem',
-                                                                padding: '0.05rem 0.3rem',
-                                                                borderRadius: '3px',
-                                                                fontWeight: '600',
-                                                                background: limit.limit_type === 'blocked' ? 'rgba(244, 67, 54, 0.2)' : 'rgba(255, 152, 0, 0.2)',
-                                                                color: limit.limit_type === 'blocked' ? '#f44336' : '#ff9800',
-                                                                lineHeight: '1.3'
-                                                            }}>
-                                                                {limit.limit_type === 'blocked' ? 'ปิด' : 'อั้น'}
-                                                            </span>
-                                                            <span style={{ fontWeight: '500', minWidth: '55px', fontSize: '0.8rem' }}>{BET_TYPES[limit.bet_type]}</span>
-                                                            <span style={{ opacity: 0.7, fontSize: '0.8rem' }}>
-                                                                {round.currency_symbol}{limit.max_amount?.toLocaleString()}
-                                                            </span>
-                                                            {limit.limit_type === 'limited' && limit.payout_percent !== 100 && (
-                                                                <span style={{ fontSize: '0.72rem', color: 'var(--color-warning)', fontWeight: '500' }}>
-                                                                    จ่าย {limit.payout_percent}%
-                                                                </span>
-                                                            )}
-                                                            {limit.time_condition?.after_time && (
-                                                                <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>
-                                                                    <FiClock size={10} /> {limit.time_condition.after_time}→{limit.time_condition.payout_percent}%
-                                                                </span>
-                                                            )}
+                                                            {(() => {
+                                                                const isRate = limit.limit_type === 'rate_limit' || limit.time_condition?.is_rate_limit === true
+                                                                const isBlocked = limit.limit_type === 'blocked'
+                                                                const isDef = limit.use_default_limit === true || limit.time_condition?.use_default_limit === true
+
+                                                                const badgeBg = isBlocked ? 'rgba(244, 67, 54, 0.2)' : isRate ? 'rgba(234, 179, 8, 0.2)' : 'rgba(255, 152, 0, 0.2)'
+                                                                const badgeColor = isBlocked ? '#f44336' : isRate ? '#eab308' : '#ff9800'
+                                                                const badgeText = isBlocked ? 'ปิด' : isRate ? 'จำกัดอัตราจ่าย' : 'อั้น'
+
+                                                                return (
+                                                                    <>
+                                                                        <span style={{
+                                                                            fontSize: '0.65rem',
+                                                                            padding: '0.05rem 0.3rem',
+                                                                            borderRadius: '3px',
+                                                                            fontWeight: '600',
+                                                                            background: badgeBg,
+                                                                            color: badgeColor,
+                                                                            lineHeight: '1.3'
+                                                                        }}>
+                                                                            {badgeText}
+                                                                        </span>
+                                                                        <span style={{ fontWeight: '500', minWidth: '55px', fontSize: '0.8rem' }}>{BET_TYPES[limit.bet_type]}</span>
+                                                                        <span style={{ opacity: 0.7, fontSize: '0.8rem' }}>
+                                                                            {isDef ? (
+                                                                                <span style={{ color: '#eab308', fontWeight: '500' }}>วงเงิน: อั้นปกติ</span>
+                                                                            ) : (
+                                                                                `${round.currency_symbol}${limit.max_amount?.toLocaleString()}`
+                                                                            )}
+                                                                        </span>
+                                                                        {(limit.limit_type === 'limited' || isRate) && limit.payout_percent !== 100 && (
+                                                                            <span style={{ fontSize: '0.72rem', color: isRate ? '#eab308' : 'var(--color-warning)', fontWeight: '500' }}>
+                                                                                จ่าย {limit.payout_percent}%
+                                                                            </span>
+                                                                        )}
+                                                                        {limit.time_condition?.after_time && (
+                                                                            <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>
+                                                                                <FiClock size={10} /> {limit.time_condition.after_time}→{limit.time_condition.payout_percent}%
+                                                                            </span>
+                                                                        )}
+                                                                    </>
+                                                                )
+                                                            })()}
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '0.15rem', flexShrink: 0 }}>
                                                             <button

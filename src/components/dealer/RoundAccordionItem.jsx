@@ -41,7 +41,7 @@ import {
     normalizeBetType,
     getLimitLookupBetType
 } from '../../constants/lotteryTypes'
-import { findMatchingLimit, getEffectivePayoutPercent } from '../../utils/numberLimits'
+import { findMatchingLimit, getEffectivePayoutPercent, isRateLimitDefault } from '../../utils/numberLimits'
 import { checkBetWin, deriveWinningNumbers } from '../../utils/scenarioCalculator'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
@@ -1576,7 +1576,8 @@ export default function RoundAccordionItem({
             const limitLookupBetType = getLimitLookupBetType(group.bet_type)
 
             const numberLimit = findMatchingLimit(inlineNumberLimits, limitLookupBetType, group.numbers)
-            const numLimit = numberLimit !== undefined && numberLimit !== null ? Number(numberLimit.max_amount) : undefined
+            const isRateLimitDef = isRateLimitDefault(numberLimit)
+            const numLimit = (numberLimit !== undefined && numberLimit !== null && !isRateLimitDef) ? Number(numberLimit.max_amount) : undefined
             const typeLimit = inlineTypeLimits[limitLookupBetType]
             const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999)
 
@@ -2775,8 +2776,9 @@ export default function RoundAccordionItem({
         const lotteryKey = getLotteryTypeKey(round.lottery_type)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
-        if (settings?.payout !== undefined) return sub.amount * settings.payout
-        return sub.amount * getFallbackPayout(sub.bet_type, round.lottery_type)
+        const payoutPct = (sub.actual_payout_percent != null ? Number(sub.actual_payout_percent) : 100) / 100
+        if (settings?.payout !== undefined) return sub.amount * settings.payout * payoutPct
+        return sub.amount * getFallbackPayout(sub.bet_type, round.lottery_type) * payoutPct
     }
 
     // Check if a submission item is a winner and calculate payout
