@@ -1098,20 +1098,24 @@
 }
 
 .btn-primary {
-    background: var(--color-primary);
+    background: var(--color-primary, #d4af37);
     color: #000;
 }
 
 .btn-primary:hover {
-    background: var(--color-primary-hover);
+    background: var(--color-primary-hover, #e5c158);
+    color: #000;
     transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(212, 175, 55, 0.35);
 }
 
 .btn-primary:focus,
+.btn-primary:focus-visible,
 .btn-primary:active {
-    background: var(--color-primary);
+    background: var(--color-primary, #d4af37);
     color: #000;
     outline: none;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.35);
     -webkit-tap-highlight-color: transparent;
 }
 

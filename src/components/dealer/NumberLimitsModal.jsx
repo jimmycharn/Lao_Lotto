@@ -735,7 +735,7 @@ export default function NumberLimitsModal({ round, onClose }) {
                         {/* Add Button */}
                         <button
                             className="btn btn-primary full-width"
-                            onClick={e => { e.target.blur(); handleAddLimit() }}
+                            onClick={e => { e.currentTarget?.blur(); handleAddLimit() }}
                             disabled={
                                 saving ||
                                 !newLimit.numbers ||
