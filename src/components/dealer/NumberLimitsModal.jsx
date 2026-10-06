@@ -24,6 +24,14 @@ export default function NumberLimitsModal({ round, onClose }) {
     const [editForm, setEditForm] = useState({})
     const numberInputRef = useRef(null)
 
+    // Batch adjust limits by bet type
+    const [showBatchAdjust, setShowBatchAdjust] = useState(false)
+    const [batchSelectedTypes, setBatchSelectedTypes] = useState([])
+    const [batchAmount, setBatchAmount] = useState('')
+    const [batchLimitType, setBatchLimitType] = useState('limited')
+    const [batchPayoutPercent, setBatchPayoutPercent] = useState('50')
+    const [batchSaving, setBatchSaving] = useState(false)
+
     // Available bet types for this lottery type
     const availableBetTypes = useMemo(() => {
         const types = BET_TYPES_BY_LOTTERY[round.lottery_type] || {}
@@ -430,6 +438,101 @@ export default function NumberLimitsModal({ round, onClose }) {
         }
     }
 
+    // Extract unique bet types currently present in the limits list with their counts
+    const existingBetTypes = useMemo(() => {
+        const counts = {}
+        limits.forEach(l => {
+            counts[l.bet_type] = (counts[l.bet_type] || 0) + 1
+        })
+        return Object.keys(counts).map(key => ({
+            key,
+            label: BET_TYPES[key] || key,
+            count: counts[key]
+        })).sort((a, b) => (BET_TYPES[a.key] || a.key).localeCompare(BET_TYPES[b.key] || b.key, 'th'))
+    }, [limits])
+
+    // Number of limits targeted by current batch selection
+    const batchTargetCount = useMemo(() => {
+        if (batchSelectedTypes.length === 0) return 0
+        return limits.filter(l => batchSelectedTypes.includes(l.bet_type)).length
+    }, [limits, batchSelectedTypes])
+
+    async function handleApplyBatchAdjust() {
+        if (batchSelectedTypes.length === 0) {
+            toast.error('กรุณาเลือกประเภทเลขอย่างน้อย 1 ประเภท')
+            return
+        }
+
+        const isRate = batchLimitType === 'rate_limit'
+        const isBlocked = batchLimitType === 'blocked'
+        const newMaxAmount = isBlocked ? 0 : (parseFloat(batchAmount) || 0)
+
+        const targetItems = limits.filter(l => batchSelectedTypes.includes(l.bet_type))
+        if (targetItems.length === 0) {
+            toast.error('ไม่พบรายการเลขอั้นในประเภทที่เลือก')
+            return
+        }
+
+        const selectedLabels = batchSelectedTypes.map(k => BET_TYPES[k] || k).join(', ')
+        const confirmMsg = `คุณต้องการปรับเลขอั้นในประเภท:\n[ ${selectedLabels} ]\n\nจำนวนทั้งหมด ${targetItems.length} รายการ\nวงเงินรับสูงสุด: ${isBlocked ? 'ปิดรับ' : `${round.currency_symbol}${newMaxAmount.toLocaleString()}`}${isRate ? ` (อัตราจ่าย ${batchPayoutPercent}%)` : ''}\n\nต้องการดำเนินการต่อหรือไม่?`
+
+        if (!(await confirmDialog({
+            title: 'ยืนยันการปรับวงเงินเลขอั้นตามประเภท',
+            message: confirmMsg,
+            confirmText: 'ยืนยันปรับวงเงิน',
+            confirmButtonClass: 'primary'
+        }))) return
+
+        setBatchSaving(true)
+        try {
+            const timeCondition = {
+                use_default_limit: false,
+                is_rate_limit: isRate
+            }
+
+            const payload = {
+                max_amount: newMaxAmount,
+                limit_type: isRate ? 'rate_limit' : batchLimitType,
+                payout_percent: isBlocked ? 100 : isRate ? (parseFloat(batchPayoutPercent) || 50) : 100,
+                use_default_limit: false,
+                time_condition: timeCondition
+            }
+
+            const targetIds = targetItems.map(l => l.id)
+            const chunkSize = 200
+            for (let i = 0; i < targetIds.length; i += chunkSize) {
+                const chunk = targetIds.slice(i, i + chunkSize)
+                let { error } = await supabase
+                    .from('number_limits')
+                    .update(payload)
+                    .in('id', chunk)
+
+                if (error && (error.message?.includes('limit_type') || error.message?.includes('use_default_limit') || error.message?.includes('constraint'))) {
+                    const { use_default_limit, ...rest } = payload
+                    const retryRes = await supabase
+                        .from('number_limits')
+                        .update({
+                            ...rest,
+                            limit_type: isRate ? 'limited' : batchLimitType
+                        })
+                        .in('id', chunk)
+                    if (retryRes.error) throw retryRes.error
+                } else if (error) {
+                    throw error
+                }
+            }
+
+            toast.success(`ปรับวงเงิน ${targetItems.length} รายการเป็น ${isBlocked ? 'ปิดรับ' : `${round.currency_symbol}${newMaxAmount.toLocaleString()}`} สำเร็จ`)
+            setShowBatchAdjust(false)
+            fetchLimits()
+        } catch (error) {
+            console.error('Error batch updating limits:', error)
+            toast.error('เกิดข้อผิดพลาดในการปรับวงเงิน: ' + error.message)
+        } finally {
+            setBatchSaving(false)
+        }
+    }
+
     // Filtered limits based on search and digit filter
     const filteredLimits = useMemo(() => {
         return limits.filter(l => {
@@ -803,6 +906,32 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     )}
                                 </div>
 
+                                {/* Batch Adjust Button */}
+                                {limits.length > 0 && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-sm"
+                                        onClick={() => setShowBatchAdjust(prev => !prev)}
+                                        title="ปรับวงเงินเลขอั้นตามประเภทเลขพร้อมกัน"
+                                        style={{
+                                            padding: '0.35rem 0.6rem',
+                                            height: '30px',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.3rem',
+                                            fontSize: '0.78rem',
+                                            borderRadius: '6px',
+                                            background: showBatchAdjust ? 'rgba(212, 175, 55, 0.25)' : 'rgba(212, 175, 55, 0.1)',
+                                            border: '1px solid rgba(212, 175, 55, 0.4)',
+                                            color: 'var(--color-primary, #d4af37)',
+                                            cursor: 'pointer',
+                                            fontWeight: '600'
+                                        }}
+                                    >
+                                        <FiEdit2 size={12} /> ปรับวงเงินตามประเภท
+                                    </button>
+                                )}
+
                                 {/* Bulk Delete Button */}
                                 {filteredLimits.length > 0 && (
                                     <button
@@ -816,6 +945,188 @@ export default function NumberLimitsModal({ round, onClose }) {
                                 )}
                             </div>
                         </div>
+
+                        {/* Batch Adjust Panel */}
+                        {showBatchAdjust && limits.length > 0 && (
+                            <div style={{
+                                background: 'var(--color-card, #1a1a2e)',
+                                border: '1.5px solid rgba(212, 175, 55, 0.45)',
+                                borderRadius: '8px',
+                                padding: '0.75rem',
+                                marginBottom: '0.75rem',
+                                boxShadow: '0 4px 16px rgba(0,0,0,0.35)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                                    <span style={{ fontSize: '0.85rem', fontWeight: '700', color: 'var(--color-primary, #d4af37)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                        <FiEdit2 size={13} /> ปรับวงเงินเลขอั้นตามประเภท (ปรับพร้อมกัน)
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowBatchAdjust(false)}
+                                        style={{ background: 'none', border: 'none', color: 'var(--color-text-secondary)', cursor: 'pointer', padding: '0.2rem' }}
+                                    >
+                                        <FiX size={14} />
+                                    </button>
+                                </div>
+
+                                {/* Step 1: Select Bet Types */}
+                                <div style={{ marginBottom: '0.65rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                                        <label style={{ ...labelStyle, marginBottom: 0, fontSize: '0.78rem' }}>
+                                            1. เลือกประเภทเลขที่ต้องการปรับ:
+                                        </label>
+                                        <div style={{ display: 'flex', gap: '0.35rem' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setBatchSelectedTypes(existingBetTypes.map(t => t.key))}
+                                                style={{ background: 'none', border: 'none', color: 'var(--color-primary, #d4af37)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                            >
+                                                เลือกทั้งหมด
+                                            </button>
+                                            <span style={{ opacity: 0.3, fontSize: '0.72rem' }}>|</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setBatchSelectedTypes([])}
+                                                style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', fontSize: '0.72rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                            >
+                                                ล้าง
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>
+                                        {existingBetTypes.map(t => {
+                                            const isSelected = batchSelectedTypes.includes(t.key)
+                                            return (
+                                                <span
+                                                    key={t.key}
+                                                    onClick={() => {
+                                                        setBatchSelectedTypes(prev => 
+                                                            prev.includes(t.key) ? prev.filter(k => k !== t.key) : [...prev, t.key]
+                                                        )
+                                                    }}
+                                                    style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.3rem',
+                                                        padding: '0.25rem 0.55rem',
+                                                        borderRadius: '16px',
+                                                        fontSize: '0.75rem',
+                                                        cursor: 'pointer',
+                                                        userSelect: 'none',
+                                                        border: isSelected ? '1.5px solid var(--color-primary, #d4af37)' : '1px solid var(--color-border)',
+                                                        background: isSelected ? 'rgba(212, 175, 55, 0.2)' : 'var(--color-surface-light)',
+                                                        color: isSelected ? 'var(--color-primary, #d4af37)' : 'var(--color-text)',
+                                                        fontWeight: isSelected ? '600' : 'normal'
+                                                    }}
+                                                >
+                                                    {isSelected && <FiCheck size={11} />}
+                                                    {t.label}
+                                                    <span style={{ opacity: 0.6, fontSize: '0.7rem' }}>({t.count})</span>
+                                                </span>
+                                            )
+                                        })}
+                                    </div>
+                                </div>
+
+                                {/* Step 2: New Amount & Limit Type */}
+                                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+                                    <div style={{ flex: '1 1 120px' }}>
+                                        <label style={{ ...labelStyle, fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+                                            2. วงเงินรับสูงสุดใหม่ ({round.currency_symbol})
+                                        </label>
+                                        <input
+                                            type="number"
+                                            inputMode="numeric"
+                                            style={{ ...inputStyle, padding: '0.4rem 0.55rem', fontSize: '0.85rem' }}
+                                            placeholder="เช่น 800"
+                                            value={batchAmount}
+                                            onChange={e => setBatchAmount(e.target.value)}
+                                            onKeyDown={e => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault()
+                                                    if (!batchSaving && batchTargetCount > 0) handleApplyBatchAdjust()
+                                                }
+                                            }}
+                                        />
+                                    </div>
+
+                                    <div style={{ flex: '1 1 120px' }}>
+                                        <label style={{ ...labelStyle, fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+                                            ประเภทจำกัด
+                                        </label>
+                                        <select
+                                            style={{ ...inputStyle, padding: '0.4rem 0.55rem', fontSize: '0.85rem' }}
+                                            value={batchLimitType}
+                                            onChange={e => setBatchLimitType(e.target.value)}
+                                        >
+                                            <option value="limited">🔶 อั้น (รับเกินได้)</option>
+                                            <option value="rate_limit">🟡 จำกัดอัตราจ่าย</option>
+                                            <option value="blocked">🔴 ปิด (ปิดรับ)</option>
+                                        </select>
+                                    </div>
+
+                                    {batchLimitType === 'rate_limit' && (
+                                        <div style={{ flex: '0 0 90px' }}>
+                                            <label style={{ ...labelStyle, fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+                                                อัตราจ่าย %
+                                            </label>
+                                            <input
+                                                type="number"
+                                                inputMode="numeric"
+                                                min="0"
+                                                max="100"
+                                                style={{ ...inputStyle, padding: '0.4rem 0.55rem', fontSize: '0.85rem' }}
+                                                placeholder="50"
+                                                value={batchPayoutPercent}
+                                                onChange={e => setBatchPayoutPercent(e.target.value)}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Step 3: Summary and Action Button */}
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    paddingTop: '0.5rem',
+                                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                    flexWrap: 'wrap',
+                                    gap: '0.4rem'
+                                }}>
+                                    <div style={{ fontSize: '0.78rem', color: batchTargetCount > 0 ? '#eab308' : 'var(--color-text-muted)' }}>
+                                        {batchTargetCount > 0 ? (
+                                            <>
+                                                จะปรับทั้งหมด <strong>{batchTargetCount} รายการ</strong> (ใน {batchSelectedTypes.length} ประเภท) เป็น <strong>{round.currency_symbol}{parseFloat(batchAmount || 0).toLocaleString()}</strong>
+                                            </>
+                                        ) : (
+                                            'กรุณาเลือกประเภทเลขที่ต้องการปรับ'
+                                        )}
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => setShowBatchAdjust(false)}
+                                            style={{ padding: '0.35rem 0.7rem', fontSize: '0.78rem' }}
+                                        >
+                                            ยกเลิก
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn btn-primary btn-sm"
+                                            disabled={batchSaving || batchTargetCount === 0 || (batchLimitType !== 'blocked' && (batchAmount === '' || batchAmount === null))}
+                                            onClick={handleApplyBatchAdjust}
+                                            style={{ padding: '0.35rem 0.85rem', fontSize: '0.78rem' }}
+                                        >
+                                            {batchSaving ? 'กำลังบันทึก...' : `ยืนยันปรับวงเงิน (${batchTargetCount})`}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {loading ? (
                             <div style={{ textAlign: 'center', padding: '2rem' }}>
