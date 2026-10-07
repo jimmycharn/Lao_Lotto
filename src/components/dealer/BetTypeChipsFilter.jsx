@@ -152,27 +152,19 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                 </div>
             </div>
 
-            {/* Quick Group Shortcuts */}
+            {/* Quick Group Shortcuts - Centered for clean mobile & desktop layout */}
             {digitGroups.length > 0 && (
                 <div 
                     style={{
                         display: 'flex',
                         flexWrap: 'wrap',
+                        justifyContent: 'center',
                         alignItems: 'center',
                         gap: '0.35rem',
-                        padding: '2px 0 4px 0',
+                        padding: '3px 0 5px 0',
                         borderBottom: '1px dashed rgba(255, 255, 255, 0.08)'
                     }}
                 >
-                    <span 
-                        style={{ 
-                            fontSize: '0.72rem', 
-                            color: 'var(--color-text-muted, #94a3b8)', 
-                            marginRight: '2px' 
-                        }}
-                    >
-                        ⚡ ทางลัดกลุ่ม:
-                    </span>
                     {digitGroups.map(group => {
                         const selectedCount = group.types.filter(t => selectedTypes.includes(t)).length
                         const isFull = selectedCount === group.types.length && group.types.length > 0
@@ -184,7 +176,7 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                                 type="button"
                                 onClick={() => handleToggleGroup(group.types)}
                                 style={{
-                                    padding: '2px 8px',
+                                    padding: '3px 9px',
                                     borderRadius: '12px',
                                     fontSize: '0.72rem',
                                     fontWeight: isFull ? 600 : 500,
@@ -207,6 +199,7 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                                         : 'var(--color-text, #cbd5e1)',
                                     display: 'inline-flex',
                                     alignItems: 'center',
+                                    justifyContent: 'center',
                                     gap: '0.25rem'
                                 }}
                                 title={`คลิกเพื่อเลือกหรือยกเลิก ${group.label} (${group.types.length} ประเภท)`}
@@ -222,11 +215,12 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                 </div>
             )}
 
-            {/* Chips Container */}
+            {/* Chips Container - Centered */}
             <div 
                 style={{
                     display: 'flex',
                     flexWrap: 'wrap',
+                    justifyContent: 'center',
                     gap: '0.35rem',
                     minHeight: '28px',
                     alignItems: 'center',
@@ -238,7 +232,11 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                         style={{ 
                             fontSize: '0.75rem', 
                             color: 'var(--color-text-muted, #94a3b8)', 
-                            fontStyle: 'italic' 
+                            fontStyle: 'italic',
+                            width: '100%',
+                            textAlign: 'center',
+                            display: 'block',
+                            padding: '2px 0'
                         }}
                     >
                         แสดงทุกประเภทเลข (กดเลือกประเภทหรือคลิกปุ่มทางลัดด้านบนเพื่อกรองเจาะจง)

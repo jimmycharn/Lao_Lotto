@@ -15,7 +15,6 @@ describe('BetTypeChipsFilter', () => {
         expect(html).toContain('แสดงทุกประเภทเลข')
         expect(html).toContain('ประเภทเลขที่เลือก (ทั้งหมด)')
         expect(html).toContain('เลือกทั้งหมด (17)')
-        expect(html).toContain('⚡ ทางลัดกลุ่ม:')
         expect(html).toContain('1 ตัวทุกประเภท')
         expect(html).toContain('2 ตัวทุกประเภท')
         expect(html).toContain('3 ตัวทุกประเภท')
