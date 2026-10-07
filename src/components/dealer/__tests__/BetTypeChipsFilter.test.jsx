@@ -15,6 +15,13 @@ describe('BetTypeChipsFilter', () => {
         expect(html).toContain('แสดงทุกประเภทเลข')
         expect(html).toContain('ประเภทเลขที่เลือก (ทั้งหมด)')
         expect(html).toContain('เลือกทั้งหมด (17)')
+        expect(html).toContain('⚡ ทางลัดกลุ่ม:')
+        expect(html).toContain('1 ตัวทุกประเภท')
+        expect(html).toContain('2 ตัวทุกประเภท')
+        expect(html).toContain('3 ตัวทุกประเภท')
+        expect(html).toContain('4 ตัวทุกประเภท')
+        expect(html).toContain('5 ตัวทุกประเภท')
+        expect(html).toContain('⚡ ทางลัดเลือกตามจำนวนหลัก')
     })
 
     it('renders selected chips correctly for Lao lottery', () => {
@@ -32,7 +39,7 @@ describe('BetTypeChipsFilter', () => {
         expect(html).toContain('ล้าง')
     })
 
-    it('renders stock lottery with 2 types', () => {
+    it('renders stock lottery with 2 types and 2-digit group shortcut', () => {
         const html = renderToString(
             <BetTypeChipsFilter
                 lotteryType="stock"
@@ -43,5 +50,24 @@ describe('BetTypeChipsFilter', () => {
         expect(html).toContain('2 ตัวบน')
         expect(html).toContain('ประเภทเลขที่เลือก (1/2)')
         expect(html).toContain('เลือกทั้งหมด (2)')
+        expect(html).toContain('2 ตัวทุกประเภท')
+    })
+
+    it('shows checkmark when all 2-digit bet types are selected', () => {
+        const html = renderToString(
+            <BetTypeChipsFilter
+                lotteryType="thai"
+                selectedTypes={['2_top', '2_front', '2_center', '2_bottom', '2_run']}
+                onChange={() => {}}
+            />
+        )
+        expect(html).toContain('✓')
+        expect(html).toContain('2 ตัวทุกประเภท')
+        expect(html).toContain('2 ตัวบน')
+        expect(html).toContain('2 ตัวหน้า')
+        expect(html).toContain('2 ตัวถ่าง')
+        expect(html).toContain('2 ตัวล่าง')
+        expect(html).toContain('2 ตัวลอย')
     })
 })
+

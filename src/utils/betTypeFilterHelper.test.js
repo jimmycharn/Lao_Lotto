@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
     FILTER_BET_TYPES_BY_LOTTERY,
     getFilterBetTypes,
+    getDigitGroups,
     isBetTypeMatched
 } from './betTypeFilterHelper'
 
@@ -74,6 +75,30 @@ describe('betTypeFilterHelper', () => {
         it('should fallback to Thai lottery types for unknown lottery type', () => {
             const types = getFilterBetTypes('unknown')
             expect(types.length).toBe(17)
+        })
+    })
+
+    describe('getDigitGroups', () => {
+        it('should return 5 digit groups for Thai lottery', () => {
+            const groups = getFilterBetTypes ? getDigitGroups('thai') : []
+            expect(groups.length).toBe(5)
+            const g2 = groups.find(g => g.id === '2_digit')
+            expect(g2.types).toEqual(['2_top', '2_front', '2_center', '2_bottom', '2_run'])
+            const g3 = groups.find(g => g.id === '3_digit')
+            expect(g3.types).toEqual(['3_top', '3_tod', '3_bottom'])
+        })
+
+        it('should return Lao digit groups with 4_set in 4_digit group', () => {
+            const groups = getDigitGroups('lao')
+            expect(groups.length).toBe(5)
+            const g4 = groups.find(g => g.id === '4_digit')
+            expect(g4.types).toEqual(['4_set', '4_float'])
+        })
+
+        it('should return 1 group for stock lottery (2_digit only)', () => {
+            const groups = getDigitGroups('stock')
+            expect(groups.length).toBe(1)
+            expect(groups[0].types).toEqual(['2_top', '2_bottom'])
         })
     })
 

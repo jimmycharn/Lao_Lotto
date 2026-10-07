@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { FiTag } from 'react-icons/fi'
-import { getFilterBetTypes } from '../../utils/betTypeFilterHelper'
+import { getFilterBetTypes, getDigitGroups } from '../../utils/betTypeFilterHelper'
 
 /**
  * Multi-Select Chips Filter for Bet Types
@@ -15,7 +15,10 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
     // 1. Get bet types configured for this lottery
     const allTypes = useMemo(() => getFilterBetTypes(lotteryType), [lotteryType])
 
-    // 2. Map for quick lookup of labels
+    // 2. Get digit groups (1 ตัว, 2 ตัว, 3 ตัว, 4 ตัว, 5 ตัว)
+    const digitGroups = useMemo(() => getDigitGroups(lotteryType), [lotteryType])
+
+    // 3. Map for quick lookup of labels
     const typeMap = useMemo(() => {
         const map = {}
         allTypes.forEach(t => {
@@ -24,7 +27,7 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
         return map
     }, [allTypes])
 
-    // 3. Types available to be added
+    // 4. Types available to be added
     const availableTypes = useMemo(() => {
         return allTypes.filter(t => !selectedTypes.includes(t.id))
     }, [allTypes, selectedTypes])
@@ -52,6 +55,20 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
         onChange(selectedTypes.filter(id => id !== typeId))
     }
 
+    // Toggle or add entire digit group
+    const handleToggleGroup = (groupTypes, forceAdd = false) => {
+        if (!groupTypes || groupTypes.length === 0) return
+        const isFull = groupTypes.every(t => selectedTypes.includes(t))
+        if (isFull && !forceAdd) {
+            // Toggle OFF: remove this group's types
+            onChange(selectedTypes.filter(id => !groupTypes.includes(id)))
+        } else {
+            // Toggle ON: add missing types from this group
+            const merged = Array.from(new Set([...selectedTypes, ...groupTypes]))
+            onChange(merged)
+        }
+    }
+
     const isAllSelected = selectedTypes.length === allTypes.length && allTypes.length > 0
 
     return (
@@ -65,7 +82,7 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                 margin: '0.4rem 0 0.6rem 0',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '0.35rem'
+                gap: '0.4rem'
             }}
         >
             {/* Header: Title and Quick Action Buttons */}
@@ -135,6 +152,76 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                 </div>
             </div>
 
+            {/* Quick Group Shortcuts */}
+            {digitGroups.length > 0 && (
+                <div 
+                    style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        padding: '2px 0 4px 0',
+                        borderBottom: '1px dashed rgba(255, 255, 255, 0.08)'
+                    }}
+                >
+                    <span 
+                        style={{ 
+                            fontSize: '0.72rem', 
+                            color: 'var(--color-text-muted, #94a3b8)', 
+                            marginRight: '2px' 
+                        }}
+                    >
+                        ⚡ ทางลัดกลุ่ม:
+                    </span>
+                    {digitGroups.map(group => {
+                        const selectedCount = group.types.filter(t => selectedTypes.includes(t)).length
+                        const isFull = selectedCount === group.types.length && group.types.length > 0
+                        const isPartial = selectedCount > 0 && !isFull
+
+                        return (
+                            <button
+                                key={group.id}
+                                type="button"
+                                onClick={() => handleToggleGroup(group.types)}
+                                style={{
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: isFull ? 600 : 500,
+                                    cursor: 'pointer',
+                                    transition: 'all 0.15s ease',
+                                    border: isFull
+                                        ? '1px solid #f59e0b'
+                                        : isPartial
+                                        ? '1px dashed rgba(245, 158, 11, 0.6)'
+                                        : '1px solid rgba(255, 255, 255, 0.15)',
+                                    background: isFull
+                                        ? 'rgba(245, 158, 11, 0.22)'
+                                        : isPartial
+                                        ? 'rgba(245, 158, 11, 0.08)'
+                                        : 'rgba(255, 255, 255, 0.04)',
+                                    color: isFull
+                                        ? '#f59e0b'
+                                        : isPartial
+                                        ? '#fbbf24'
+                                        : 'var(--color-text, #cbd5e1)',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.25rem'
+                                }}
+                                title={`คลิกเพื่อเลือกหรือยกเลิก ${group.label} (${group.types.length} ประเภท)`}
+                            >
+                                {isFull && <span style={{ fontSize: '0.7rem' }}>✓</span>}
+                                <span>{group.label}</span>
+                                <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>
+                                    ({selectedCount > 0 && !isFull ? `${selectedCount}/${group.types.length}` : group.types.length})
+                                </span>
+                            </button>
+                        )
+                    })}
+                </div>
+            )}
+
             {/* Chips Container */}
             <div 
                 style={{
@@ -154,7 +241,7 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                             fontStyle: 'italic' 
                         }}
                     >
-                        แสดงทุกประเภทเลข (กดเลือกประเภทจากเมนูด้านล่างเพื่อกรองเจาะจง)
+                        แสดงทุกประเภทเลข (กดเลือกประเภทหรือคลิกปุ่มทางลัดด้านบนเพื่อกรองเจาะจง)
                     </span>
                 ) : (
                     selectedTypes.map(typeId => {
@@ -214,7 +301,17 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                     <select
                         value=""
                         onChange={(e) => {
-                            handleAddType(e.target.value)
+                            const val = e.target.value
+                            if (!val) return
+                            if (val.startsWith('group:')) {
+                                const groupId = val.replace('group:', '')
+                                const group = digitGroups.find(g => g.id === groupId)
+                                if (group) {
+                                    handleToggleGroup(group.types, true)
+                                }
+                            } else {
+                                handleAddType(val)
+                            }
                         }}
                         style={{
                             width: '100%',
@@ -231,14 +328,32 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                         <option value="" style={{ background: '#1e2230', color: '#94a3b8' }}>
                             ➕ เลือกเพิ่มประเภทเลข... (เหลืออีก {availableTypes.length} ประเภท)
                         </option>
-                        {availableTypes.map(t => (
-                            <option key={t.id} value={t.id} style={{ background: '#1e2230', color: '#fff' }}>
-                                🏷️ {t.label}
-                            </option>
-                        ))}
+
+                        {/* Option group for digit groups that have unselected items */}
+                        {digitGroups.some(g => g.types.some(t => !selectedTypes.includes(t))) && (
+                            <optgroup label="⚡ ทางลัดเลือกตามจำนวนหลัก" style={{ background: '#1e2230', color: '#f59e0b' }}>
+                                {digitGroups
+                                    .filter(g => g.types.some(t => !selectedTypes.includes(t)))
+                                    .map(g => (
+                                        <option key={`group-${g.id}`} value={`group:${g.id}`} style={{ background: '#1e2230', color: '#fff' }}>
+                                            📁 {g.label} ({g.types.length} ประเภท)
+                                        </option>
+                                    ))}
+                            </optgroup>
+                        )}
+
+                        {/* Individual bet types */}
+                        <optgroup label="🏷️ เลือกทีละประเภท" style={{ background: '#1e2230', color: '#94a3b8' }}>
+                            {availableTypes.map(t => (
+                                <option key={t.id} value={t.id} style={{ background: '#1e2230', color: '#fff' }}>
+                                    {t.label}
+                                </option>
+                            ))}
+                        </optgroup>
                     </select>
                 </div>
             )}
         </div>
     )
 }
+

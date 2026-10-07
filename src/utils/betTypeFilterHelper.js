@@ -59,6 +59,44 @@ export const FILTER_BET_TYPES_BY_LOTTERY = {
     stock: STOCK_FILTER_BET_TYPES
 }
 
+// Quick Digit Groups per Lottery Type
+export const DIGIT_GROUPS_BY_LOTTERY = {
+    thai: [
+        { id: '1_digit', label: '1 ตัวทุกประเภท', shortLabel: '1 ตัว', types: ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1'] },
+        { id: '2_digit', label: '2 ตัวทุกประเภท', shortLabel: '2 ตัว', types: ['2_top', '2_front', '2_center', '2_bottom', '2_run'] },
+        { id: '3_digit', label: '3 ตัวทุกประเภท', shortLabel: '3 ตัว', types: ['3_top', '3_tod', '3_bottom'] },
+        { id: '4_digit', label: '4 ตัวทุกประเภท', shortLabel: '4 ตัว', types: ['4_float'] },
+        { id: '5_digit', label: '5 ตัวทุกประเภท', shortLabel: '5 ตัว', types: ['5_float'] }
+    ],
+    lao: [
+        { id: '1_digit', label: '1 ตัวทุกประเภท', shortLabel: '1 ตัว', types: ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1'] },
+        { id: '2_digit', label: '2 ตัวทุกประเภท', shortLabel: '2 ตัว', types: ['2_top', '2_front', '2_center', '2_bottom', '2_run'] },
+        { id: '3_digit', label: '3 ตัวทุกประเภท', shortLabel: '3 ตัว', types: ['3_top', '3_tod', '3_bottom'] },
+        { id: '4_digit', label: '4 ตัวทุกประเภท', shortLabel: '4 ตัว', types: ['4_set', '4_float'] },
+        { id: '5_digit', label: '5 ตัวทุกประเภท', shortLabel: '5 ตัว', types: ['5_float'] }
+    ],
+    hanoi: [
+        { id: '1_digit', label: '1 ตัวทุกประเภท', shortLabel: '1 ตัว', types: ['run_top', 'run_bottom', 'front_top_1', 'middle_top_1', 'back_top_1', 'front_bottom_1', 'back_bottom_1'] },
+        { id: '2_digit', label: '2 ตัวทุกประเภท', shortLabel: '2 ตัว', types: ['2_top', '2_front', '2_center', '2_bottom', '2_run'] },
+        { id: '3_digit', label: '3 ตัวทุกประเภท', shortLabel: '3 ตัว', types: ['3_top', '3_tod', '3_bottom'] },
+        { id: '4_digit', label: '4 ตัวทุกประเภท', shortLabel: '4 ตัว', types: ['4_set', '4_float'] },
+        { id: '5_digit', label: '5 ตัวทุกประเภท', shortLabel: '5 ตัว', types: ['5_float'] }
+    ],
+    stock: [
+        { id: '2_digit', label: '2 ตัวทุกประเภท', shortLabel: '2 ตัว', types: ['2_top', '2_bottom'] }
+    ]
+}
+
+/**
+ * Returns digit shortcut groups based on lottery type
+ * @param {string} lotteryType 
+ * @returns {Array<{ id: string, label: string, shortLabel: string, types: string[] }>}
+ */
+export function getDigitGroups(lotteryType) {
+    if (!lotteryType) return DIGIT_GROUPS_BY_LOTTERY.thai
+    return DIGIT_GROUPS_BY_LOTTERY[lotteryType] || DIGIT_GROUPS_BY_LOTTERY.thai
+}
+
 /**
  * Returns available bet types for filter based on lottery type
  * @param {string} lotteryType 
