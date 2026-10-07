@@ -3,7 +3,9 @@ import {
     FILTER_BET_TYPES_BY_LOTTERY,
     getFilterBetTypes,
     getDigitGroups,
-    isBetTypeMatched
+    isBetTypeMatched,
+    matchesCompositeDigits,
+    isSearchNumberMatched
 } from './betTypeFilterHelper'
 
 describe('betTypeFilterHelper', () => {
@@ -165,4 +167,77 @@ describe('betTypeFilterHelper', () => {
             expect(isBetTypeMatched('pak_bottom', ['front_bottom_1'])).toBe(true)
         })
     })
+
+    describe('matchesCompositeDigits', () => {
+        it('should match exact permutations of 123 (3-digit)', () => {
+            expect(matchesCompositeDigits('123', '123')).toBe(true)
+            expect(matchesCompositeDigits('132', '123')).toBe(true)
+            expect(matchesCompositeDigits('213', '123')).toBe(true)
+            expect(matchesCompositeDigits('231', '123')).toBe(true)
+            expect(matchesCompositeDigits('312', '123')).toBe(true)
+            expect(matchesCompositeDigits('321', '123')).toBe(true)
+        })
+
+        it('should match 4-digit numbers containing all digits of 123', () => {
+            expect(matchesCompositeDigits('1243', '123')).toBe(true)
+            expect(matchesCompositeDigits('2513', '123')).toBe(true)
+            expect(matchesCompositeDigits('9123', '123')).toBe(true)
+            expect(matchesCompositeDigits('3201', '123')).toBe(true)
+        })
+
+        it('should return false if any search digit is missing', () => {
+            expect(matchesCompositeDigits('124', '123')).toBe(false)
+            expect(matchesCompositeDigits('25', '123')).toBe(false)
+            expect(matchesCompositeDigits('789', '123')).toBe(false)
+        })
+
+        it('should correctly handle multiset repeated digits (e.g. 22)', () => {
+            expect(matchesCompositeDigits('22', '22')).toBe(true)
+            expect(matchesCompositeDigits('228', '22')).toBe(true)
+            expect(matchesCompositeDigits('252', '22')).toBe(true)
+            expect(matchesCompositeDigits('25', '22')).toBe(false) // only one 2
+        })
+
+        it('should match 276 example from user screenshot', () => {
+            expect(matchesCompositeDigits('276', '276')).toBe(true)
+            expect(matchesCompositeDigits('267', '276')).toBe(true)
+            expect(matchesCompositeDigits('726', '276')).toBe(true)
+            expect(matchesCompositeDigits('762', '276')).toBe(true)
+            expect(matchesCompositeDigits('627', '276')).toBe(true)
+            expect(matchesCompositeDigits('672', '276')).toBe(true)
+            expect(matchesCompositeDigits('1276', '276')).toBe(true)
+            expect(matchesCompositeDigits('2760', '276')).toBe(true)
+            expect(matchesCompositeDigits('275', '276')).toBe(false)
+        })
+
+        it('should return false for empty or null inputs', () => {
+            expect(matchesCompositeDigits('', '123')).toBe(false)
+            expect(matchesCompositeDigits('123', '')).toBe(false)
+            expect(matchesCompositeDigits(null, '123')).toBe(false)
+            expect(matchesCompositeDigits('123', null)).toBe(false)
+        })
+    })
+
+    describe('isSearchNumberMatched', () => {
+        it('should return true when searchStr is empty or null', () => {
+            expect(isSearchNumberMatched('123', '', false)).toBe(true)
+            expect(isSearchNumberMatched('123', null, false)).toBe(true)
+            expect(isSearchNumberMatched('123', '', true)).toBe(true)
+            expect(isSearchNumberMatched('123', null, true)).toBe(true)
+        })
+
+        it('should use substring match when isComposite is false', () => {
+            expect(isSearchNumberMatched('123', '12', false)).toBe(true)
+            expect(isSearchNumberMatched('1234', '23', false)).toBe(true)
+            expect(isSearchNumberMatched('321', '123', false)).toBe(false)
+        })
+
+        it('should use composite match when isComposite is true', () => {
+            expect(isSearchNumberMatched('321', '123', true)).toBe(true)
+            expect(isSearchNumberMatched('1243', '123', true)).toBe(true)
+            expect(isSearchNumberMatched('2513', '123', true)).toBe(true)
+            expect(isSearchNumberMatched('999', '123', true)).toBe(false)
+        })
+    })
 })
+

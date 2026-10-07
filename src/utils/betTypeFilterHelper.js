@@ -154,3 +154,50 @@ export function isBetTypeMatched(betType, selectedTypes) {
 
     return false
 }
+
+/**
+ * Checks if numberStr contains all digits present in searchStr (multiset match)
+ * e.g. searchStr='123', matches '123', '321', '1243', '2513', '132', '213', etc.
+ * @param {string|number} numberStr 
+ * @param {string} searchStr 
+ * @returns {boolean}
+ */
+export function matchesCompositeDigits(numberStr, searchStr) {
+    if (!numberStr || !searchStr) return false
+    const searchDigits = String(searchStr).replace(/\D/g, '')
+    if (!searchDigits) {
+        return String(numberStr).toLowerCase().includes(String(searchStr).toLowerCase())
+    }
+    const numDigits = String(numberStr).replace(/\D/g, '')
+    const searchCounts = {}
+    for (const d of searchDigits) {
+        searchCounts[d] = (searchCounts[d] || 0) + 1
+    }
+    const numCounts = {}
+    for (const d of numDigits) {
+        numCounts[d] = (numCounts[d] || 0) + 1
+    }
+    for (const d in searchCounts) {
+        if ((numCounts[d] || 0) < searchCounts[d]) {
+            return false
+        }
+    }
+    return true
+}
+
+/**
+ * Checks if numberStr matches searchStr given the composite search option
+ * @param {string|number} numberStr 
+ * @param {string} searchStr 
+ * @param {boolean} isComposite 
+ * @returns {boolean}
+ */
+export function isSearchNumberMatched(numberStr, searchStr, isComposite = false) {
+    if (!searchStr) return true
+    if (!numberStr) return false
+    if (isComposite) {
+        return matchesCompositeDigits(numberStr, searchStr)
+    }
+    return String(numberStr).includes(String(searchStr))
+}
+

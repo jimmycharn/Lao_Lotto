@@ -51,7 +51,7 @@ import {
     calculateTransferDeduction
 } from '../../utils/layoffTodConverter'
 import BetTypeChipsFilter from './BetTypeChipsFilter'
-import { isBetTypeMatched } from '../../utils/betTypeFilterHelper'
+import { isBetTypeMatched, isSearchNumberMatched } from '../../utils/betTypeFilterHelper'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
 import MemberTimeExtensionModal from './MemberTimeExtensionModal'
@@ -290,6 +290,7 @@ export default function RoundAccordionItem({
     const [inlineUserFilter, setInlineUserFilter] = useState('all')
     const [inlineSelectedBetTypes, setInlineSelectedBetTypes] = useState([])
     const [inlineSearch, setInlineSearch] = useState('')
+    const [inlineIsCompositeSearch, setInlineIsCompositeSearch] = useState(false)
     // Member filter: 'all' = all members, 'submitted' = only members who submitted
     const [memberFilterMode, setMemberFilterMode] = useState('all')
     // Total tab view mode: 'all' = ทั้งหมด (รวมเลข), 'bills' = แยกใบโพย
@@ -3524,19 +3525,48 @@ export default function RoundAccordionItem({
                     {(isOpen || (!isOpen && closedRoundTab === 'submissions')) && (
                         <div className="inline-submissions-view">
                             <div className="inline-global-filters" style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                                <div className="search-input-wrapper" style={{ width: '100%' }}>
-                                    <FiSearch className="search-icon" />
-                                    <input
-                                        type="text"
-                                        value={inlineSearch}
-                                        onChange={(e) => setInlineSearch(e.target.value)}
-                                        placeholder="ค้นหาเลขหรือบันทึกช่วยจำ..."
-                                        className="form-input search-input"
-                                        style={{ fontSize: '0.85rem', height: '32px', width: '100%' }}
-                                    />
-                                    {inlineSearch && (
-                                        <button className="search-clear-btn" onClick={() => setInlineSearch('')}><FiX /></button>
-                                    )}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', width: '100%' }}>
+                                    <div className="search-input-wrapper" style={{ flex: 1 }}>
+                                        <FiSearch className="search-icon" />
+                                        <input
+                                            type="text"
+                                            value={inlineSearch}
+                                            onChange={(e) => setInlineSearch(e.target.value)}
+                                            placeholder="ค้นหาเลขหรือบันทึกช่วยจำ..."
+                                            className="form-input search-input"
+                                            style={{ fontSize: '0.85rem', height: '32px', width: '100%' }}
+                                        />
+                                        {inlineSearch && (
+                                            <button className="search-clear-btn" onClick={() => setInlineSearch('')}><FiX /></button>
+                                        )}
+                                    </div>
+                                    <label
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.35rem',
+                                            fontSize: '0.78rem',
+                                            color: inlineIsCompositeSearch ? '#f59e0b' : 'var(--color-text-muted, #94a3b8)',
+                                            cursor: 'pointer',
+                                            whiteSpace: 'nowrap',
+                                            userSelect: 'none',
+                                            padding: '4px 10px',
+                                            height: '32px',
+                                            borderRadius: '6px',
+                                            background: inlineIsCompositeSearch ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                            border: inlineIsCompositeSearch ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid rgba(255, 255, 255, 0.12)',
+                                            transition: 'all 0.15s ease'
+                                        }}
+                                        title="ค้นหาเลขที่มีเลขที่ค้นหาประกอบอยู่ครบทุกตัว (เช่น ค้น 123 จะเจอ 123, 321, 1243, 2513)"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={inlineIsCompositeSearch}
+                                            onChange={(e) => setInlineIsCompositeSearch(e.target.checked)}
+                                            style={{ cursor: 'pointer', accentColor: '#f59e0b' }}
+                                        />
+                                        <span style={{ fontWeight: inlineIsCompositeSearch ? 600 : 400 }}>เลขประกอบ</span>
+                                    </label>
                                 </div>
                                 <BetTypeChipsFilter
                                     lotteryType={round.lottery_type}
@@ -4009,7 +4039,7 @@ export default function RoundAccordionItem({
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                     if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
-                                                    if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
+                                                    if (inlineSearch && !isSearchNumberMatched(s.numbers, inlineSearch, inlineIsCompositeSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
                                                 })
                                                 const currentMode = totalViewMode === 'bills' ? billDisplayMode : displayMode
@@ -4118,7 +4148,7 @@ export default function RoundAccordionItem({
                                                             const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                             if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                             if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
-                                                            if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
+                                                            if (inlineSearch && !isSearchNumberMatched(s.numbers, inlineSearch, inlineIsCompositeSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                             return true
                                                         })
                                                         
@@ -4236,7 +4266,7 @@ export default function RoundAccordionItem({
                                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
                                                                     if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
-                                                                    if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
+                                                                    if (inlineSearch && !isSearchNumberMatched(s.numbers, inlineSearch, inlineIsCompositeSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                                     return true
                                                                 })
 
@@ -4409,7 +4439,7 @@ export default function RoundAccordionItem({
                                                             const hasMatchingItem = b.items.some(item => {
                                                                 if (!isBillCancelled && item.is_deleted) return false
                                                                 const betTypeMatch = inlineSelectedBetTypes.length === 0 || isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)
-                                                                const searchMatch = !inlineSearch || hasMatchingNote || item.numbers.includes(inlineSearch)
+                                                                const searchMatch = !inlineSearch || hasMatchingNote || isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch)
                                                                 return betTypeMatch && searchMatch
                                                             })
                                                             
@@ -4466,7 +4496,7 @@ export default function RoundAccordionItem({
                                                                 }
                                                                 const hasBillNoteMatch = inlineSearch && bill.bill_note && bill.bill_note.toLowerCase().includes(inlineSearch.toLowerCase())
                                                                 if (inlineSearch && !hasBillNoteMatch) {
-                                                                    filteredItems = filteredItems.filter(item => item.numbers.includes(inlineSearch))
+                                                                    filteredItems = filteredItems.filter(item => isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch))
                                                                 }
                                                                 // Only count bill if it has filtered items
                                                                 if (filteredItems.length > 0) {
@@ -4686,7 +4716,7 @@ export default function RoundAccordionItem({
                                                                         const matchingCount = bill.items.filter(item => {
                                                                             if (!isBillAllCancelled && item.is_deleted) return false
                                                                             const btMatch = inlineSelectedBetTypes.length === 0 || isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)
-                                                                            const sMatch = !inlineSearch || hasBillNoteMatch || item.numbers.includes(inlineSearch)
+                                                                            const sMatch = !inlineSearch || hasBillNoteMatch || isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch)
                                                                             return btMatch && sMatch
                                                                         }).length
                                                                         if (isFilterActive && matchingCount === 0) return null
@@ -4743,7 +4773,7 @@ export default function RoundAccordionItem({
                                                                                                          filteredItems = filteredItems.filter(item => isBetTypeMatched(item.bet_type, inlineSelectedBetTypes))
                                                                                                      }
                                                                                                      if (inlineSearch && !hasBillNoteMatch) {
-                                                                                                         filteredItems = filteredItems.filter(item => item.numbers.includes(inlineSearch))
+                                                                                                         filteredItems = filteredItems.filter(item => isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch))
                                                                                                      }
                                                                                                      if (billDisplayMode === 'summary') {
                                                                                                          const byEntry = {}
@@ -4795,13 +4825,13 @@ export default function RoundAccordionItem({
                                                                                             <span style={{ fontWeight: '600', fontSize: '0.95rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? '#ef4444' : 'inherit' }}>
                                                                                                 {round.currency_symbol}{(() => {
                                                                                                     if (!isFilterActive) return (isBillAllCancelled ? bill.originalTotal : bill.activeTotal).toLocaleString()
-                                                                                                    return bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && isBetTypeMatched(item.bet_type, inlineSelectedBetTypes) && (!inlineSearch || hasBillNoteMatch || item.numbers.includes(inlineSearch))).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
+                                                                                                    return bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && isBetTypeMatched(item.bet_type, inlineSelectedBetTypes) && (!inlineSearch || hasBillNoteMatch || isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch))).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
                                                                                                 })()}
                                                                                             </span>
                                                                                             <span style={{ fontSize: '0.8rem', color: isBillAllCancelled ? '#ef4444' : 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
                                                                                                 คอม {round.currency_symbol}{(() => {
                                                                                                     if (!isFilterActive) return Math.round(bill.items.filter(item => isBillAllCancelled || !item.is_deleted).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
-                                                                                                    return Math.round(bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && isBetTypeMatched(item.bet_type, inlineSelectedBetTypes) && (!inlineSearch || hasBillNoteMatch || item.numbers.includes(inlineSearch))).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
+                                                                                                    return Math.round(bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && isBetTypeMatched(item.bet_type, inlineSelectedBetTypes) && (!inlineSearch || hasBillNoteMatch || isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch))).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
                                                                                                 })()}
                                                                                             </span>
                                                                                         </div>
@@ -4849,7 +4879,7 @@ export default function RoundAccordionItem({
                                                                                                 displayItems = displayItems.filter(item => isBetTypeMatched(item.bet_type, inlineSelectedBetTypes))
                                                                                             }
                                                                                             if (inlineSearch && !hasBillNoteMatch) {
-                                                                                                displayItems = displayItems.filter(item => item.numbers.includes(inlineSearch))
+                                                                                                displayItems = displayItems.filter(item => isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch))
                                                                                             }
                                                                                             // Group items by entry_id for summary mode
                                                                                             if (billDisplayMode === 'summary') {
@@ -5034,7 +5064,7 @@ export default function RoundAccordionItem({
                                                     remainingItems = remainingItems.filter(item => isBetTypeMatched(item.bet_type, inlineSelectedBetTypes))
                                                 }
                                                 if (inlineSearch) {
-                                                    remainingItems = remainingItems.filter(item => item.numbers.includes(inlineSearch))
+                                                    remainingItems = remainingItems.filter(item => isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch))
                                                 }
                                                 
                                                 // Sort by numbers
@@ -5120,7 +5150,7 @@ export default function RoundAccordionItem({
                                     {inlineTab === 'excess' && (() => {
                                         const filteredExcessItems = activeExcessItems.filter(item => {
                                             if (!isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)) return false
-                                            if (inlineSearch && !item.numbers.includes(inlineSearch)) return false
+                                            if (inlineSearch && !isSearchNumberMatched(item.numbers, inlineSearch, inlineIsCompositeSearch)) return false
                                             return true
                                         })
                                         const filteredSelectedCount = filteredExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
@@ -5708,7 +5738,7 @@ export default function RoundAccordionItem({
                                     {inlineTab === 'transferred' && (() => {
                                         const filteredTransfers = inlineTransfers.filter(t => {
                                             if (!isBetTypeMatched(t.bet_type, inlineSelectedBetTypes)) return false
-                                            if (inlineSearch && !t.numbers.includes(inlineSearch)) return false
+                                            if (inlineSearch && !isSearchNumberMatched(t.numbers, inlineSearch, inlineIsCompositeSearch)) return false
                                             if (transferDealerFilter !== 'all' && t.target_dealer_name !== transferDealerFilter) return false
                                             return true
                                         })
