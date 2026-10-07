@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { supabase, fetchAllRows } from '../../lib/supabase'
 import { useToast } from '../../contexts/ToastContext'
 import { updatePendingDeduction } from '../../utils/creditCheck'
@@ -24,7 +24,8 @@ import {
     FiChevronRight,
     FiChevronDown,
     FiPower,
-    FiSlash
+    FiSlash,
+    FiCheckSquare
 } from 'react-icons/fi'
 import {
     LOTTERY_TYPES,
@@ -43,6 +44,12 @@ import {
 } from '../../constants/lotteryTypes'
 import { findMatchingLimit, getEffectivePayoutPercent, isRateLimitDefault } from '../../utils/numberLimits'
 import { checkBetWin, deriveWinningNumbers } from '../../utils/scenarioCalculator'
+import {
+    mergeTodToTopExcessItems,
+    encodeTodConversionNote,
+    parseTodConversionNote,
+    calculateTransferDeduction
+} from '../../utils/layoffTodConverter'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
 import MemberTimeExtensionModal from './MemberTimeExtensionModal'
@@ -74,6 +81,16 @@ const getFallbackPayout = (betType, lotteryType) => {
         }
     }
     return DEFAULT_PAYOUTS[normalized] || DEFAULT_PAYOUTS[betType] || 1
+}
+
+const is3DigitBetType = (bt) => {
+    return ['3_top', '3_straight', '3_tod', '3_tod_single', '3_front', '3_bottom', '3_set'].includes(bt)
+}
+const is2DigitBetType = (bt) => {
+    return ['2_top', '2_bottom', '2_front', '2_center', '2_spread', '2_run', '2_teng', '2_tang', '2_have'].includes(bt)
+}
+const isRunBetType = (bt) => {
+    return ['run_top', 'run_bottom', '1_top', '1_bottom', 'pak_top', 'pak_bottom', 'front_top_1', 'middle_top_1', 'back_top_1'].includes(bt)
 }
 
 // Helper: chunked Supabase update to avoid URL query string overflow (max ~100 IDs per batch)
@@ -313,7 +330,9 @@ export default function RoundAccordionItem({
     const [selectedExcessItems, setSelectedExcessItems] = useState({})
     const [aiRecommendedItems, setAiRecommendedItems] = useState([]) // AI-recommended transfer items (excess-item format)
     const [showTransferModal, setShowTransferModal] = useState(false)
+    const [transferModalBetTypes, setTransferModalBetTypes] = useState({}) // { [betType]: true/false }
     const [showAIAnalysis, setShowAIAnalysis] = useState(false)
+    const [isConvertTodToTopActive, setIsConvertTodToTopActive] = useState(false)
     const [transferForm, setTransferForm] = useState({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
     const [savingTransfer, setSavingTransfer] = useState(false)
     
@@ -1581,17 +1600,7 @@ export default function RoundAccordionItem({
             const typeLimit = inlineTypeLimits[limitLookupBetType]
             const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999)
 
-            const transferredAmount = inlineTransfers
-                .filter(t => {
-                    if (t.status === 'returned') return false
-                    const tBetType = getLimitLookupBetType(t.bet_type)
-                    let tNum = t.numbers
-                    if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
-                        tNum = tNum.split('').sort().join('')
-                    }
-                    return tBetType === limitLookupBetType && tNum === group.numbers
-                })
-                .reduce((sum, t) => sum + (t.amount || 0), 0)
+            const transferredAmount = calculateTransferDeduction(inlineTransfers, limitLookupBetType, group.numbers)
 
             const isSetBased = isSetBasedLottery && (group.bet_type === '4_set' || group.bet_type === '4_top')
             const transferredSets = isSetBased ? Math.floor(transferredAmount / setPrice) : 0
@@ -1664,12 +1673,69 @@ export default function RoundAccordionItem({
         return merged
     })()
 
+    const activeExcessItems = useMemo(() => {
+        if (!isConvertTodToTopActive) return excessItems
+        return mergeTodToTopExcessItems(excessItems)
+    }, [excessItems, isConvertTodToTopActive])
+
     const toggleExcessItem = (item) => {
         const key = `${item.bet_type}|${item.numbers}`
         setSelectedExcessItems(prev => ({ ...prev, [key]: !prev[key] }))
     }
 
-    const selectedCount = excessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
+    const selectedCount = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
+
+    // Helper to open transfer modal with pre-initialized bet types
+    const handleOpenTransferModal = () => {
+        const rawSelected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        if (rawSelected.length === 0) {
+            toast.warning('กรุณาเลือกรายการที่ต้องการตีออก')
+            return
+        }
+        const initialTypes = {}
+        rawSelected.forEach(item => {
+            initialTypes[item.bet_type] = true
+        })
+        setTransferModalBetTypes(initialTypes)
+        setShowTransferModal(true)
+    }
+
+    const modalBetTypeBreakdown = useMemo(() => {
+        const selected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        const breakdown = {}
+        selected.forEach(item => {
+            const bt = item.bet_type
+            if (!breakdown[bt]) {
+                breakdown[bt] = {
+                    bet_type: bt,
+                    label: BET_TYPES_BY_LOTTERY[round.lottery_type]?.[bt]?.label || BET_TYPES[bt] || bt,
+                    count: 0,
+                    amount: 0,
+                    isSetBased: item.isSetBased,
+                    excessSets: 0
+                }
+            }
+            const setPrice = round?.set_prices?.['4_top'] || 120
+            const excessAmt = item.isSetBased ? item.excess * setPrice : item.excess
+            breakdown[bt].count += 1
+            breakdown[bt].amount += excessAmt
+            if (item.isSetBased) breakdown[bt].excessSets += item.excess
+        })
+        return breakdown
+    }, [activeExcessItems, selectedExcessItems, round])
+
+    const modalSelectedItems = useMemo(() => {
+        const selected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        return selected.filter(item => transferModalBetTypes[item.bet_type] !== false)
+    }, [activeExcessItems, selectedExcessItems, transferModalBetTypes])
+
+    const modalSelectedCount = modalSelectedItems.length
+    const modalSelectedAmount = useMemo(() => {
+        return modalSelectedItems.reduce((sum, item) => {
+            const setPrice = round?.set_prices?.['4_top'] || 120
+            return sum + (item.isSetBased ? item.excess * setPrice : item.excess)
+        }, 0)
+    }, [modalSelectedItems, round])
 
     const handleSaveTransfer = async () => {
         if (!transferForm.target_dealer_name) {
@@ -1683,9 +1749,14 @@ export default function RoundAccordionItem({
             return
         }
         
+        const selectedItems = modalSelectedItems
+        if (selectedItems.length === 0) {
+            toast.warning('กรุณาเลือกประเภทเลขที่ต้องการตีออกอย่างน้อย 1 ประเภท')
+            return
+        }
+
         setSavingTransfer(true)
         try {
-            const selectedItems = excessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
             const batchId = generateBatchId()
             const isLinked = !!(selectedUpstreamDealer?.is_linked && selectedUpstreamDealer?.upstream_dealer_id)
             const canSendToUpstream = isLinked && upstreamRoundStatus === 'available'
@@ -1781,7 +1852,7 @@ export default function RoundAccordionItem({
                 amount: item.isSetBased ? item.excess * (round?.set_prices?.['4_top'] || 120) : item.excess,
                 target_dealer_name: transferForm.target_dealer_name,
                 target_dealer_contact: transferForm.target_dealer_contact || null,
-                notes: transferForm.notes || null,
+                notes: encodeTodConversionNote(item, transferForm.notes || '') || null,
                 transfer_batch_id: batchId,
                 upstream_dealer_id: selectedUpstreamDealer?.upstream_dealer_id || null,
                 is_linked: isLinked || false,
@@ -1809,10 +1880,20 @@ export default function RoundAccordionItem({
 
             await fetchInlineSubmissions(true)
             setShowTransferModal(false)
-            setSelectedExcessItems({})
+            setSelectedExcessItems(prev => {
+                const next = { ...prev }
+                selectedItems.forEach(item => {
+                    delete next[`${item.bet_type}|${item.numbers}`]
+                    if (item.isConvertedFromTod && item.originalTodNumbers) {
+                        delete next[`3_tod|${item.originalTodNumbers}`]
+                    }
+                })
+                return next
+            })
             setAiRecommendedItems([])
             setSelectedUpstreamDealer(null)
             setTransferForm({ target_dealer_name: '', target_dealer_contact: '', notes: '' })
+            setTransferModalBetTypes({})
             
             setUpstreamRoundStatus(null)
             
@@ -5010,19 +5091,88 @@ export default function RoundAccordionItem({
                                     )}
 
                                     {inlineTab === 'excess' && (() => {
-                                        const filteredExcessItems = excessItems.filter(item => {
+                                        const filteredExcessItems = activeExcessItems.filter(item => {
                                             if (inlineBetTypeFilter !== 'all' && item.bet_type !== inlineBetTypeFilter) return false
                                             if (inlineSearch && !item.numbers.includes(inlineSearch)) return false
                                             return true
                                         })
                                         const filteredSelectedCount = filteredExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
+                                        const filteredSelectedAmount = filteredExcessItems
+                                            .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+                                            .reduce((sum, item) => {
+                                                const setPrice = round?.set_prices?.['4_top'] || 120
+                                                return sum + (item.isSetBased ? item.excess * setPrice : item.excess)
+                                            }, 0)
+
+                                        // Compute breakdown by bet_type for filteredExcessItems
+                                        const betTypeStats = {}
+                                        filteredExcessItems.forEach(item => {
+                                            const bt = item.bet_type
+                                            if (!betTypeStats[bt]) {
+                                                betTypeStats[bt] = {
+                                                    bet_type: bt,
+                                                    label: BET_TYPES_BY_LOTTERY[round.lottery_type]?.[bt]?.label || BET_TYPES[bt] || bt,
+                                                    count: 0,
+                                                    amount: 0,
+                                                    selectedCount: 0,
+                                                    isSetBased: item.isSetBased,
+                                                    excessSets: 0
+                                                }
+                                            }
+                                            const setPrice = round?.set_prices?.['4_top'] || 120
+                                            const excessAmt = item.isSetBased ? item.excess * setPrice : item.excess
+                                            betTypeStats[bt].count += 1
+                                            betTypeStats[bt].amount += excessAmt
+                                            if (item.isSetBased) betTypeStats[bt].excessSets += item.excess
+                                            if (selectedExcessItems[`${item.bet_type}|${item.numbers}`]) {
+                                                betTypeStats[bt].selectedCount += 1
+                                            }
+                                        })
+                                        const betTypeList = Object.values(betTypeStats)
+
+                                        const items3Digit = filteredExcessItems.filter(item => is3DigitBetType(item.bet_type))
+                                        const items2Digit = filteredExcessItems.filter(item => is2DigitBetType(item.bet_type))
+                                        const itemsRun = filteredExcessItems.filter(item => isRunBetType(item.bet_type))
+
+                                        const all3Selected = items3Digit.length > 0 && items3Digit.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+                                        const all2Selected = items2Digit.length > 0 && items2Digit.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+                                        const allRunSelected = itemsRun.length > 0 && itemsRun.every(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+
+                                        const toggleGroup = (groupItems, isAllSelected) => {
+                                            const next = { ...selectedExcessItems }
+                                            if (isAllSelected) {
+                                                groupItems.forEach(item => {
+                                                    delete next[`${item.bet_type}|${item.numbers}`]
+                                                })
+                                            } else {
+                                                groupItems.forEach(item => {
+                                                    next[`${item.bet_type}|${item.numbers}`] = true
+                                                })
+                                            }
+                                            setSelectedExcessItems(next)
+                                        }
+
+                                        const toggleSingleType = (bt, isAllSelected) => {
+                                            const typeItems = filteredExcessItems.filter(item => item.bet_type === bt)
+                                            const next = { ...selectedExcessItems }
+                                            if (isAllSelected) {
+                                                typeItems.forEach(item => {
+                                                    delete next[`${item.bet_type}|${item.numbers}`]
+                                                })
+                                            } else {
+                                                typeItems.forEach(item => {
+                                                    next[`${item.bet_type}|${item.numbers}`] = true
+                                                })
+                                            }
+                                            setSelectedExcessItems(next)
+                                        }
 
                                         return (
                                             <div className="inline-tab-content">
                                                 {filteredExcessItems.length === 0 ? (
                                                     <div className="empty-state" style={{ padding: '2rem', textAlign: 'center' }}>
                                                         <FiCheck style={{ fontSize: '2rem', color: 'var(--color-success)', marginBottom: '0.5rem' }} />
-                                                        <p style={{ color: 'var(--color-text-muted)' }}>{excessItems.length === 0 ? 'ไม่มียอดเกิน' : 'ไม่พบรายการที่ค้นหา'}</p>
+                                                        <p style={{ color: 'var(--color-text-muted)' }}>{activeExcessItems.length === 0 ? 'ไม่มียอดเกิน' : 'ไม่พบรายการที่ค้นหา'}</p>
                                                     </div>
                                                 ) : (
                                                     <>
@@ -5035,15 +5185,220 @@ export default function RoundAccordionItem({
                                                                         : `${round.currency_symbol}${filteredExcessItems.reduce((sum, i) => sum + (i.excess || 0), 0).toLocaleString()}`}
                                                                 </span>
                                                             </div>
-                                                            <button
-                                                                className="btn btn-sm"
-                                                                onClick={() => handleCopyExcessItems(filteredExcessItems)}
-                                                                title="คัดลอกยอดเกิน"
-                                                                style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem', marginTop: '0.5rem' }}
-                                                            >
-                                                                <FiCopy size={12} /> คัดลอก ({filteredExcessItems.length})
-                                                            </button>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
+                                                                <button
+                                                                    className="btn btn-sm"
+                                                                    onClick={() => handleCopyExcessItems(filteredExcessItems)}
+                                                                    title="คัดลอกยอดเกิน"
+                                                                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+                                                                >
+                                                                    <FiCopy size={12} /> คัดลอก ({filteredExcessItems.length})
+                                                                </button>
+                                                                {(excessItems.some(i => i.bet_type === '3_tod') || isConvertTodToTopActive) && (
+                                                                    <button
+                                                                        type="button"
+                                                                        className="btn btn-sm"
+                                                                        onClick={() => {
+                                                                            setIsConvertTodToTopActive(prev => !prev)
+                                                                            setSelectedExcessItems({})
+                                                                        }}
+                                                                        title="สลับโหมดแปลง 3 ตัวโต๊ดเป็น 3 ตัวตรง"
+                                                                        style={{
+                                                                            padding: '0.2rem 0.55rem',
+                                                                            fontSize: '0.75rem',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '0.35rem',
+                                                                            background: isConvertTodToTopActive ? 'rgba(245, 158, 11, 0.22)' : 'var(--color-surface-light, rgba(255,255,255,0.06))',
+                                                                            border: `1px solid ${isConvertTodToTopActive ? 'var(--color-warning, #f59e0b)' : 'var(--color-border)'}`,
+                                                                            color: isConvertTodToTopActive ? '#fbbf24' : 'var(--color-text-main)',
+                                                                            borderRadius: '6px',
+                                                                            cursor: 'pointer',
+                                                                            fontWeight: isConvertTodToTopActive ? 600 : 400
+                                                                        }}
+                                                                    >
+                                                                        <FiRotateCcw size={12} style={{ transform: isConvertTodToTopActive ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                                                                        <span>แปลงโต๊ดเป็นตรง: {isConvertTodToTopActive ? 'เปิด (ON)' : 'ปิด (OFF)'}</span>
+                                                                    </button>
+                                                                )}
+                                                            </div>
                                                         </div>
+
+                                                        {/* Quick Bet Type Selection Panel */}
+                                                        {betTypeList.length > 0 && (
+                                                            <div style={{
+                                                                background: 'var(--color-surface, #1e293b)',
+                                                                border: '1px solid var(--color-border, #334155)',
+                                                                borderRadius: '10px',
+                                                                padding: '0.75rem 0.9rem',
+                                                                marginBottom: '0.85rem',
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                gap: '0.55rem'
+                                                            }}>
+                                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.45rem' }}>
+                                                                    <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-main)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                        <FiCheckSquare style={{ color: 'var(--color-warning, #f59e0b)' }} /> เลือกตีออกตามประเภทเลข:
+                                                                    </span>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                                                        {items3Digit.length > 0 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="btn btn-sm"
+                                                                                onClick={() => toggleGroup(items3Digit, all3Selected)}
+                                                                                style={{
+                                                                                    padding: '0.2rem 0.5rem',
+                                                                                    fontSize: '0.74rem',
+                                                                                    background: all3Selected ? 'rgba(245, 158, 11, 0.22)' : 'var(--color-surface-light, rgba(255,255,255,0.06))',
+                                                                                    border: `1px solid ${all3Selected ? 'var(--color-warning, #f59e0b)' : 'var(--color-border)'}`,
+                                                                                    color: all3Selected ? '#fbbf24' : 'var(--color-text-main)',
+                                                                                    borderRadius: '6px',
+                                                                                    cursor: 'pointer',
+                                                                                    display: 'flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '0.3rem',
+                                                                                    fontWeight: all3Selected ? 600 : 400
+                                                                                }}
+                                                                            >
+                                                                                <span>🎯 3 ตัวทั้งหมด</span>
+                                                                                <span style={{ opacity: 0.8, fontSize: '0.7rem' }}>({items3Digit.length})</span>
+                                                                            </button>
+                                                                        )}
+                                                                        {items2Digit.length > 0 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="btn btn-sm"
+                                                                                onClick={() => toggleGroup(items2Digit, all2Selected)}
+                                                                                style={{
+                                                                                    padding: '0.2rem 0.5rem',
+                                                                                    fontSize: '0.74rem',
+                                                                                    background: all2Selected ? 'rgba(245, 158, 11, 0.22)' : 'var(--color-surface-light, rgba(255,255,255,0.06))',
+                                                                                    border: `1px solid ${all2Selected ? 'var(--color-warning, #f59e0b)' : 'var(--color-border)'}`,
+                                                                                    color: all2Selected ? '#fbbf24' : 'var(--color-text-main)',
+                                                                                    borderRadius: '6px',
+                                                                                    cursor: 'pointer',
+                                                                                    display: 'flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '0.3rem',
+                                                                                    fontWeight: all2Selected ? 600 : 400
+                                                                                }}
+                                                                            >
+                                                                                <span>🎯 2 ตัวทั้งหมด</span>
+                                                                                <span style={{ opacity: 0.8, fontSize: '0.7rem' }}>({items2Digit.length})</span>
+                                                                            </button>
+                                                                        )}
+                                                                        {itemsRun.length > 0 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="btn btn-sm"
+                                                                                onClick={() => toggleGroup(itemsRun, allRunSelected)}
+                                                                                style={{
+                                                                                    padding: '0.2rem 0.5rem',
+                                                                                    fontSize: '0.74rem',
+                                                                                    background: allRunSelected ? 'rgba(245, 158, 11, 0.22)' : 'var(--color-surface-light, rgba(255,255,255,0.06))',
+                                                                                    border: `1px solid ${allRunSelected ? 'var(--color-warning, #f59e0b)' : 'var(--color-border)'}`,
+                                                                                    color: allRunSelected ? '#fbbf24' : 'var(--color-text-main)',
+                                                                                    borderRadius: '6px',
+                                                                                    cursor: 'pointer',
+                                                                                    display: 'flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '0.3rem',
+                                                                                    fontWeight: allRunSelected ? 600 : 400
+                                                                                }}
+                                                                            >
+                                                                                <span>🎯 เลขวิ่ง</span>
+                                                                                <span style={{ opacity: 0.8, fontSize: '0.7rem' }}>({itemsRun.length})</span>
+                                                                            </button>
+                                                                        )}
+                                                                        {filteredSelectedCount > 0 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                className="btn btn-sm"
+                                                                                onClick={() => {
+                                                                                    const next = { ...selectedExcessItems }
+                                                                                    filteredExcessItems.forEach(item => {
+                                                                                        delete next[`${item.bet_type}|${item.numbers}`]
+                                                                                    })
+                                                                                    setSelectedExcessItems(next)
+                                                                                }}
+                                                                                style={{
+                                                                                    padding: '0.2rem 0.45rem',
+                                                                                    fontSize: '0.72rem',
+                                                                                    background: 'transparent',
+                                                                                    border: '1px solid var(--color-border)',
+                                                                                    color: 'var(--color-text-muted)',
+                                                                                    borderRadius: '6px',
+                                                                                    cursor: 'pointer'
+                                                                                }}
+                                                                            >
+                                                                                ล้างที่เลือก
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Individual Bet Type Chips */}
+                                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                                                    {betTypeList.map(bt => {
+                                                                        const isAll = bt.selectedCount === bt.count && bt.count > 0
+                                                                        const isPartial = bt.selectedCount > 0 && bt.selectedCount < bt.count
+                                                                        return (
+                                                                            <button
+                                                                                key={bt.bet_type}
+                                                                                type="button"
+                                                                                onClick={() => toggleSingleType(bt.bet_type, isAll)}
+                                                                                style={{
+                                                                                    display: 'inline-flex',
+                                                                                    alignItems: 'center',
+                                                                                    gap: '0.35rem',
+                                                                                    padding: '0.3rem 0.6rem',
+                                                                                    borderRadius: '20px',
+                                                                                    fontSize: '0.78rem',
+                                                                                    cursor: 'pointer',
+                                                                                    transition: 'all 0.15s ease',
+                                                                                    background: isAll 
+                                                                                        ? 'rgba(245, 158, 11, 0.22)' 
+                                                                                        : isPartial 
+                                                                                            ? 'rgba(245, 158, 11, 0.08)' 
+                                                                                            : 'rgba(255, 255, 255, 0.04)',
+                                                                                    border: isAll 
+                                                                                        ? '1px solid var(--color-warning, #f59e0b)' 
+                                                                                        : isPartial 
+                                                                                            ? '1px dashed var(--color-warning, #f59e0b)' 
+                                                                                            : '1px solid var(--color-border, #334155)',
+                                                                                    color: (isAll || isPartial) ? '#fbbf24' : 'var(--color-text-main)',
+                                                                                    fontWeight: isAll ? 600 : 400
+                                                                                }}
+                                                                                title={`คลิกเพื่อ${isAll ? 'ยกเลิก' : 'เลือก'}เลข ${bt.label} ทั้งหมด`}
+                                                                            >
+                                                                                <span style={{
+                                                                                    display: 'inline-flex',
+                                                                                    alignItems: 'center',
+                                                                                    justifyContent: 'center',
+                                                                                    width: '13px',
+                                                                                    height: '13px',
+                                                                                    borderRadius: '50%',
+                                                                                    background: isAll ? 'var(--color-warning, #f59e0b)' : 'transparent',
+                                                                                    color: isAll ? '#1e293b' : 'inherit',
+                                                                                    fontSize: '0.62rem',
+                                                                                    fontWeight: 'bold',
+                                                                                    border: isAll ? 'none' : '1px solid currentColor'
+                                                                                }}>
+                                                                                    {isAll ? '✓' : isPartial ? '–' : ''}
+                                                                                </span>
+                                                                                <span>{bt.label}</span>
+                                                                                <span style={{
+                                                                                    fontSize: '0.72rem',
+                                                                                    opacity: 0.85
+                                                                                }}>
+                                                                                    {isPartial ? `(${bt.selectedCount}/${bt.count})` : `(${bt.count})`}
+                                                                                </span>
+                                                                            </button>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        )}
 
                                                         <div className="bulk-actions" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: '8px' }}>
                                                             <label className="checkbox-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
@@ -5066,10 +5421,15 @@ export default function RoundAccordionItem({
                                                                 />
                                                                 <span>เลือกทั้งหมด ({filteredExcessItems.length})</span>
                                                             </label>
-                                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                                {filteredSelectedCount > 0 && (
+                                                                    <span style={{ fontSize: '0.82rem', color: 'var(--color-warning)', fontWeight: 600 }}>
+                                                                        {round.currency_symbol}{filteredSelectedAmount.toLocaleString()}
+                                                                    </span>
+                                                                )}
                                                                 <button
                                                                     className="btn btn-warning"
-                                                                    onClick={(e) => { e.stopPropagation(); if (filteredSelectedCount === 0) { toast.warning('กรุณาเลือกรายการที่ต้องการตีออก'); return; } setShowTransferModal(true); }}
+                                                                    onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(); }}
                                                                     disabled={filteredSelectedCount === 0}
                                                                 >
                                                                     <FiSend /> ตีออก ({filteredSelectedCount})
@@ -5119,10 +5479,24 @@ export default function RoundAccordionItem({
                                                                             <div>
                                                                                 <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
                                                                                 <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                    {item.isAIRecommended && item.limitType === 'ai'
-                                                                                        ? <>ยอดปัจจุบัน: {round.currency_symbol}{(item.total || 0).toLocaleString()} → เก็บไว้: {round.currency_symbol}{(item.limit || 0).toLocaleString()}</>
-                                                                                        : <>ยอด: {round.currency_symbol}{(item.total || 0).toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • {item.limitType === 'blocked' ? '🔴 ปิด' : 'อั้น'}: {item.isSetBased ? `${item.limit || 0} ชุด` : `${round.currency_symbol}${(item.limit || 0).toLocaleString()}`}{item.isNumberLimit && item.payoutPercent < 100 ? ` • จ่าย ${item.payoutPercent}%` : ''}</>}
+                                                                                    {item.isConvertedFromTod && !item.isMergedWithTod ? (
+                                                                                        <>ยอดโต๊ดเดิม: {round.currency_symbol}{(item.originalTodExcess || 0).toLocaleString()} • แตก {item.convertedPermutationsCount || 6} ชุด</>
+                                                                                    ) : item.isAIRecommended && item.limitType === 'ai' ? (
+                                                                                        <>ยอดปัจจุบัน: {round.currency_symbol}{(item.total || 0).toLocaleString()} → เก็บไว้: {round.currency_symbol}{(item.limit || 0).toLocaleString()}</>
+                                                                                    ) : (
+                                                                                        <>ยอด: {round.currency_symbol}{(item.total || 0).toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • {item.limitType === 'blocked' ? '🔴 ปิด' : 'อั้น'}: {item.isSetBased ? `${item.limit || 0} ชุด` : `${round.currency_symbol}${(item.limit || 0).toLocaleString()}`}{item.isNumberLimit && item.payoutPercent < 100 ? ` • จ่าย ${item.payoutPercent}%` : ''}</>
+                                                                                    )}
                                                                                 </div>
+                                                                                {item.isMergedWithTod && (
+                                                                                    <div style={{ fontSize: '0.74rem', color: '#fbbf24', marginTop: '0.15rem', fontWeight: 500 }}>
+                                                                                        (ตรงเดิม {round.currency_symbol}{(item.originalTopExcess || 0).toLocaleString()} + แปลงจากโต๊ด {round.currency_symbol}{(item.convertedTodExcess || 0).toLocaleString()})
+                                                                                    </div>
+                                                                                )}
+                                                                                {item.isConvertedFromTod && !item.isMergedWithTod && (
+                                                                                    <div style={{ fontSize: '0.74rem', color: '#38bdf8', marginTop: '0.15rem', fontWeight: 500 }}>
+                                                                                        💫 แตกจากโต๊ด {item.originalTodNumbers}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         </div>
                                                                         <div style={{ textAlign: 'right', color: 'var(--color-warning)', fontWeight: 600 }}>
@@ -5148,7 +5522,74 @@ export default function RoundAccordionItem({
                                                     <button className="modal-close" onClick={() => setShowTransferModal(false)}><FiX /></button>
                                                 </div>
                                                 <div className="modal-body">
-                                                    <p style={{ marginBottom: '1rem', color: 'var(--color-text-muted)' }}>กำลังตีออก {selectedCount} รายการ</p>
+                                                    {/* Bet Type Breakdown & Selection Checklist */}
+                                                    <div style={{
+                                                        background: 'var(--color-surface-light, rgba(255,255,255,0.04))',
+                                                        border: '1px solid var(--color-border, #334155)',
+                                                        borderRadius: '8px',
+                                                        padding: '0.75rem 0.85rem',
+                                                        marginBottom: '1rem'
+                                                    }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                                                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-main)' }}>
+                                                                ประเภทเลขที่จะตีออกในรอบนี้:
+                                                            </span>
+                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', fontWeight: 600 }}>
+                                                                {modalSelectedCount} รายการ ({round.currency_symbol}{modalSelectedAmount.toLocaleString()})
+                                                            </span>
+                                                        </div>
+
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '180px', overflowY: 'auto' }}>
+                                                            {Object.entries(modalBetTypeBreakdown).map(([bt, info]) => {
+                                                                const isChecked = transferModalBetTypes[bt] !== false
+                                                                return (
+                                                                    <label
+                                                                        key={bt}
+                                                                        style={{
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            justifyContent: 'space-between',
+                                                                            padding: '0.45rem 0.65rem',
+                                                                            background: isChecked ? 'rgba(245, 158, 11, 0.12)' : 'rgba(0,0,0,0.2)',
+                                                                            border: `1px solid ${isChecked ? 'rgba(245, 158, 11, 0.35)' : 'var(--color-border)'}`,
+                                                                            borderRadius: '6px',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.15s ease'
+                                                                        }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={isChecked}
+                                                                                onChange={() => {
+                                                                                    setTransferModalBetTypes(prev => ({
+                                                                                        ...prev,
+                                                                                        [bt]: !isChecked
+                                                                                    }))
+                                                                                }}
+                                                                                style={{ width: '16px', height: '16px', accentColor: 'var(--color-warning)' }}
+                                                                            />
+                                                                            <span style={{ fontSize: '0.85rem', fontWeight: 500, color: isChecked ? 'var(--color-text-main)' : 'var(--color-text-muted)' }}>
+                                                                                {info.label}
+                                                                            </span>
+                                                                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                ({info.count} รายการ)
+                                                                            </span>
+                                                                        </div>
+                                                                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: isChecked ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
+                                                                            {info.isSetBased ? `${info.excessSets} ชุด` : `${round.currency_symbol}${info.amount.toLocaleString()}`}
+                                                                        </span>
+                                                                    </label>
+                                                                )
+                                                            })}
+                                                        </div>
+
+                                                        {modalSelectedCount === 0 && (
+                                                            <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.78rem', marginTop: '0.5rem', textAlign: 'center' }}>
+                                                                * กรุณาเลือกประเภทเลขที่จะตีออกอย่างน้อย 1 ประเภท
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                     
                                                     {/* Upstream Dealer Selection */}
                                                     {upstreamDealers.length > 0 && (
@@ -5228,9 +5669,9 @@ export default function RoundAccordionItem({
                                                     <button 
                                                         className="btn btn-warning" 
                                                         onClick={handleSaveTransfer} 
-                                                        disabled={savingTransfer || (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') || upstreamRoundStatus === 'checking'}
+                                                        disabled={savingTransfer || modalSelectedCount === 0 || (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') || upstreamRoundStatus === 'checking'}
                                                     >
-                                                        {savingTransfer ? 'กำลังบันทึก...' : (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') ? 'ไม่มีงวดหวยตรงกัน' : 'ยืนยันตีออก'}
+                                                        {savingTransfer ? 'กำลังบันทึก...' : (selectedUpstreamDealer?.is_linked && upstreamRoundStatus === 'unavailable') ? 'ไม่มีงวดหวยตรงกัน' : `ยืนยันตีออก (${modalSelectedCount})`}
                                                     </button>
                                                 </div>
                                             </div>
@@ -5601,6 +6042,15 @@ export default function RoundAccordionItem({
                                                                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                                                         <span style={{ fontWeight: 600, minWidth: '50px', fontFamily: "'Monaco', 'Menlo', monospace", color: itemWin ? 'var(--color-success)' : itemReturned ? 'var(--color-danger)' : 'var(--color-primary)', letterSpacing: '0.05em' }}>{item.numbers}</span>
                                                                                                         <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
+                                                                                                        {(() => {
+                                                                                                            const meta = parseTodConversionNote(item.notes)
+                                                                                                            if (!meta) return null
+                                                                                                            return (
+                                                                                                                <span style={{ fontSize: '0.68rem', padding: '0.1rem 0.35rem', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '4px' }}>
+                                                                                                                    💫 แปลงจากโต๊ด {meta.originalTodNumbers}
+                                                                                                                </span>
+                                                                                                            )
+                                                                                                        })()}
                                                                                                         {itemReturned && <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.3rem', background: 'var(--color-danger)', color: 'white', borderRadius: '3px' }}>คืน</span>}
                                                                                                     </div>
                                                                                                     <div style={{ textAlign: 'right' }}>

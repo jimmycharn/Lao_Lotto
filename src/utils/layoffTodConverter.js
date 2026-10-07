@@ -159,3 +159,47 @@ export function parseTodConversionNote(note) {
         return null
     }
 }
+
+/**
+ * Calculates effective transferred amount for a specific bet group (e.g. 3_tod|123 or 3_top|123),
+ * taking into account any transfers that were converted from 3_tod.
+ * 
+ * @param {object[]} transfers - Array of inlineTransfers
+ * @param {string} targetBetType - e.g. '3_tod' or '3_top'
+ * @param {string} targetNumbers - normalized numbers e.g. '123'
+ * @returns {number} Effective transferred amount to deduct from excess
+ */
+export function calculateTransferDeduction(transfers, targetBetType, targetNumbers) {
+    if (!Array.isArray(transfers) || transfers.length === 0) return 0
+
+    let total = 0
+    transfers.forEach(t => {
+        if (t.status === 'returned') return
+
+        const meta = parseTodConversionNote(t.notes)
+        if (meta) {
+            // Case A: Calculating for 3_tod
+            if (targetBetType === '3_tod' && meta.originalTodNumbers === targetNumbers) {
+                total += (meta.convertedTodExcess || 0)
+            }
+            // Case B: Calculating for 3_top
+            else if (targetBetType === '3_top' && t.numbers === targetNumbers) {
+                if (meta.isMergedWithTod) {
+                    total += (meta.originalTopExcess || 0)
+                }
+                // If it was pure converted tod without merge, it was allocated for tod, not original 3_top
+            }
+        } else {
+            // Standard non-converted transfer
+            let tNum = t.numbers
+            if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
+                tNum = tNum.split('').sort().join('')
+            }
+            if (t.bet_type === targetBetType && tNum === targetNumbers) {
+                total += (t.amount || 0)
+            }
+        }
+    })
+    return total
+}
+

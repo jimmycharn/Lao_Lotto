@@ -4,7 +4,8 @@ import {
     convertTodItemToTopItems,
     mergeTodToTopExcessItems,
     encodeTodConversionNote,
-    parseTodConversionNote
+    parseTodConversionNote,
+    calculateTransferDeduction
 } from './layoffTodConverter'
 
 describe('layoffTodConverter', () => {
@@ -144,4 +145,40 @@ describe('layoffTodConverter', () => {
             expect(parsed.userNote).toBe('ส่งเจ้ามือใหญ่')
         })
     })
+
+    describe('calculateTransferDeduction', () => {
+        it('should correctly allocate merged transfer between 3_tod and 3_top', () => {
+            const transfers = [
+                {
+                    bet_type: '3_top',
+                    numbers: '123',
+                    amount: 414,
+                    notes: '[TOD_CONV:{"orig_num":"123","orig_excess":200,"allocated":34,"is_merged":true,"top_excess":380}] โต๊ดแปลง'
+                },
+                {
+                    bet_type: '3_top',
+                    numbers: '132',
+                    amount: 34,
+                    notes: '[TOD_CONV:{"orig_num":"123","orig_excess":200,"allocated":34,"is_merged":false,"top_excess":0}]'
+                }
+            ]
+
+            // 3_top 123 should deduct only its top_excess (380)
+            const topDeduction = calculateTransferDeduction(transfers, '3_top', '123')
+            expect(topDeduction).toBe(380)
+
+            // 3_tod 123 should deduct allocated amounts from both 123 and 132 (34 + 34 = 68)
+            const todDeduction = calculateTransferDeduction(transfers, '3_tod', '123')
+            expect(todDeduction).toBe(68)
+        })
+
+        it('should deduct standard non-converted transfers normally', () => {
+            const transfers = [
+                { bet_type: '2_top', numbers: '25', amount: 500 }
+            ]
+            expect(calculateTransferDeduction(transfers, '2_top', '25')).toBe(500)
+            expect(calculateTransferDeduction(transfers, '2_top', '26')).toBe(0)
+        })
+    })
 })
+
