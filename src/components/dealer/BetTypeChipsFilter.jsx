@@ -110,32 +110,12 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    {!isAllSelected && (
-                        <button
-                            type="button"
-                            onClick={handleSelectAll}
-                            style={{
-                                padding: '2px 8px',
-                                borderRadius: '6px',
-                                border: '1px solid rgba(245, 158, 11, 0.4)',
-                                background: 'rgba(245, 158, 11, 0.1)',
-                                color: '#f59e0b',
-                                fontSize: '0.72rem',
-                                fontWeight: 600,
-                                cursor: 'pointer',
-                                transition: 'all 0.15s ease'
-                            }}
-                            title="เลือกประเภทเลขทั้งหมดของงวดนี้"
-                        >
-                            {`เลือกทั้งหมด (${allTypes.length})`}
-                        </button>
-                    )}
                     {selectedTypes.length > 0 && (
                         <button
                             type="button"
                             onClick={handleClearAll}
                             style={{
-                                padding: '2px 6px',
+                                padding: '2px 8px',
                                 borderRadius: '6px',
                                 border: '1px solid rgba(255, 255, 255, 0.15)',
                                 background: 'transparent',
@@ -153,7 +133,7 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
             </div>
 
             {/* Quick Group Shortcuts - Centered for clean mobile & desktop layout */}
-            {digitGroups.length > 0 && (
+            {(digitGroups.length > 0 || allTypes.length > 0) && (
                 <div 
                     style={{
                         display: 'flex',
@@ -182,6 +162,7 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                                     fontWeight: isFull ? 600 : 500,
                                     cursor: 'pointer',
                                     transition: 'all 0.15s ease',
+                                    minWidth: '115px',
                                     border: isFull
                                         ? '1px solid #f59e0b'
                                         : isPartial
@@ -207,11 +188,60 @@ export default function BetTypeChipsFilter({ lotteryType, selectedTypes = [], on
                                 {isFull && <span style={{ fontSize: '0.7rem' }}>✓</span>}
                                 <span>{group.label}</span>
                                 <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>
-                                    ({selectedCount > 0 && !isFull ? `${selectedCount}/${group.types.length}` : group.types.length})
+                                    {`(${selectedCount > 0 && !isFull ? `${selectedCount}/${group.types.length}` : group.types.length})`}
                                 </span>
                             </button>
                         )
                     })}
+
+                    {/* Master 'เลือกทั้งหมด' button placed alongside '5 ตัวทุกประเภท' to form balanced pairs on mobile */}
+                    {allTypes.length > 0 && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (isAllSelected) {
+                                    handleClearAll()
+                                } else {
+                                    handleSelectAll()
+                                }
+                            }}
+                            style={{
+                                padding: '3px 9px',
+                                borderRadius: '12px',
+                                fontSize: '0.72rem',
+                                fontWeight: isAllSelected ? 600 : 500,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                minWidth: '115px',
+                                border: isAllSelected
+                                    ? '1px solid #f59e0b'
+                                    : (selectedTypes.length > 0)
+                                    ? '1px dashed rgba(245, 158, 11, 0.6)'
+                                    : '1px solid rgba(245, 158, 11, 0.35)',
+                                background: isAllSelected
+                                    ? 'rgba(245, 158, 11, 0.22)'
+                                    : (selectedTypes.length > 0)
+                                    ? 'rgba(245, 158, 11, 0.08)'
+                                    : 'rgba(245, 158, 11, 0.06)',
+                                color: isAllSelected
+                                    ? '#f59e0b'
+                                    : (selectedTypes.length > 0)
+                                    ? '#fbbf24'
+                                    : '#f59e0b',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '0.25rem'
+                            }}
+                            title={isAllSelected ? "คลิกเพื่อยกเลิกการเลือกทั้งหมด" : `คลิกเพื่อเลือกทุกประเภท (${allTypes.length} ประเภท)`}
+                        >
+                            {isAllSelected && <span style={{ fontSize: '0.7rem' }}>✓</span>}
+                            <span>เลือกทั้งหมด</span>
+                            <span style={{ fontSize: '0.68rem', opacity: 0.85 }}>
+                                {`(${allTypes.length})`}
+                            </span>
+                        </button>
+                    )}
                 </div>
             )}
 
