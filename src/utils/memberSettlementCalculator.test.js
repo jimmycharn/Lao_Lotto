@@ -16,7 +16,9 @@ import {
     isRoundFullySettled,
     synthesizeMissingRoundHistory,
     isUpstreamPaymentMatch,
-    filterUpstreamPaymentsForTransfer
+    filterUpstreamPaymentsForTransfer,
+    isUpstreamPrizePayment,
+    calculateUpstreamPrizeCollected
 } from './memberSettlementCalculator'
 
 describe('memberSettlementCalculator', () => {
@@ -838,6 +840,29 @@ describe('calculateRoundOutstandingDetails', () => {
             const transfer = { bet_type: '2_top', numbers: '99', amount: 100 }
             const win = calculateTransferWinning(transfer, winningNumbersThai, 'thai')
             expect(win).toBe(0)
+        })
+    })
+
+    describe('isUpstreamPrizePayment & calculateUpstreamPrizeCollected', () => {
+        it('identifies upstream prize payment correctly', () => {
+            expect(isUpstreamPrizePayment(null)).toBe(false)
+            expect(isUpstreamPrizePayment(undefined)).toBe(false)
+            expect(isUpstreamPrizePayment({ payment_type: 'prize_collection', amount: 1500 })).toBe(true)
+            expect(isUpstreamPrizePayment({ payment_type: 'net_settlement', amount: 1500 })).toBe(false)
+            expect(isUpstreamPrizePayment({ notes: 'รับคืนเงินถูกรางวัลงวดนี้', amount: 1500 })).toBe(true)
+            expect(isUpstreamPrizePayment({ notes: 'โอนเงิน prize payout', amount: 1500 })).toBe(true)
+            expect(isUpstreamPrizePayment({ direction: 'upstream_to_dealer', amount: 1500 })).toBe(true)
+            expect(isUpstreamPrizePayment({ direction: 'dealer_to_upstream', amount: 1500 })).toBe(false)
+        })
+
+        it('calculates total upstream prize collected correctly', () => {
+            const payments = [
+                { id: 1, payment_type: 'prize_collection', amount: 1500, direction: 'upstream_to_dealer' },
+                { id: 2, payment_type: 'net_settlement', amount: 5000, direction: 'dealer_to_upstream' },
+                { id: 3, notes: 'คืนรางวัลเพิ่ม', amount: 500, direction: 'upstream_to_dealer' }
+            ]
+            expect(calculateUpstreamPrizeCollected(payments)).toBe(2000)
+            expect(calculateUpstreamPrizeCollected([])).toBe(0)
         })
     })
 })

@@ -19,7 +19,8 @@ import {
     calculateUpstreamInitialBalance,
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
-    getUpstreamPaymentPresetAmount
+    getUpstreamPaymentPresetAmount,
+    calculateUpstreamPrizeCollected
 } from '../../utils/memberSettlementCalculator'
 import {
     findUpstreamPastUnpaidRounds,
@@ -113,10 +114,11 @@ export default function UpstreamSettlementInline({
 
     // Prize already collected from upstream in current round
     const prizeCollected = useMemo(() => {
-        return payments
-            .filter(p => p.direction === 'upstream_to_dealer' || p.payment_type === 'prize_collection')
-            .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        return calculateUpstreamPrizeCollected(payments)
     }, [payments])
+
+    const isPrizeFullyPaid = totalWinnings > 0 && (prizeCollected >= totalWinnings || Boolean(status.isSettled))
+    const isPrizePartiallyPaid = totalWinnings > 0 && !status.isSettled && prizeCollected > 0 && prizeCollected < totalWinnings
 
     // Available prize from current round that can be used for cross-round offset
     const availableWinnings = Math.max(0, Math.round(totalWinnings - prizeCollected))
@@ -346,9 +348,31 @@ export default function UpstreamSettlementInline({
                 </div>
                 <div className="upstream-strip-col">
                     <span className="upstream-strip-label">รับคืนรางวัล</span>
-                    <span className="upstream-strip-val" style={{ color: 'var(--color-success)' }}>
+                    <span 
+                        className="upstream-strip-val" 
+                        style={{ 
+                            color: 'var(--color-success)',
+                            textDecoration: isPrizeFullyPaid ? 'line-through' : 'none',
+                            textDecorationThickness: isPrizeFullyPaid ? '1.5px' : 'auto',
+                            opacity: isPrizeFullyPaid ? 0.65 : 1
+                        }}
+                        title={isPrizeFullyPaid ? (status.isSettled ? `เคลียร์ยอดครบแล้ว (รวมเงินรางวัล ฿${totalWinnings.toLocaleString()})` : `รับคืนเงินรางวัลครบแล้ว (฿${prizeCollected.toLocaleString()})`) : undefined}
+                    >
                         +฿{totalWinnings.toLocaleString()}
                     </span>
+                    {isPrizePartiallyPaid && (
+                        <span 
+                            style={{ 
+                                fontSize: '0.68rem', 
+                                color: 'var(--color-warning, #f59e0b)', 
+                                fontWeight: 'normal',
+                                marginTop: '0.15rem' 
+                            }}
+                            title={`รับแล้ว ฿${prizeCollected.toLocaleString()} / ค้างรับอีก ฿${(totalWinnings - prizeCollected).toLocaleString()}`}
+                        >
+                            (รับแล้ว ฿{prizeCollected.toLocaleString()})
+                        </span>
+                    )}
                 </div>
                 <div className="upstream-strip-col">
                     <span className="upstream-strip-label">ชำระแล้ว (เราจ่าย / เจ้ามือจ่าย)</span>

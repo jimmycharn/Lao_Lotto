@@ -415,14 +415,34 @@ export function getUpstreamSettlementStatus(currentBalance) {
 }
 
 /**
+ * Checks if a payment record is specifically a prize collection from upstream dealer
+ */
+export function isUpstreamPrizePayment(p) {
+    if (!p) return false
+    if (p.payment_type === 'prize_collection') return true
+    if (p.payment_type === 'net_settlement') return false
+    if (p.notes && (p.notes.includes('รางวัล') || p.notes.includes('prize') || p.notes.includes('ถูกรางวัล') || p.notes.includes('คืนรางวัล'))) return true
+    if (p.direction === 'upstream_to_dealer') return true
+    return false
+}
+
+/**
+ * Calculates total prize amount already collected/received from upstream dealer in a round
+ */
+export function calculateUpstreamPrizeCollected(payments = []) {
+    if (!Array.isArray(payments) || payments.length === 0) return 0
+    return payments
+        .filter(isUpstreamPrizePayment)
+        .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+}
+
+/**
  * Calculates preset amount for upstream payment form
  */
 export function getUpstreamPaymentPresetAmount(transfer, payments = [], paymentType = 'net_settlement') {
     if (paymentType === 'prize_collection') {
         const totalWinnings = Number(transfer?.winnings || 0)
-        const prizeCollected = payments
-            .filter(p => p.payment_type === 'prize_collection')
-            .reduce((sum, p) => sum + Number(p.amount || 0), 0)
+        const prizeCollected = calculateUpstreamPrizeCollected(payments)
         return Math.max(0, Math.round(totalWinnings - prizeCollected))
     }
 

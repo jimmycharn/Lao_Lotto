@@ -94,6 +94,7 @@ import {
     calculateUpstreamInitialBalance,
     calculateUpstreamCurrentBalance,
     getUpstreamSettlementStatus,
+    calculateUpstreamPrizeCollected,
     calculateTransferCommission,
     calculateTransferWinning,
     calculateRoundOutstandingDetails,
@@ -5642,6 +5643,10 @@ export default function Dealer() {
                                                                                                                     const settlementRowKey = `${history.id}_${upstreamName}`
                                                                                                                     const isExpanded = expandedUpstreamSettlementId === settlementRowKey
                                                                                                                     const isSettled = Boolean(settlementStatus.isSettled)
+                                                                                                                    const upstreamWinnings = Math.round(t.winnings || 0)
+                                                                                                                    const prizeCollected = calculateUpstreamPrizeCollected(upstreamPayments)
+                                                                                                                    const isPrizeFullyPaid = upstreamWinnings > 0 && (prizeCollected >= upstreamWinnings || isSettled)
+                                                                                                                    const isPrizePartiallyPaid = upstreamWinnings > 0 && !isSettled && prizeCollected > 0 && prizeCollected < upstreamWinnings
                                                                                                                     const isRowFocused = keyboardNavTarget?.cardIndex === cardIdx && keyboardNavTarget?.section === 'upstream' && keyboardNavTarget?.rowIndex === upIdx
 
                                                                                                                     return (
@@ -5689,7 +5694,49 @@ export default function Dealer() {
                                                                                                                                 <td className="col-entries" style={{ padding: "0.55rem 0.4rem", textAlign: "center", whiteSpace: "nowrap" }}>{entriesCount}</td>
                                                                                                                                 <td className="col-amount" style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: "#ef4444", whiteSpace: "nowrap" }}>-฿{(t.amount || 0).toLocaleString()}</td>
                                                                                                                                 <td className="col-comm" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>+฿{Math.round(t.commission_earned || 0).toLocaleString()}</td>
-                                                                                                                                <td className="col-win" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>+฿{(t.winnings || 0).toLocaleString()}</td>
+                                                                                                                                <td className="col-win" style={{ padding: "0.55rem 0.65rem", textAlign: "right", color: "var(--color-success)", whiteSpace: "nowrap" }}>
+                                                                                                                                    {(() => {
+                                                                                                                                        if (upstreamWinnings <= 0) {
+                                                                                                                                            return <span style={{ color: "var(--color-text-muted)" }}>+฿0</span>
+                                                                                                                                        }
+                                                                                                                                        if (isPrizeFullyPaid) {
+                                                                                                                                            return (
+                                                                                                                                                <span 
+                                                                                                                                                    style={{ 
+                                                                                                                                                        textDecoration: "line-through", 
+                                                                                                                                                        textDecorationThickness: "1.5px",
+                                                                                                                                                        color: "var(--color-success)", 
+                                                                                                                                                        opacity: 0.65 
+                                                                                                                                                    }}
+                                                                                                                                                    title={isSettled ? `เคลียร์ยอดครบแล้ว (รวมเงินรางวัล ฿${upstreamWinnings.toLocaleString()})` : `รับคืนเงินรางวัลครบแล้ว (฿${prizeCollected.toLocaleString()})`}
+                                                                                                                                                >
+                                                                                                                                                    +฿{upstreamWinnings.toLocaleString()}
+                                                                                                                                                </span>
+                                                                                                                                            )
+                                                                                                                                        }
+                                                                                                                                        if (isPrizePartiallyPaid) {
+                                                                                                                                            return (
+                                                                                                                                                <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-end", lineHeight: 1.25 }}>
+                                                                                                                                                    <span style={{ color: "var(--color-success)", fontWeight: 600 }}>
+                                                                                                                                                        +฿{upstreamWinnings.toLocaleString()}
+                                                                                                                                                    </span>
+                                                                                                                                                    <span 
+                                                                                                                                                        style={{ 
+                                                                                                                                                            fontSize: "0.65rem", 
+                                                                                                                                                            color: "var(--color-warning, #f59e0b)", 
+                                                                                                                                                            fontWeight: "normal",
+                                                                                                                                                            whiteSpace: "nowrap" 
+                                                                                                                                                        }}
+                                                                                                                                                        title={`รับแล้ว ฿${prizeCollected.toLocaleString()} / ค้างรับอีก ฿${(upstreamWinnings - prizeCollected).toLocaleString()}`}
+                                                                                                                                                    >
+                                                                                                                                                        (รับแล้ว ฿{prizeCollected.toLocaleString()})
+                                                                                                                                                    </span>
+                                                                                                                                                </div>
+                                                                                                                                            )
+                                                                                                                                        }
+                                                                                                                                        return <span style={{ color: "var(--color-success)" }}>+฿{upstreamWinnings.toLocaleString()}</span>
+                                                                                                                                    })()}
+                                                                                                                                </td>
                                                                                                                                 <td className="col-profit" style={{ padding: "0.55rem 0.65rem", textAlign: "right", fontWeight: 600, color: tProfit >= 0 ? "var(--color-success)" : "#ef4444", whiteSpace: "nowrap" }}>
                                                                                                                                     {tProfit >= 0 ? "+฿" : "-฿"}{Math.abs(Math.round(tProfit)).toLocaleString()}
                                                                                                                                 </td>
