@@ -50,6 +50,8 @@ import {
     parseTodConversionNote,
     calculateTransferDeduction
 } from '../../utils/layoffTodConverter'
+import BetTypeChipsFilter from './BetTypeChipsFilter'
+import { isBetTypeMatched } from '../../utils/betTypeFilterHelper'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
 import MemberTimeExtensionModal from './MemberTimeExtensionModal'
@@ -286,7 +288,7 @@ export default function RoundAccordionItem({
     const [inlineIncomingCommissions, setInlineIncomingCommissions] = useState({}) // { dealerEmail: { totalCommission, ... } }
     const [inlineLoading, setInlineLoading] = useState(false)
     const [inlineUserFilter, setInlineUserFilter] = useState('all')
-    const [inlineBetTypeFilter, setInlineBetTypeFilter] = useState('all')
+    const [inlineSelectedBetTypes, setInlineSelectedBetTypes] = useState([])
     const [inlineSearch, setInlineSearch] = useState('')
     // Member filter: 'all' = all members, 'submitted' = only members who submitted
     const [memberFilterMode, setMemberFilterMode] = useState('all')
@@ -3521,8 +3523,8 @@ export default function RoundAccordionItem({
                     {/* Submissions Tab Content - for both open rounds and closed rounds with submissions tab */}
                     {(isOpen || (!isOpen && closedRoundTab === 'submissions')) && (
                         <div className="inline-submissions-view">
-                            <div className="inline-global-filters">
-                                <div className="search-input-wrapper">
+                            <div className="inline-global-filters" style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                <div className="search-input-wrapper" style={{ width: '100%' }}>
                                     <FiSearch className="search-icon" />
                                     <input
                                         type="text"
@@ -3530,24 +3532,17 @@ export default function RoundAccordionItem({
                                         onChange={(e) => setInlineSearch(e.target.value)}
                                         placeholder="ค้นหาเลขหรือบันทึกช่วยจำ..."
                                         className="form-input search-input"
-                                        style={{ fontSize: '0.85rem', height: '32px' }}
+                                        style={{ fontSize: '0.85rem', height: '32px', width: '100%' }}
                                     />
                                     {inlineSearch && (
                                         <button className="search-clear-btn" onClick={() => setInlineSearch('')}><FiX /></button>
                                     )}
                                 </div>
-                                <div className="filter-select-wrapper">
-                                    <select
-                                        value={inlineBetTypeFilter}
-                                        onChange={(e) => setInlineBetTypeFilter(e.target.value)}
-                                        className="form-input filter-select"
-                                    >
-                                        <option value="all">ทุกประเภท</option>
-                                        {Object.entries(BET_TYPES_BY_LOTTERY[round.lottery_type] || {}).map(([type, config]) => (
-                                            <option key={type} value={type}>{config.label || BET_TYPES[type] || type}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                                <BetTypeChipsFilter
+                                    lotteryType={round.lottery_type}
+                                    selectedTypes={inlineSelectedBetTypes}
+                                    onChange={setInlineSelectedBetTypes}
+                                />
                             </div>
 
                             <div className="inline-tabs">
@@ -4013,7 +4008,7 @@ export default function RoundAccordionItem({
                                                     if (s.is_deleted) return false
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                    if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                    if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
                                                     if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                     return true
                                                 })
@@ -4122,7 +4117,7 @@ export default function RoundAccordionItem({
                                                         let preFilteredData = inlineSubmissions.filter(s => {
                                                             const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                             if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                            if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                            if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
                                                             if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                             return true
                                                         })
@@ -4240,7 +4235,7 @@ export default function RoundAccordionItem({
                                                                 let filteredData = inlineSubmissions.filter(s => {
                                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
                                                                     if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
-                                                                    if (inlineBetTypeFilter !== 'all' && s.bet_type !== inlineBetTypeFilter) return false
+                                                                    if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
                                                                     if (inlineSearch && !s.numbers.includes(inlineSearch) && !(s.bill_note && s.bill_note.toLowerCase().includes(inlineSearch.toLowerCase()))) return false
                                                                     return true
                                                                 })
@@ -4407,7 +4402,7 @@ export default function RoundAccordionItem({
                                                         // Filter by user if selected
                                                         const filteredBills = bills.filter(b => {
                                                             if (inlineUserFilter !== 'all' && b.user_name !== inlineUserFilter) return false
-                                                            if (inlineBetTypeFilter !== 'all' && !b.items.some(item => item.bet_type === inlineBetTypeFilter)) return false
+                                                            if (inlineSelectedBetTypes.length > 0 && !b.items.some(item => isBetTypeMatched(item.bet_type, inlineSelectedBetTypes))) return false
                                                             if (inlineSearch && !(b.bill_note && b.bill_note.toLowerCase().includes(inlineSearch.toLowerCase())) && !b.items.some(item => item.numbers.includes(inlineSearch))) return false
                                                             return true
                                                         })
@@ -4457,8 +4452,8 @@ export default function RoundAccordionItem({
                                                                 if (!isBillCancelled) {
                                                                     filteredItems = filteredItems.filter(item => !item.is_deleted)
                                                                 }
-                                                                if (inlineBetTypeFilter !== 'all') {
-                                                                    filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                                if (inlineSelectedBetTypes.length > 0) {
+                                                                    filteredItems = filteredItems.filter(item => isBetTypeMatched(item.bet_type, inlineSelectedBetTypes))
                                                                 }
                                                                 // Only count bill if it has filtered items
                                                                 if (filteredItems.length > 0) {
@@ -4627,8 +4622,8 @@ export default function RoundAccordionItem({
                                                                     </div>
                                                                     {/* Row 2: amount + commission + (leftover or winning total) */}
                                                                     {(() => {
-                                                                        const userAmount = inlineBetTypeFilter === 'all' ? userGroup.total : filteredTotal
-                                                                        const userCom = inlineBetTypeFilter === 'all' ? userGroup.totalCommission : filteredCommission
+                                                                        const userAmount = inlineSelectedBetTypes.length === 0 ? userGroup.total : filteredTotal
+                                                                        const userCom = inlineSelectedBetTypes.length === 0 ? userGroup.totalCommission : filteredCommission
                                                                         const userLeftover = userAmount - userCom
                                                                         const userProfit = userAmount - userCom - userTotalWinPayout
                                                                         return (
@@ -4718,8 +4713,8 @@ export default function RoundAccordionItem({
                                                                                                      if (!isBillAllCancelled) {
                                                                                                          filteredItems = filteredItems.filter(item => !item.is_deleted)
                                                                                                      }
-                                                                                                     if (inlineBetTypeFilter !== 'all') {
-                                                                                                         filteredItems = filteredItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                                                                     if (inlineSelectedBetTypes.length > 0) {
+                                                                                                         filteredItems = filteredItems.filter(item => isBetTypeMatched(item.bet_type, inlineSelectedBetTypes))
                                                                                                      }
                                                                                                      if (billDisplayMode === 'summary') {
                                                                                                          const byEntry = {}
@@ -4770,14 +4765,14 @@ export default function RoundAccordionItem({
                                                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                                                                             <span style={{ fontWeight: '600', fontSize: '0.95rem', textDecoration: isBillAllCancelled ? 'line-through' : 'none', color: isBillAllCancelled ? '#ef4444' : 'inherit' }}>
                                                                                                 {round.currency_symbol}{(() => {
-                                                                                                    if (inlineBetTypeFilter === 'all') return (isBillAllCancelled ? bill.originalTotal : bill.activeTotal).toLocaleString()
-                                                                                                    return bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
+                                                                                                    if (inlineSelectedBetTypes.length === 0) return (isBillAllCancelled ? bill.originalTotal : bill.activeTotal).toLocaleString()
+                                                                                                    return bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)).reduce((sum, item) => sum + item.amount, 0).toLocaleString()
                                                                                                 })()}
                                                                                             </span>
                                                                                             <span style={{ fontSize: '0.8rem', color: isBillAllCancelled ? '#ef4444' : 'var(--color-warning)', textDecoration: isBillAllCancelled ? 'line-through' : 'none' }}>
                                                                                                 คอม {round.currency_symbol}{(() => {
-                                                                                                    if (inlineBetTypeFilter === 'all') return Math.round(bill.items.filter(item => isBillAllCancelled || !item.is_deleted).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
-                                                                                                    return Math.round(bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && item.bet_type === inlineBetTypeFilter).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
+                                                                                                    if (inlineSelectedBetTypes.length === 0) return Math.round(bill.items.filter(item => isBillAllCancelled || !item.is_deleted).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
+                                                                                                    return Math.round(bill.items.filter(item => (isBillAllCancelled || !item.is_deleted) && isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)).reduce((sum, item) => sum + getCommission(item), 0)).toLocaleString()
                                                                                                 })()}
                                                                                             </span>
                                                                                         </div>
@@ -4821,8 +4816,8 @@ export default function RoundAccordionItem({
                                                                                                     new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
                                                                                                 )
                                                                                             // Filter items by bet type if selected
-                                                                                            if (inlineBetTypeFilter !== 'all') {
-                                                                                                displayItems = displayItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                                                            if (inlineSelectedBetTypes.length > 0) {
+                                                                                                displayItems = displayItems.filter(item => isBetTypeMatched(item.bet_type, inlineSelectedBetTypes))
                                                                                             }
                                                                                             // Group items by entry_id for summary mode
                                                                                             if (billDisplayMode === 'summary') {
@@ -5003,8 +4998,8 @@ export default function RoundAccordionItem({
                                                     .filter(item => item.remainingAmount > 0)
                                                 
                                                 // Apply filters
-                                                if (inlineBetTypeFilter !== 'all') {
-                                                    remainingItems = remainingItems.filter(item => item.bet_type === inlineBetTypeFilter)
+                                                if (inlineSelectedBetTypes.length > 0) {
+                                                    remainingItems = remainingItems.filter(item => isBetTypeMatched(item.bet_type, inlineSelectedBetTypes))
                                                 }
                                                 if (inlineSearch) {
                                                     remainingItems = remainingItems.filter(item => item.numbers.includes(inlineSearch))
@@ -5092,7 +5087,7 @@ export default function RoundAccordionItem({
 
                                     {inlineTab === 'excess' && (() => {
                                         const filteredExcessItems = activeExcessItems.filter(item => {
-                                            if (inlineBetTypeFilter !== 'all' && item.bet_type !== inlineBetTypeFilter) return false
+                                            if (!isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)) return false
                                             if (inlineSearch && !item.numbers.includes(inlineSearch)) return false
                                             return true
                                         })
@@ -5680,7 +5675,7 @@ export default function RoundAccordionItem({
 
                                     {inlineTab === 'transferred' && (() => {
                                         const filteredTransfers = inlineTransfers.filter(t => {
-                                            if (inlineBetTypeFilter !== 'all' && t.bet_type !== inlineBetTypeFilter) return false
+                                            if (!isBetTypeMatched(t.bet_type, inlineSelectedBetTypes)) return false
                                             if (inlineSearch && !t.numbers.includes(inlineSearch)) return false
                                             if (transferDealerFilter !== 'all' && t.target_dealer_name !== transferDealerFilter) return false
                                             return true
