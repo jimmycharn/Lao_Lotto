@@ -1774,6 +1774,7 @@ export default function RoundAccordionItem({
             item.transferredAmount = calculateTransferDeduction(inlineTransfers || [], item.bet_type, item.numbers)
         })
 
+        const isSetBasedLottery = ['lao', 'hanoi'].includes(round?.lottery_type)
         const setPrice = round?.set_prices?.['4_top'] || 120
         return Object.values(remainingByKey)
             .map(item => {
@@ -1791,7 +1792,7 @@ export default function RoundAccordionItem({
                 }
             })
             .filter(item => (item.remainingAmount || 0) > 0)
-    }, [inlineSubmissions, inlineTransfers, round?.lottery_type, isSetBasedLottery, round?.set_prices])
+    }, [inlineSubmissions, inlineTransfers, round?.lottery_type, round?.set_prices])
 
     const activeRemainingItems = useMemo(() => {
         if (!isConvertTodToTopRemainingActive) return baseRemainingItems
