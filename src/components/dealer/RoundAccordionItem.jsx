@@ -1749,9 +1749,10 @@ export default function RoundAccordionItem({
     const selectedCount = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
 
     const baseRemainingItems = useMemo(() => {
+        if (!inlineSubmissions || !Array.isArray(inlineSubmissions)) return []
         const remainingByKey = {}
-        inlineSubmissions.filter(s => !s.is_deleted).forEach(s => {
-            let normNum = s.numbers
+        inlineSubmissions.filter(s => s && !s.is_deleted).forEach(s => {
+            let normNum = String(s.numbers ?? '')
             if (s.bet_type === '3_tod' || s.bet_type === '4_tod') {
                 normNum = normNum.split('').sort().join('')
             }
@@ -1760,40 +1761,48 @@ export default function RoundAccordionItem({
                 remainingByKey[key] = {
                     numbers: normNum,
                     bet_type: s.bet_type,
-                    display_bet_type: s.display_bet_type || BET_TYPES_BY_LOTTERY[round.lottery_type]?.[s.bet_type]?.label || BET_TYPES[s.bet_type] || s.bet_type,
+                    display_bet_type: s.display_bet_type || BET_TYPES_BY_LOTTERY[round?.lottery_type]?.[s.bet_type]?.label || BET_TYPES[s.bet_type] || s.bet_type,
                     totalAmount: 0,
                     transferredAmount: 0
                 }
             }
-            remainingByKey[key].totalAmount += s.amount || 0
+            remainingByKey[key].totalAmount += Number(s.amount) || 0
         })
 
         // Deduct transfers using calculateTransferDeduction
         Object.values(remainingByKey).forEach(item => {
-            item.transferredAmount = calculateTransferDeduction(inlineTransfers, item.bet_type, item.numbers)
+            item.transferredAmount = calculateTransferDeduction(inlineTransfers || [], item.bet_type, item.numbers)
         })
 
         const setPrice = round?.set_prices?.['4_top'] || 120
         return Object.values(remainingByKey)
-            .map(item => ({
-                ...item,
-                remainingAmount: Math.max(0, item.totalAmount - item.transferredAmount),
-                excess: Math.max(0, item.totalAmount - item.transferredAmount),
-                isSetBased: isSetBasedLottery && (item.bet_type === '4_set' || item.bet_type === '4_top'),
-                setPrice
-            }))
-            .filter(item => item.remainingAmount > 0)
-    }, [inlineSubmissions, inlineTransfers, round.lottery_type, isSetBasedLottery, round.set_prices])
+            .map(item => {
+                const total = Number(item.totalAmount) || 0
+                const trans = Number(item.transferredAmount) || 0
+                const rem = Math.max(0, total - trans)
+                return {
+                    ...item,
+                    totalAmount: total,
+                    transferredAmount: trans,
+                    remainingAmount: rem,
+                    excess: rem,
+                    isSetBased: isSetBasedLottery && (item.bet_type === '4_set' || item.bet_type === '4_top'),
+                    setPrice
+                }
+            })
+            .filter(item => (item.remainingAmount || 0) > 0)
+    }, [inlineSubmissions, inlineTransfers, round?.lottery_type, isSetBasedLottery, round?.set_prices])
 
     const activeRemainingItems = useMemo(() => {
         if (!isConvertTodToTopRemainingActive) return baseRemainingItems
         const converted = mergeTodToTopExcessItems(baseRemainingItems.map(item => ({
             ...item,
-            excess: item.remainingAmount
+            excess: item.remainingAmount || 0
         })))
         return converted.map(item => ({
             ...item,
-            remainingAmount: item.excess
+            totalAmount: Number(item.totalAmount) || Number(item.excess) || 0,
+            remainingAmount: Number(item.excess) || 0
         }))
     }, [baseRemainingItems, isConvertTodToTopRemainingActive])
 
@@ -5347,16 +5356,18 @@ export default function RoundAccordionItem({
                                             if (isSearchActive && !isSearchNumberMatched(item.numbers, activeSearchNumbers, inlineIsCompositeSearch)) return false
                                             return true
                                         }).sort((a, b) => {
-                                            const digitDiff = a.numbers.length - b.numbers.length
+                                            const aNum = String(a?.numbers ?? '')
+                                            const bNum = String(b?.numbers ?? '')
+                                            const digitDiff = aNum.length - bNum.length
                                             if (digitDiff !== 0) return digitDiff
-                                            return a.numbers.localeCompare(b.numbers, undefined, { numeric: true })
+                                            return aNum.localeCompare(bNum, undefined, { numeric: true })
                                         })
 
-                                        const totalRemaining = filteredRemainingItems.reduce((sum, item) => sum + item.remainingAmount, 0)
+                                        const totalRemaining = filteredRemainingItems.reduce((sum, item) => sum + (Number(item.remainingAmount) || 0), 0)
                                         const filteredSelectedCount = filteredRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`]).length
                                         const filteredSelectedAmount = filteredRemainingItems
                                             .filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`])
-                                            .reduce((sum, item) => sum + item.remainingAmount, 0)
+                                            .reduce((sum, item) => sum + (Number(item.remainingAmount) || 0), 0)
 
                                         // Compute breakdown by bet_type for filteredRemainingItems
                                         const betTypeStats = {}
@@ -5365,14 +5376,14 @@ export default function RoundAccordionItem({
                                             if (!betTypeStats[bt]) {
                                                 betTypeStats[bt] = {
                                                     bet_type: bt,
-                                                    label: BET_TYPES_BY_LOTTERY[round.lottery_type]?.[bt]?.label || BET_TYPES[bt] || bt,
+                                                    label: BET_TYPES_BY_LOTTERY[round?.lottery_type]?.[bt]?.label || BET_TYPES[bt] || bt,
                                                     count: 0,
                                                     amount: 0,
                                                     selectedCount: 0
                                                 }
                                             }
                                             betTypeStats[bt].count += 1
-                                            betTypeStats[bt].amount += item.remainingAmount
+                                            betTypeStats[bt].amount += (Number(item.remainingAmount) || 0)
                                             if (selectedRemainingItems[`${item.bet_type}|${item.numbers}`]) {
                                                 betTypeStats[bt].selectedCount += 1
                                             }
@@ -5432,7 +5443,7 @@ export default function RoundAccordionItem({
                                                             <div className="summary-item">
                                                                 <span className="label">ยอดที่เหลือ</span>
                                                                 <span className="value text-warning">
-                                                                    {round.currency_symbol}{totalRemaining.toLocaleString()}
+                                                                    {(round?.currency_symbol || '฿')}{(totalRemaining || 0).toLocaleString()}
                                                                 </span>
                                                             </div>
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
@@ -5442,7 +5453,7 @@ export default function RoundAccordionItem({
                                                                         const itemsToCopy = filteredSelectedCount > 0 
                                                                             ? filteredRemainingItems.filter(i => selectedRemainingItems[`${i.bet_type}|${i.numbers}`])
                                                                             : filteredRemainingItems
-                                                                        const copyTotal = itemsToCopy.reduce((sum, i) => sum + i.remainingAmount, 0)
+                                                                        const copyTotal = itemsToCopy.reduce((sum, i) => sum + (Number(i.remainingAmount) || 0), 0)
                                                                         handleCopyRemainingItems(itemsToCopy, copyTotal)
                                                                     }}
                                                                     title="คัดลอกยอดที่เหลือ"
@@ -5680,7 +5691,7 @@ export default function RoundAccordionItem({
                                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                                                 {filteredSelectedCount > 0 && (
                                                                     <span style={{ fontSize: '0.82rem', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                                                        {round.currency_symbol}{filteredSelectedAmount.toLocaleString()}
+                                                                        {(round?.currency_symbol || '฿')}{(filteredSelectedAmount || 0).toLocaleString()}
                                                                     </span>
                                                                 )}
                                                                 <button
@@ -5736,7 +5747,7 @@ export default function RoundAccordionItem({
                                                                                     <div>{item.display_bet_type}</div>
                                                                                     {item.isMergedWithTod && (
                                                                                         <div style={{ fontSize: '0.72rem', color: '#fbbf24', marginTop: '0.1rem', fontWeight: 500 }}>
-                                                                                            (ตรงเดิม {round.currency_symbol}{(item.originalTopExcess || 0).toLocaleString()} + แปลงจากโต๊ด {round.currency_symbol}{(item.convertedTodExcess || 0).toLocaleString()})
+                                                                                            (ตรงเดิม {(round?.currency_symbol || '฿')}{(Number(item.originalTopExcess) || 0).toLocaleString()} + แปลงจากโต๊ด {(round?.currency_symbol || '฿')}{(Number(item.convertedTodExcess) || 0).toLocaleString()})
                                                                                         </div>
                                                                                     )}
                                                                                     {item.isConvertedFromTod && !item.isMergedWithTod && (
@@ -5746,10 +5757,10 @@ export default function RoundAccordionItem({
                                                                                     )}
                                                                                 </td>
                                                                                 <td style={{ color: 'var(--color-text-muted)' }}>
-                                                                                    {round.currency_symbol}{item.totalAmount.toLocaleString()}
+                                                                                    {(round?.currency_symbol || '฿')}{(Number(item.totalAmount) || 0).toLocaleString()}
                                                                                 </td>
                                                                                 <td style={{ fontWeight: 600, color: 'var(--color-warning)', textAlign: 'right' }}>
-                                                                                    {round.currency_symbol}{item.remainingAmount.toLocaleString()}
+                                                                                    {(round?.currency_symbol || '฿')}{(Number(item.remainingAmount) || 0).toLocaleString()}
                                                                                 </td>
                                                                             </tr>
                                                                         )
@@ -6317,7 +6328,7 @@ export default function RoundAccordionItem({
                                                                 ประเภทเลขที่จะตีออกในรอบนี้:
                                                             </span>
                                                             <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                                                {modalSelectedCount} รายการ ({round.currency_symbol}{modalSelectedAmount.toLocaleString()})
+                                                                {modalSelectedCount} รายการ ({round?.currency_symbol || '฿'}{(Number(modalSelectedAmount) || 0).toLocaleString()})
                                                             </span>
                                                         </div>
 
@@ -6359,7 +6370,7 @@ export default function RoundAccordionItem({
                                                                             </span>
                                                                         </div>
                                                                         <span style={{ fontSize: '0.82rem', fontWeight: 600, color: isChecked ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
-                                                                            {info.isSetBased ? `${info.excessSets} ชุด` : `${round.currency_symbol}${info.amount.toLocaleString()}`}
+                                                                            {info.isSetBased ? `${info.excessSets} ชุด` : `${round?.currency_symbol || '฿'}{(Number(info.amount) || 0).toLocaleString()}`}
                                                                         </span>
                                                                     </label>
                                                                 )
@@ -6424,15 +6435,15 @@ export default function RoundAccordionItem({
                                                                                     {willTransfer ? (
                                                                                         <span>
                                                                                             <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginRight: '0.4rem' }}>
-                                                                                                (เดิม {round.currency_symbol}{item.originalRemaining?.toLocaleString()})
+                                                                                                (เดิม {round?.currency_symbol || '฿'}{(Number(item.originalRemaining) || 0).toLocaleString()})
                                                                                             </span>
                                                                                             <span style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
-                                                                                                ตีออก {round.currency_symbol}{item.excess.toLocaleString()}
+                                                                                                ตีออก {round?.currency_symbol || '฿'}{(Number(item.excess) || 0).toLocaleString()}
                                                                                             </span>
                                                                                         </span>
                                                                                     ) : (
                                                                                         <span style={{ color: 'var(--color-text-muted)', fontSize: '0.74rem', fontStyle: 'italic' }}>
-                                                                                            เหลือ {round.currency_symbol}{item.originalRemaining?.toLocaleString()} (ข้าม - ไม่เกินยอดเก็บ)
+                                                                                            เหลือ {round?.currency_symbol || '฿'}{(Number(item.originalRemaining) || 0).toLocaleString()} (ข้าม - ไม่เกินยอดเก็บ)
                                                                                         </span>
                                                                                     )}
                                                                                 </div>

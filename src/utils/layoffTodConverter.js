@@ -172,31 +172,32 @@ export function parseTodConversionNote(note) {
 export function calculateTransferDeduction(transfers, targetBetType, targetNumbers) {
     if (!Array.isArray(transfers) || transfers.length === 0) return 0
 
+    const targetStr = String(targetNumbers ?? '')
     let total = 0
     transfers.forEach(t => {
-        if (t.status === 'returned') return
+        if (!t || t.status === 'returned') return
 
         const meta = parseTodConversionNote(t.notes)
         if (meta) {
             // Case A: Calculating for 3_tod
-            if (targetBetType === '3_tod' && meta.originalTodNumbers === targetNumbers) {
-                total += (meta.convertedTodExcess || 0)
+            if (targetBetType === '3_tod' && String(meta.originalTodNumbers ?? '') === targetStr) {
+                total += (Number(meta.convertedTodExcess) || 0)
             }
             // Case B: Calculating for 3_top
-            else if (targetBetType === '3_top' && t.numbers === targetNumbers) {
+            else if (targetBetType === '3_top' && String(t.numbers ?? '') === targetStr) {
                 if (meta.isMergedWithTod) {
-                    total += (meta.originalTopExcess || 0)
+                    total += (Number(meta.originalTopExcess) || 0)
                 }
                 // If it was pure converted tod without merge, it was allocated for tod, not original 3_top
             }
         } else {
             // Standard non-converted transfer
-            let tNum = t.numbers
+            let tNum = String(t.numbers ?? '')
             if (t.bet_type === '3_tod' || t.bet_type === '4_tod') {
                 tNum = tNum.split('').sort().join('')
             }
-            if (t.bet_type === targetBetType && tNum === targetNumbers) {
-                total += (t.amount || 0)
+            if (t.bet_type === targetBetType && tNum === targetStr) {
+                total += (Number(t.amount) || 0)
             }
         }
     })
