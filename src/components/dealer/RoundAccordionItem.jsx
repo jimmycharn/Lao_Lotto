@@ -6394,63 +6394,55 @@ export default function RoundAccordionItem({
                                                             padding: '0.65rem 0.85rem',
                                                             marginBottom: '1rem'
                                                         }}>
-                                                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between' }}>
-                                                                <span>ตัวอย่างรายการที่จะตีออกจริง ({modalSelectedCount}/{calculatedRemainingTransferItems.length}):</span>
+                                                            <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <span>รายการที่จะตีออก ({modalSelectedCount} รายการ):</span>
                                                                 {remainingLayoffMode === 'retain' && Number(remainingRetainAmount) > 0 && (
-                                                                    <span style={{ color: '#94a3b8' }}>เก็บไว้ตัวละ {round.currency_symbol}{Number(remainingRetainAmount).toLocaleString()}</span>
+                                                                    <span style={{ color: '#94a3b8' }}>เก็บไว้ตัวละ {round?.currency_symbol || '฿'}{Number(remainingRetainAmount).toLocaleString()}</span>
                                                                 )}
                                                             </div>
-                                                            <div style={{ maxHeight: '140px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                                                                {calculatedRemainingTransferItems
-                                                                    .filter(item => transferModalBetTypes[item.bet_type] !== false)
-                                                                    .map((item, idx) => {
-                                                                        const willTransfer = item.excess > 0
-                                                                        return (
-                                                                            <div
-                                                                                key={idx}
-                                                                                style={{
-                                                                                    display: 'flex',
-                                                                                    alignItems: 'center',
-                                                                                    justifyContent: 'space-between',
-                                                                                    padding: '0.35rem 0.55rem',
-                                                                                    background: willTransfer ? 'rgba(255,255,255,0.03)' : 'rgba(239, 68, 68, 0.05)',
-                                                                                    borderRadius: '4px',
-                                                                                    fontSize: '0.8rem',
-                                                                                    opacity: willTransfer ? 1 : 0.6
-                                                                                }}
-                                                                            >
-                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                                                                    <span style={{ fontFamily: 'monospace', fontWeight: 600, color: willTransfer ? '#fbbf24' : 'var(--color-text-muted)', minWidth: '45px' }}>
-                                                                                        {item.displayNumbers || item.numbers}
+                                                            <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                                                                {modalSelectedItems.length === 0 ? (
+                                                                    <div style={{ textAlign: 'center', padding: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' }}>
+                                                                        ไม่มีรายการที่จะตีออก (ไม่มียอดที่เกินจำนวนเงินที่เก็บไว้)
+                                                                    </div>
+                                                                ) : (
+                                                                    modalSelectedItems.map((item, idx) => (
+                                                                        <div
+                                                                            key={idx}
+                                                                            style={{
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                justifyContent: 'space-between',
+                                                                                padding: '0.35rem 0.55rem',
+                                                                                background: 'rgba(255,255,255,0.03)',
+                                                                                borderRadius: '4px',
+                                                                                fontSize: '0.8rem'
+                                                                            }}
+                                                                        >
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                                                <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#fbbf24', minWidth: '45px' }}>
+                                                                                    {item.displayNumbers || item.numbers}
+                                                                                </span>
+                                                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.74rem' }}>
+                                                                                    {BET_TYPES_BY_LOTTERY[round?.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                </span>
+                                                                                {item.isConvertedFromTod && (
+                                                                                    <span style={{ fontSize: '0.68rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>
+                                                                                        แตกโต๊ด
                                                                                     </span>
-                                                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.74rem' }}>
-                                                                                        {BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
-                                                                                    </span>
-                                                                                    {item.isConvertedFromTod && (
-                                                                                        <span style={{ fontSize: '0.68rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>
-                                                                                            แตกโต๊ด
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                <div style={{ textAlign: 'right' }}>
-                                                                                    {willTransfer ? (
-                                                                                        <span>
-                                                                                            <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginRight: '0.4rem' }}>
-                                                                                                (เดิม {round?.currency_symbol || '฿'}{(Number(item.originalRemaining) || 0).toLocaleString()})
-                                                                                            </span>
-                                                                                            <span style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
-                                                                                                ตีออก {round?.currency_symbol || '฿'}{(Number(item.excess) || 0).toLocaleString()}
-                                                                                            </span>
-                                                                                        </span>
-                                                                                    ) : (
-                                                                                        <span style={{ color: 'var(--color-text-muted)', fontSize: '0.74rem', fontStyle: 'italic' }}>
-                                                                                            เหลือ {round?.currency_symbol || '฿'}{(Number(item.originalRemaining) || 0).toLocaleString()} (ข้าม - ไม่เกินยอดเก็บ)
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
+                                                                                )}
                                                                             </div>
-                                                                        )
-                                                                    })}
+                                                                            <div style={{ textAlign: 'right' }}>
+                                                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginRight: '0.4rem' }}>
+                                                                                    (เดิม {round?.currency_symbol || '฿'}{(Number(item.originalRemaining) || 0).toLocaleString()})
+                                                                                </span>
+                                                                                <span style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
+                                                                                    ตีออก {round?.currency_symbol || '฿'}{(Number(item.excess) || 0).toLocaleString()}
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))
+                                                                )}
                                                             </div>
                                                         </div>
                                                     )}
