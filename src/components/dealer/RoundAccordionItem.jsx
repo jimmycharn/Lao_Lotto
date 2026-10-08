@@ -6371,7 +6371,7 @@ export default function RoundAccordionItem({
                                                                             </span>
                                                                         </div>
                                                                         <span style={{ fontSize: '0.82rem', fontWeight: 600, color: isChecked ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
-                                                                            {info.isSetBased ? `${info.excessSets} ชุด` : `${round?.currency_symbol || '฿'}{(Number(info.amount) || 0).toLocaleString()}`}
+                                                                            {info.isSetBased ? `${info.excessSets} ชุด` : `${round?.currency_symbol || '฿'}${(Number(info.amount) || 0).toLocaleString()}`}
                                                                         </span>
                                                                     </label>
                                                                 )
