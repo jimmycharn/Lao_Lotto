@@ -293,7 +293,7 @@ export default function RoundAccordionItem({
     const [inlineSelectedBetTypes, setInlineSelectedBetTypes] = useState([])
     const [inlineSearch, setInlineSearch] = useState('')
     const [inlineSearchNumbers, setInlineSearchNumbers] = useState([])
-    const [inlineIsCompositeSearch, setInlineIsCompositeSearch] = useState(false)
+    const [inlineIsCompositeSearch, setInlineIsCompositeSearch] = useState(true)
 
     // Active search numbers (includes confirmed number chips + current text input if any)
     const activeSearchNumbers = useMemo(() => {
