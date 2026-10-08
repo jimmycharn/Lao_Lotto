@@ -187,17 +187,29 @@ export function matchesCompositeDigits(numberStr, searchStr) {
 
 /**
  * Checks if numberStr matches searchStr given the composite search option
+ * Supports searchStr as string, number, or array of strings/numbers
  * @param {string|number} numberStr 
- * @param {string} searchStr 
+ * @param {string|number|Array<string|number>} searchStr 
  * @param {boolean} isComposite 
  * @returns {boolean}
  */
 export function isSearchNumberMatched(numberStr, searchStr, isComposite = false) {
     if (!searchStr) return true
     if (!numberStr) return false
-    if (isComposite) {
-        return matchesCompositeDigits(numberStr, searchStr)
+
+    // Support array of search target numbers (e.g. ['123', '465', '789'])
+    if (Array.isArray(searchStr)) {
+        const validTargets = searchStr.filter(t => t !== null && t !== undefined && String(t).trim() !== '')
+        if (validTargets.length === 0) return true
+        return validTargets.some(target => isSearchNumberMatched(numberStr, target, isComposite))
     }
-    return String(numberStr).includes(String(searchStr))
+
+    const trimmedSearch = String(searchStr).trim()
+    if (!trimmedSearch) return true
+
+    if (isComposite) {
+        return matchesCompositeDigits(numberStr, trimmedSearch)
+    }
+    return String(numberStr).includes(trimmedSearch)
 }
 

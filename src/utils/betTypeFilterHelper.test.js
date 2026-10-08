@@ -238,6 +238,28 @@ describe('betTypeFilterHelper', () => {
             expect(isSearchNumberMatched('2513', '123', true)).toBe(true)
             expect(isSearchNumberMatched('999', '123', true)).toBe(false)
         })
+
+        it('should match any number in an array of search targets', () => {
+            const targets = ['123', '465', '789']
+            expect(isSearchNumberMatched('123', targets, false)).toBe(true)
+            expect(isSearchNumberMatched('465', targets, false)).toBe(true)
+            expect(isSearchNumberMatched('789', targets, false)).toBe(true)
+            expect(isSearchNumberMatched('000', targets, false)).toBe(false)
+            expect(isSearchNumberMatched('12', targets, false)).toBe(false)
+        })
+
+        it('should match any number in an array with composite matching', () => {
+            const targets = ['123', '465']
+            expect(isSearchNumberMatched('321', targets, true)).toBe(true)
+            expect(isSearchNumberMatched('564', targets, true)).toBe(true)
+            expect(isSearchNumberMatched('999', targets, true)).toBe(false)
+        })
+
+        it('should return true if array of search targets is empty', () => {
+            expect(isSearchNumberMatched('123', [], false)).toBe(true)
+            expect(isSearchNumberMatched('123', [], true)).toBe(true)
+            expect(isSearchNumberMatched('123', ['', null], false)).toBe(true)
+        })
     })
 })
 
