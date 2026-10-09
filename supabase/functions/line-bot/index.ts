@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.89.0"
 import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts"
 import { parseMultiLinePaste, ParsedBet, getPermutations, getUnique3DigitPermsFrom4, getUnique3DigitPermsFrom5, extractBuyerNote } from "./pasteParser.ts"
 import { buildBetItems, calculateScenarios, greedyRecommendations } from "./layoffCalculator.ts"
+import { convertAndMergeTodItems } from "./layoffTodConverter.ts"
 import { isMemberCodeParam, matchMembersByCode, parseRoundDateParam, parseMemberAndRoundDateParam } from "./memberCode.ts"
 import { parseWinningNumbers, getWinningNumberFormatHelp } from "./winningNumbers.ts"
 import { isConversationMessage } from "./conversationHelper.ts"
@@ -2106,6 +2107,13 @@ interface ExcessItem {
   bet_type: string;
   numbers: string;
   amount: number;
+  notes?: string;
+  isConvertedFromTod?: boolean;
+  isMergedWithTod?: boolean;
+  originalTodNumbers?: string;
+  originalTodAmount?: number;
+  convertedTodAmount?: number;
+  originalTopAmount?: number;
 }
 
 // Helper: Calculate excess volume for a round
@@ -2478,6 +2486,7 @@ async function performLayoff(
       amount: item.amount,
       target_dealer_name: targetDealerName,
       transfer_batch_id: batchId,
+      notes: item.notes || null,
       upstream_dealer_id: upstreamDealerId || null,
       is_linked: !!targetRoundId,
       target_round_id: targetRoundId,
@@ -13128,8 +13137,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               continue;
             }
 
-            // ─── COMMAND: /ตีออกเฉพาะ หรือ /ตีออกเฉพาะเลข ───
-            if (text.startsWith('/ตีออกเฉพาะ') || text.startsWith('/ตีออกเฉพาะเลข')) {
+            // ─── COMMAND: /ตีออกเฉพาะ, /ตีออกเฉพาะเลข, /ตีออกแปลง, /ตีออกแปลงเลข ───
+            const isLayoffSpecific = text.startsWith('/ตีออกเฉพาะ') || text.startsWith('/ตีออกเฉพาะเลข');
+            const isLayoffConverted = text.startsWith('/ตีออกแปลง') || text.startsWith('/ตีออกแปลงเลข');
+
+            if (isLayoffSpecific || isLayoffConverted) {
               if (!permissions.can_transfer) {
                 await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการสั่งตีออกตัวเลข`);
                 continue;
@@ -13137,7 +13149,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const { data: activeRound } = await supabase
                 .from('lottery_rounds')
-                .select('id, round_date, close_time, set_prices, lottery_type')
+                .select('id, round_date, close_time, set_prices, lottery_type, lottery_name')
                 .eq('dealer_id', dealerId)
                 .eq('lottery_type', groupLink.lottery_type)
                 .in('status', ['open', 'closed', 'announced'])
@@ -13151,14 +13163,19 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               }
 
               let rawBody = '';
-              if (text.startsWith('/ตีออกเฉพาะเลข')) {
+              if (text.startsWith('/ตีออกแปลงเลข')) {
+                rawBody = text.substring('/ตีออกแปลงเลข'.length).trim();
+              } else if (text.startsWith('/ตีออกแปลง')) {
+                rawBody = text.substring('/ตีออกแปลง'.length).trim();
+              } else if (text.startsWith('/ตีออกเฉพาะเลข')) {
                 rawBody = text.substring('/ตีออกเฉพาะเลข'.length).trim();
               } else {
                 rawBody = text.substring('/ตีออกเฉพาะ'.length).trim();
               }
 
+              const cmdPrefix = isLayoffConverted ? '/ตีออกแปลง' : '/ตีออกเฉพาะ';
               if (!rawBody) {
-                await sendLineReply(replyToken, `❌ กรุณาระบุเลขและเงื่อนไขการตีออกเฉพาะ เช่น\n/ตีออกเฉพาะ\n12,31,95 100 บลก`);
+                await sendLineReply(replyToken, `❌ กรุณาระบุเลขและเงื่อนไขการ${isLayoffConverted ? 'ตีออกแปลง' : 'ตีออกเฉพาะ'} เช่น\n${cmdPrefix}\n12,31,95 100 บลก`);
                 continue;
               }
 
@@ -13194,7 +13211,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               );
 
               if (subErr) {
-                console.error("Error fetching submissions for /ตีออกเฉพาะ:", subErr);
+                console.error(`Error fetching submissions for ${cmdPrefix}:`, subErr);
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงข้อมูลโพยแทง: ${subErr.message}`);
                 continue;
               }
@@ -13299,24 +13316,29 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
               }
 
-              if (excessItems.length === 0) {
+              let itemsToLayoff: ExcessItem[] = excessItems;
+              if (isLayoffConverted) {
+                itemsToLayoff = convertAndMergeTodItems(excessItems, activeRound.lottery_type);
+              }
+
+              if (itemsToLayoff.length === 0) {
                 await sendLineReply(replyToken, `ℹ️ เลขที่ระบุไม่มีสัดส่วนที่เกินจากเกณฑ์ ไม่จำเป็นต้องตีออกค่ะ 🎉`);
                 continue;
               }
 
               if (!isConfirmed) {
-                const totalAmount = excessItems.reduce((sum, item) => sum + item.amount, 0);
+                const totalAmount = itemsToLayoff.reduce((sum, item) => sum + item.amount, 0);
                 const lotteryName = activeRound.lottery_name || activeRound.lottery_type.toUpperCase();
                 const roundDateStr = getRoundDisplayDate(activeRound, false);
 
-                let previewText = `⚡ ยืนยันการตีออกเฉพาะเลข\n`;
+                let previewText = isLayoffConverted ? `⚡ ยืนยันการตีออกแปลงเลข\n` : `⚡ ยืนยันการตีออกเฉพาะเลข\n`;
                 previewText += `ประเภทหวย: ${lotteryName}\n`;
                 if (roundDateStr) previewText += `งวดวันที่: ${roundDateStr}\n`;
-                previewText += `จำนวน: ${excessItems.length} รายการ\n`;
+                previewText += `จำนวน: ${itemsToLayoff.length} รายการ\n`;
                 previewText += `💰 ยอดรวมตีออก: ฿${totalAmount.toLocaleString('th-TH')}\n`;
                 previewText += `--------------------------\n`;
 
-                const itemLines = excessItems.map(item => {
+                const itemLines = itemsToLayoff.map(item => {
                   const label = getThaiBetTypeLabel(item.bet_type, activeRound.lottery_type);
                   return `• ${item.numbers} (${label}) = ฿${item.amount.toLocaleString('th-TH')}`;
                 });
@@ -13324,7 +13346,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 previewText += `\n--------------------------\n`;
                 previewText += `👉 กดปุ่ม "ตกลง" ด้านล่างเพื่อยืนยัน หรือกด "ยกเลิก" เพื่อยกเลิกรายการค่ะ`;
 
-                const confirmCmdText = `/ตีออกเฉพาะ\n${body} ตกลง`;
+                const confirmCmdText = `${cmdPrefix}\n${body} ตกลง`;
 
                 await sendLineReply(replyToken, {
                   type: "text",
@@ -13353,9 +13375,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              const result = await performLayoff(dealerId, activeRound.id, activeRound.lottery_type, excessItems);
+              const result = await performLayoff(dealerId, activeRound.id, activeRound.lottery_type, itemsToLayoff);
               if (result.success) {
-                await sendLineReply(replyToken, result.text || `✅ ตีออกเฉพาะเลขสำเร็จเรียบร้อยแล้วค่ะ`);
+                await sendLineReply(replyToken, result.text || `✅ ตีออก${isLayoffConverted ? 'แปลง' : 'เฉพาะ'}เลขสำเร็จเรียบร้อยแล้วค่ะ`);
               } else {
                 await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการตีออก:\n${result.message}`);
               }
