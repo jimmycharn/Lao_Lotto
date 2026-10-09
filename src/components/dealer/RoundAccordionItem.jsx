@@ -53,6 +53,7 @@ import {
     calculateTransferDeduction,
     getRemainingBetTypeDisplay
 } from '../../utils/layoffTodConverter'
+import { sortRemainingItems } from '../../utils/remainingSortHelper'
 import BetTypeChipsFilter from './BetTypeChipsFilter'
 import { isBetTypeMatched, isSearchNumberMatched } from '../../utils/betTypeFilterHelper'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
@@ -397,6 +398,8 @@ export default function RoundAccordionItem({
     const [isConvertTodToTopRemainingActive, setIsConvertTodToTopRemainingActive] = useState(false)
     const [transferSource, setTransferSource] = useState('excess') // 'excess' | 'remaining'
     const [remainingRetainByType, setRemainingRetainByType] = useState({}) // { [bet_type]: number | '' }
+    const [remainingSortBy, setRemainingSortBy] = useState('number') // 'number' | 'remaining' | 'total'
+    const [remainingSortOrder, setRemainingSortOrder] = useState('asc') // 'asc' | 'desc'
     
     // Upstream dealers for transfer selection
     const [upstreamDealers, setUpstreamDealers] = useState([])
@@ -1800,6 +1803,15 @@ export default function RoundAccordionItem({
     const toggleRemainingItem = (item) => {
         const key = `${item.bet_type}|${item.numbers}`
         setSelectedRemainingItems(prev => ({ ...prev, [key]: !prev[key] }))
+    }
+
+    const handleToggleRemainingSort = (colKey) => {
+        if (remainingSortBy === colKey) {
+            setRemainingSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+        } else {
+            setRemainingSortBy(colKey)
+            setRemainingSortOrder(colKey === 'number' ? 'asc' : 'desc')
+        }
     }
 
     // Calculate items for remaining transfer:
@@ -5351,17 +5363,12 @@ export default function RoundAccordionItem({
 
                                     {inlineTab === 'remaining' && (() => {
                                         // Filter activeRemainingItems by inlineSelectedBetTypes and activeSearchNumbers
-                                        const filteredRemainingItems = activeRemainingItems.filter(item => {
+                                        const rawRemainingItems = activeRemainingItems.filter(item => {
                                             if (!isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)) return false
                                             if (isSearchActive && !isSearchNumberMatched(item.numbers, activeSearchNumbers, inlineIsCompositeSearch)) return false
                                             return true
-                                        }).sort((a, b) => {
-                                            const aNum = String(a?.numbers ?? '')
-                                            const bNum = String(b?.numbers ?? '')
-                                            const digitDiff = aNum.length - bNum.length
-                                            if (digitDiff !== 0) return digitDiff
-                                            return aNum.localeCompare(bNum, undefined, { numeric: true })
                                         })
+                                        const filteredRemainingItems = sortRemainingItems(rawRemainingItems, remainingSortBy, remainingSortOrder)
 
                                         const totalRemaining = filteredRemainingItems.reduce((sum, item) => sum + (Number(item.remainingAmount) || 0), 0)
                                         const filteredSelectedCount = filteredRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`]).length
@@ -5828,10 +5835,34 @@ export default function RoundAccordionItem({
                                                                 <thead>
                                                                     <tr>
                                                                         <th style={{ width: '36px', textAlign: 'center' }}></th>
-                                                                        <th>เลข</th>
+                                                                        <th 
+                                                                            onClick={() => handleToggleRemainingSort('number')}
+                                                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                                            title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"
+                                                                        >
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: remainingSortBy === 'number' ? 'var(--color-warning)' : 'inherit' }}>
+                                                                                เลข {remainingSortBy === 'number' ? (remainingSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                            </span>
+                                                                        </th>
                                                                         <th>ประเภท</th>
-                                                                        <th>ยอดรวม</th>
-                                                                        <th style={{ textAlign: 'right' }}>เหลือ</th>
+                                                                        <th 
+                                                                            onClick={() => handleToggleRemainingSort('total')}
+                                                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                                            title="คลิกเพื่อเรียงตามยอดรวม (มากไปน้อย / น้อยไปมาก)"
+                                                                        >
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: remainingSortBy === 'total' ? 'var(--color-warning)' : 'inherit' }}>
+                                                                                ยอดรวม {remainingSortBy === 'total' ? (remainingSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                            </span>
+                                                                        </th>
+                                                                        <th 
+                                                                            onClick={() => handleToggleRemainingSort('remaining')}
+                                                                            style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+                                                                            title="คลิกเพื่อเรียงตามยอดเหลือ (มากไปน้อย / น้อยไปมาก)"
+                                                                        >
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem', color: remainingSortBy === 'remaining' ? 'var(--color-warning)' : 'inherit' }}>
+                                                                                เหลือ {remainingSortBy === 'remaining' ? (remainingSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                            </span>
+                                                                        </th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody>
