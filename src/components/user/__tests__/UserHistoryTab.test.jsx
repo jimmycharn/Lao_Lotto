@@ -206,6 +206,29 @@ describe('UserHistoryTab', () => {
             expect(html).toContain('฿4,000')
             expect(html).toContain('+฿1,600')
         })
+
+        it('rounds decimal commission, amount, and prize to integers in table rows', () => {
+            const decimalHistory = [
+                {
+                    id: 'thai_1',
+                    lottery_type: 'thai',
+                    lottery_name: 'หวยไทย',
+                    close_time: '2026-10-01T08:30:00Z',
+                    round_date: '2026-10-01',
+                    total_amount: 62141,
+                    total_commission: 14022.65,
+                    total_winnings: 45600,
+                    profit_loss: -2518.35
+                }
+            ]
+            const html = renderToString(<UserHistoryTab history={decimalHistory} initialMonth="all" initialExpandedAll={true} />)
+            // Commission 14022.65 must be rounded to 14,023 instead of 14,022.65
+            expect(html).toContain('฿14,023')
+            expect(html).not.toContain('14,022.65')
+            // Profit -2518.35 must be rounded to -฿2,518
+            expect(html).toContain('-฿2,518')
+            expect(html).not.toContain('2,518.35')
+        })
     })
 })
 

@@ -433,8 +433,9 @@ export default function UserHistoryTab({
                                                     const profit = round.profit_loss != null 
                                                         ? Number(round.profit_loss)
                                                         : ((Number(round.total_winnings) || 0) + (Number(round.total_commission) || 0) - (Number(round.total_amount) || 0))
-                                                    const isWin = Number(round.total_winnings || 0) > 0
-                                                    const isRoundProfitable = profit >= 0
+                                                    const roundedProfit = Math.round(profit)
+                                                    const isWin = Math.round(Number(round.total_winnings || 0)) > 0
+                                                    const isRoundProfitable = roundedProfit >= 0
 
                                                     return (
                                                         <tr key={round.id || `${round.round_id}_${round.round_date}`}>
@@ -452,18 +453,18 @@ export default function UserHistoryTab({
                                                                 </div>
                                                             </td>
                                                             <td className="col-num user-history-val-sent">
-                                                                {`${currencySymbol}${(Number(round.total_amount || 0)).toLocaleString()}`}
+                                                                {`${currencySymbol}${Math.round(Number(round.total_amount || 0)).toLocaleString()}`}
                                                             </td>
                                                             <td className="col-num user-history-val-comm">
-                                                                {`${currencySymbol}${(Number(round.total_commission || 0)).toLocaleString()}`}
+                                                                {`${currencySymbol}${Math.round(Number(round.total_commission || 0)).toLocaleString()}`}
                                                             </td>
                                                             <td className={`col-num user-history-val-win ${isWin ? 'winner' : ''}`}>
-                                                                {`${currencySymbol}${(Number(round.total_winnings || 0)).toLocaleString()}`}
+                                                                {`${currencySymbol}${Math.round(Number(round.total_winnings || 0)).toLocaleString()}`}
                                                             </td>
                                                             <td className={`col-num user-history-val-profit ${isRoundProfitable ? 'positive' : 'negative'}`}>
-                                                                {profit < 0 
-                                                                    ? `-${currencySymbol}${Math.abs(Math.round(profit)).toLocaleString()}` 
-                                                                    : (profit > 0 ? `+${currencySymbol}${Math.round(profit).toLocaleString()}` : `${currencySymbol}0`)}
+                                                                {roundedProfit < 0 
+                                                                    ? `-${currencySymbol}${Math.abs(roundedProfit).toLocaleString()}` 
+                                                                    : (roundedProfit > 0 ? `+${currencySymbol}${roundedProfit.toLocaleString()}` : `${currencySymbol}0`)}
                                                             </td>
                                                         </tr>
                                                     )
@@ -480,13 +481,13 @@ export default function UserHistoryTab({
                                                     <td className="col-num user-history-val-comm">
                                                         {`${currencySymbol}${Math.round(group.totalComm).toLocaleString()}`}
                                                     </td>
-                                                    <td className={`col-num user-history-val-win ${group.totalWin > 0 ? 'winner' : ''}`}>
+                                                    <td className={`col-num user-history-val-win ${Math.round(group.totalWin) > 0 ? 'winner' : ''}`}>
                                                         {`${currencySymbol}${Math.round(group.totalWin).toLocaleString()}`}
                                                     </td>
                                                     <td className={`col-num user-history-val-profit ${isProfitable ? 'positive' : 'negative'}`}>
-                                                        {group.totalProfit < 0 
+                                                        {Math.round(group.totalProfit) < 0 
                                                             ? `-${currencySymbol}${Math.abs(Math.round(group.totalProfit)).toLocaleString()}` 
-                                                            : (group.totalProfit > 0 ? `+${currencySymbol}${Math.round(group.totalProfit).toLocaleString()}` : `${currencySymbol}0`)}
+                                                            : (Math.round(group.totalProfit) > 0 ? `+${currencySymbol}${Math.round(group.totalProfit).toLocaleString()}` : `${currencySymbol}0`)}
                                                     </td>
                                                 </tr>
                                             </tfoot>
