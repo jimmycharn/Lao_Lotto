@@ -1,6 +1,25 @@
+import { BET_TYPES, BET_TYPES_BY_LOTTERY } from '../constants/lotteryTypes'
+
 /**
  * Utility for converting 3-tod excess bets to 3-top permutations.
  */
+
+/**
+ * Returns user-friendly bet type display for remaining items table:
+ * - '3_tod' -> 'โต๊ด'
+ * - '3_top' -> lotteryType === 'thai' ? 'บน' : 'ตรง'
+ * - Others -> BET_TYPES_BY_LOTTERY[lotteryType]?.[betType]?.label || BET_TYPES[betType]?.label || BET_TYPES[betType] || betType
+ */
+export function getRemainingBetTypeDisplay(betType, lotteryType) {
+    if (betType === '3_tod') return 'โต๊ด'
+    if (betType === '3_top') return lotteryType === 'thai' ? 'บน' : 'ตรง'
+    const byLottery = BET_TYPES_BY_LOTTERY?.[lotteryType]?.[betType]
+    if (byLottery?.label) return byLottery.label
+    const generic = BET_TYPES?.[betType]
+    if (generic?.label) return generic.label
+    if (typeof generic === 'string') return generic
+    return betType || ''
+}
 
 /**
  * Returns all unique permutations of a 3-digit string.
@@ -31,15 +50,18 @@ export function get3DigitPermutations(numbers) {
  * Converts a 3_tod excess item into an array of 3_top items.
  * Applies Math.ceil(excess / perms.length) for each permutation.
  * @param {object} todItem - Excess item with bet_type === '3_tod'
+ * @param {string} [lotteryType] - Optional lottery type, e.g. 'thai', 'lao'
  * @returns {object[]} Array of converted 3_top items
  */
-export function convertTodItemToTopItems(todItem) {
+export function convertTodItemToTopItems(todItem, lotteryType) {
+    const lType = lotteryType || todItem.lotteryType || todItem.lottery_type
     const perms = get3DigitPermutations(todItem.numbers)
     const perPermExcess = Math.ceil(todItem.excess / perms.length)
 
     return perms.map(num => ({
         ...todItem,
         bet_type: '3_top',
+        display_bet_type: getRemainingBetTypeDisplay('3_top', lType),
         numbers: num,
         excess: perPermExcess,
         isConvertedFromTod: true,
@@ -56,9 +78,10 @@ export function convertTodItemToTopItems(todItem) {
  * Merges tod-converted 3_top items with existing 3_top items in the excessItems list.
  * Approach A: Same number is combined into a single row.
  * @param {object[]} excessItems - Full list of excess items
+ * @param {string} [lotteryType] - Optional lottery type, e.g. 'thai', 'lao'
  * @returns {object[]} Transformed excess items
  */
-export function mergeTodToTopExcessItems(excessItems) {
+export function mergeTodToTopExcessItems(excessItems, lotteryType) {
     const nonTodItems = []
     const todItems = []
 
@@ -70,6 +93,8 @@ export function mergeTodToTopExcessItems(excessItems) {
         }
     })
 
+    const lType = lotteryType || todItems[0]?.lotteryType || todItems[0]?.lottery_type || nonTodItems[0]?.lotteryType || nonTodItems[0]?.lottery_type
+
     if (todItems.length === 0) {
         return nonTodItems
     }
@@ -77,7 +102,7 @@ export function mergeTodToTopExcessItems(excessItems) {
     // Convert all tod items
     const convertedItems = []
     todItems.forEach(tod => {
-        convertedItems.push(...convertTodItemToTopItems(tod))
+        convertedItems.push(...convertTodItemToTopItems(tod, lType))
     })
 
     // Index non-tod items by bet_type|numbers
@@ -87,12 +112,14 @@ export function mergeTodToTopExcessItems(excessItems) {
     })
 
     // Merge converted items
+    const topDisplayType = getRemainingBetTypeDisplay('3_top', lType)
     convertedItems.forEach(conv => {
         const key = `3_top|${conv.numbers}`
         if (resultMap.has(key)) {
             const existing = resultMap.get(key)
             resultMap.set(key, {
                 ...existing,
+                display_bet_type: topDisplayType,
                 excess: (existing.excess || 0) + conv.excess,
                 isMergedWithTod: true,
                 isConvertedFromTod: true,

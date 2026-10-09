@@ -5,7 +5,9 @@ import {
     mergeTodToTopExcessItems,
     encodeTodConversionNote,
     parseTodConversionNote,
-    calculateTransferDeduction
+    calculateTransferDeduction,
+    calculateRemainingLayoff,
+    getRemainingBetTypeDisplay
 } from './layoffTodConverter'
 
 describe('layoffTodConverter', () => {
@@ -121,6 +123,25 @@ describe('layoffTodConverter', () => {
             expect(item132.excess).toBe(34)
             expect(item132.isConvertedFromTod).toBe(true)
         })
+
+        it('should assign display_bet_type based on lotteryType (บน for thai, ตรง for lao)', () => {
+            const excessItems = [
+                { bet_type: '3_tod', numbers: '123', excess: 60 }
+            ]
+            const mergedThai = mergeTodToTopExcessItems(excessItems, 'thai')
+            expect(mergedThai).toHaveLength(6)
+            mergedThai.forEach(i => {
+                expect(i.bet_type).toBe('3_top')
+                expect(i.display_bet_type).toBe('บน')
+            })
+
+            const mergedLao = mergeTodToTopExcessItems(excessItems, 'lao')
+            expect(mergedLao).toHaveLength(6)
+            mergedLao.forEach(i => {
+                expect(i.bet_type).toBe('3_top')
+                expect(i.display_bet_type).toBe('ตรง')
+            })
+        })
     })
 
     describe('encodeTodConversionNote & parseTodConversionNote', () => {
@@ -180,5 +201,156 @@ describe('layoffTodConverter', () => {
             expect(calculateTransferDeduction(transfers, '2_top', '26')).toBe(0)
         })
     })
+
+    describe('Remaining tab layoff calculations workflow', () => {
+        const calculateRemainingLayoff = ({ baseItems, selectedMap, retainByType, convertTodToTop }) => {
+            const rawSelected = baseItems.filter(item => selectedMap[`${item.bet_type}|${item.numbers}`])
+            if (rawSelected.length === 0) return []
+
+            const itemsWithExcess = rawSelected.map(item => {
+                const retainVal = retainByType[item.bet_type]
+                const hasRetain = retainVal !== undefined && retainVal !== null && retainVal !== '' && !isNaN(Number(retainVal)) && Number(retainVal) >= 0
+                const retain = hasRetain ? Number(retainVal) : 0
+                const transferAmt = hasRetain ? Math.max(0, item.remainingAmount - retain) : item.remainingAmount
+
+                return {
+                    ...item,
+                    excess: transferAmt,
+                    originalRemaining: item.remainingAmount,
+                    retainAmount: hasRetain ? retain : 0
+                }
+            }).filter(item => item.excess > 0)
+
+            if (itemsWithExcess.length === 0) return []
+
+            if (convertTodToTop) {
+                return mergeTodToTopExcessItems(itemsWithExcess)
+            }
+            return itemsWithExcess
+        }
+
+        it('should transfer 100% when no retain amount is specified for a bet type', () => {
+            const baseItems = [
+                { bet_type: '3_top', numbers: '000', remainingAmount: 50 },
+                { bet_type: '3_tod', numbers: '002', remainingAmount: 20 }
+            ]
+            const selectedMap = { '3_top|000': true, '3_tod|002': true }
+            const retainByType = {} // none specified
+
+            const result = calculateRemainingLayoff({
+                baseItems,
+                selectedMap,
+                retainByType,
+                convertTodToTop: false
+            })
+
+            expect(result).toHaveLength(2)
+            expect(result.find(i => i.numbers === '000').excess).toBe(50)
+            expect(result.find(i => i.numbers === '002').excess).toBe(20)
+        })
+
+        it('should keep what it has when remaining is less than or equal to retain (excess = 0)', () => {
+            const baseItems = [
+                { bet_type: '3_top', numbers: '000', remainingAmount: 15 },
+                { bet_type: '3_top', numbers: '111', remainingAmount: 50 }
+            ]
+            const selectedMap = { '3_top|000': true, '3_top|111': true }
+            const retainByType = { '3_top': 20 } // retain 20
+
+            const result = calculateRemainingLayoff({
+                baseItems,
+                selectedMap,
+                retainByType,
+                convertTodToTop: false
+            })
+
+            // 000 has 15 <= 20 -> excess = 0, excluded from transfer!
+            // 111 has 50 > 20 -> excess = 30
+            expect(result).toHaveLength(1)
+            expect(result[0].numbers).toBe('111')
+            expect(result[0].excess).toBe(30)
+            expect(result[0].retainAmount).toBe(20)
+        })
+
+        it('should convert ONLY selected 3_tod items to 3_top when convertTodToTop is enabled', () => {
+            const baseItems = [
+                { bet_type: '3_top', numbers: '000', remainingAmount: 50 },
+                { bet_type: '3_tod', numbers: '002', remainingAmount: 60 },
+                { bet_type: '3_tod', numbers: '123', remainingAmount: 100 } // unselected
+            ]
+            const selectedMap = { '3_top|000': true, '3_tod|002': true } // only 000 and 002 selected
+            const retainByType = { '3_top': 20, '3_tod': 30 } // 000 -> 30, 002 -> 30
+
+            const result = calculateRemainingLayoff({
+                baseItems,
+                selectedMap,
+                retainByType,
+                convertTodToTop: true
+            })
+
+            // 000 (3_top) retains excess 30
+            const top000 = result.find(i => i.bet_type === '3_top' && i.numbers === '000')
+            expect(top000).toBeDefined()
+            expect(top000.excess).toBe(30)
+
+            // 002 (3_tod) excess 30 converted into 3 permutations of 3_top: 002, 020, 200 (ceil(30/3) = 10 each)
+            const convertedPerms = result.filter(i => i.isConvertedFromTod && i.originalTodNumbers === '002')
+            expect(convertedPerms).toHaveLength(3)
+            convertedPerms.forEach(perm => {
+                expect(perm.bet_type).toBe('3_top')
+                expect(perm.excess).toBe(10)
+            })
+
+            // 123 (unselected 3_tod) should NOT be in result at all
+            expect(result.some(i => i.numbers === '123' || i.originalTodNumbers === '123')).toBe(false)
+        })
+    })
+
+    describe('getRemainingBetTypeDisplay', () => {
+        it('should return โต๊ด for 3_tod across different lottery types', () => {
+            expect(getRemainingBetTypeDisplay('3_tod', 'lao')).toBe('โต๊ด')
+            expect(getRemainingBetTypeDisplay('3_tod', 'hanoi')).toBe('โต๊ด')
+            expect(getRemainingBetTypeDisplay('3_tod', 'thai')).toBe('โต๊ด')
+        })
+
+        it('should return บน for 3_top in thai lottery, and ตรง for other lotteries', () => {
+            expect(getRemainingBetTypeDisplay('3_top', 'thai')).toBe('บน')
+            expect(getRemainingBetTypeDisplay('3_top', 'lao')).toBe('ตรง')
+            expect(getRemainingBetTypeDisplay('3_top', 'hanoi')).toBe('ตรง')
+            expect(getRemainingBetTypeDisplay('3_top', 'stock')).toBe('ตรง')
+        })
+
+        it('should return default lottery label for other bet types', () => {
+            expect(getRemainingBetTypeDisplay('2_top', 'lao')).toBe('2 ตัวบน')
+            expect(getRemainingBetTypeDisplay('2_bottom', 'lao')).toBe('2 ตัวล่าง')
+            expect(getRemainingBetTypeDisplay('run_top', 'lao')).toBe('ลอยบน')
+            expect(getRemainingBetTypeDisplay('4_set', 'lao')).toBe('4 ตัวชุด')
+        })
+    })
+
+    describe('display_bet_type preservation during conversion', () => {
+        it('should set display_bet_type to บน for thai and ตรง for others when 3_tod is converted to 3_top permutations', () => {
+            const todItem = {
+                bet_type: '3_tod',
+                display_bet_type: 'เต็ง-โต๊ด',
+                numbers: '023',
+                excess: 5
+            }
+            const convertedLao = convertTodItemToTopItems(todItem, 'lao')
+            expect(convertedLao).toHaveLength(6)
+            convertedLao.forEach(item => {
+                expect(item.bet_type).toBe('3_top')
+                expect(item.display_bet_type).toBe('ตรง')
+            })
+
+            const convertedThai = convertTodItemToTopItems(todItem, 'thai')
+            expect(convertedThai).toHaveLength(6)
+            convertedThai.forEach(item => {
+                expect(item.bet_type).toBe('3_top')
+                expect(item.display_bet_type).toBe('บน')
+            })
+        })
+    })
 })
+
 

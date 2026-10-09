@@ -50,7 +50,8 @@ import {
     mergeTodToTopExcessItems,
     encodeTodConversionNote,
     parseTodConversionNote,
-    calculateTransferDeduction
+    calculateTransferDeduction,
+    getRemainingBetTypeDisplay
 } from '../../utils/layoffTodConverter'
 import BetTypeChipsFilter from './BetTypeChipsFilter'
 import { isBetTypeMatched, isSearchNumberMatched } from '../../utils/betTypeFilterHelper'
@@ -395,9 +396,7 @@ export default function RoundAccordionItem({
     const [selectedRemainingItems, setSelectedRemainingItems] = useState({})
     const [isConvertTodToTopRemainingActive, setIsConvertTodToTopRemainingActive] = useState(false)
     const [transferSource, setTransferSource] = useState('excess') // 'excess' | 'remaining'
-    const [remainingLayoffMode, setRemainingLayoffMode] = useState('all') // 'all' | 'retain'
-    const [remainingRetainAmount, setRemainingRetainAmount] = useState('')
-    const [remainingCustomAmounts, setRemainingCustomAmounts] = useState({})
+    const [remainingRetainByType, setRemainingRetainByType] = useState({}) // { [bet_type]: number | '' }
     
     // Upstream dealers for transfer selection
     const [upstreamDealers, setUpstreamDealers] = useState([])
@@ -1738,8 +1737,8 @@ export default function RoundAccordionItem({
 
     const activeExcessItems = useMemo(() => {
         if (!isConvertTodToTopActive) return excessItems
-        return mergeTodToTopExcessItems(excessItems)
-    }, [excessItems, isConvertTodToTopActive])
+        return mergeTodToTopExcessItems(excessItems, round?.lottery_type)
+    }, [excessItems, isConvertTodToTopActive, round?.lottery_type])
 
     const toggleExcessItem = (item) => {
         const key = `${item.bet_type}|${item.numbers}`
@@ -1761,7 +1760,7 @@ export default function RoundAccordionItem({
                 remainingByKey[key] = {
                     numbers: normNum,
                     bet_type: s.bet_type,
-                    display_bet_type: s.display_bet_type || BET_TYPES_BY_LOTTERY[round?.lottery_type]?.[s.bet_type]?.label || BET_TYPES[s.bet_type] || s.bet_type,
+                    display_bet_type: getRemainingBetTypeDisplay(s.bet_type, round?.lottery_type),
                     totalAmount: 0,
                     transferredAmount: 0
                 }
@@ -1794,41 +1793,69 @@ export default function RoundAccordionItem({
             .filter(item => (item.remainingAmount || 0) > 0)
     }, [inlineSubmissions, inlineTransfers, round?.lottery_type, round?.set_prices])
 
-    const activeRemainingItems = useMemo(() => {
-        if (!isConvertTodToTopRemainingActive) return baseRemainingItems
-        const converted = mergeTodToTopExcessItems(baseRemainingItems.map(item => ({
-            ...item,
-            excess: item.remainingAmount || 0
-        })))
-        return converted.map(item => ({
-            ...item,
-            totalAmount: Number(item.totalAmount) || Number(item.excess) || 0,
-            remainingAmount: Number(item.excess) || 0
-        }))
-    }, [baseRemainingItems, isConvertTodToTopRemainingActive])
+    // In remaining tab, table displays base items (unconverted).
+    // Conversion of selected 3_tod to 3_top only takes place when transferring to modal.
+    const activeRemainingItems = baseRemainingItems
 
     const toggleRemainingItem = (item) => {
         const key = `${item.bet_type}|${item.numbers}`
         setSelectedRemainingItems(prev => ({ ...prev, [key]: !prev[key] }))
     }
 
+    // Calculate items for remaining transfer:
+    // 1. Take user-selected items from baseRemainingItems
+    // 2. Apply retain amount per bet type (remainingRetainByType):
+    //    - If not specified: retain = 0, transfer 100% of remainingAmount
+    //    - If specified: keep up to retain amount, transfer remaining - retain (if remaining <= retain, keep all -> transfer 0)
+    // 3. Keep only items with excess > 0
+    // 4. If isConvertTodToTopRemainingActive is true: convert ONLY selected 3_tod items with excess > 0 to 3_top permutations
+    const calculatedRemainingTransferItems = useMemo(() => {
+        const rawSelected = baseRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`])
+        if (rawSelected.length === 0) return []
+
+        const itemsWithExcess = rawSelected.map(item => {
+            const retainVal = remainingRetainByType[item.bet_type]
+            const hasRetain = retainVal !== undefined && retainVal !== null && retainVal !== '' && !isNaN(Number(retainVal)) && Number(retainVal) >= 0
+            const retain = hasRetain ? Number(retainVal) : 0
+            
+            const transferAmt = hasRetain ? Math.max(0, item.remainingAmount - retain) : item.remainingAmount
+
+            return {
+                ...item,
+                excess: transferAmt,
+                originalRemaining: item.remainingAmount,
+                retainAmount: hasRetain ? retain : 0
+            }
+        }).filter(item => item.excess > 0)
+
+        if (itemsWithExcess.length === 0) return []
+
+        if (isConvertTodToTopRemainingActive) {
+            return mergeTodToTopExcessItems(itemsWithExcess, round?.lottery_type)
+        }
+
+        return itemsWithExcess
+    }, [baseRemainingItems, selectedRemainingItems, remainingRetainByType, isConvertTodToTopRemainingActive, round?.lottery_type])
+
+    const totalRemainingTransferAmount = useMemo(() => {
+        return calculatedRemainingTransferItems.reduce((sum, item) => {
+            const setPrice = round?.set_prices?.['4_top'] || 120
+            return sum + (item.isSetBased ? item.excess * setPrice : item.excess)
+        }, 0)
+    }, [calculatedRemainingTransferItems, round])
+
     // Helper to open transfer modal from Remaining tab
     const handleOpenRemainingTransferModal = () => {
-        const rawSelected = activeRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`])
-        if (rawSelected.length === 0) {
+        const rawSelectedCount = baseRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`]).length
+        if (rawSelectedCount === 0) {
             toast.warning('กรุณาเลือกรายการที่ต้องการตีออก')
             return
         }
+        if (calculatedRemainingTransferItems.length === 0) {
+            toast.warning('ไม่มีรายการที่จะตีออก (ทุกเลขที่เลือกมียอดไม่เกินจำนวนเงินที่ตั้งเก็บไว้)')
+            return
+        }
         setTransferSource('remaining')
-        setRemainingLayoffMode('all')
-        setRemainingRetainAmount('')
-        setRemainingCustomAmounts({})
-
-        const initialTypes = {}
-        rawSelected.forEach(item => {
-            initialTypes[item.bet_type] = true
-        })
-        setTransferModalBetTypes(initialTypes)
         setShowTransferModal(true)
     }
 
@@ -1847,31 +1874,6 @@ export default function RoundAccordionItem({
         setTransferModalBetTypes(initialTypes)
         setShowTransferModal(true)
     }
-
-    // Calculate items for remaining transfer considering retain amount & custom overrides
-    const calculatedRemainingTransferItems = useMemo(() => {
-        if (transferSource !== 'remaining') return []
-        const selected = activeRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`])
-        const retain = Math.max(0, Number(remainingRetainAmount) || 0)
-
-        return selected.map(item => {
-            const key = `${item.bet_type}|${item.numbers}`
-            let transferAmt = 0
-            if (remainingCustomAmounts[key] !== undefined) {
-                transferAmt = Math.max(0, Number(remainingCustomAmounts[key]) || 0)
-            } else if (remainingLayoffMode === 'retain') {
-                transferAmt = Math.max(0, item.remainingAmount - retain)
-            } else {
-                transferAmt = item.remainingAmount
-            }
-            return {
-                ...item,
-                excess: transferAmt,
-                originalRemaining: item.remainingAmount,
-                retainAmount: remainingLayoffMode === 'retain' ? retain : 0
-            }
-        })
-    }, [transferSource, activeRemainingItems, selectedRemainingItems, remainingRetainAmount, remainingCustomAmounts, remainingLayoffMode])
 
     const modalBetTypeBreakdown = useMemo(() => {
         if (transferSource === 'remaining') {
@@ -1925,8 +1927,6 @@ export default function RoundAccordionItem({
     const modalSelectedItems = useMemo(() => {
         if (transferSource === 'remaining') {
             return calculatedRemainingTransferItems
-                .filter(item => item.excess > 0)
-                .filter(item => transferModalBetTypes[item.bet_type] !== false)
         }
         const selected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
         return selected.filter(item => transferModalBetTypes[item.bet_type] !== false)
@@ -2094,7 +2094,6 @@ export default function RoundAccordionItem({
                     })
                     return next
                 })
-                setRemainingCustomAmounts({})
             } else {
                 setSelectedExcessItems(prev => {
                     const next = { ...prev }
@@ -5468,9 +5467,8 @@ export default function RoundAccordionItem({
                                                                         className="btn btn-sm"
                                                                         onClick={() => {
                                                                             setIsConvertTodToTopRemainingActive(prev => !prev)
-                                                                            setSelectedRemainingItems({})
                                                                         }}
-                                                                        title="สลับโหมดแปลง 3 ตัวโต๊ดเป็น 3 ตัวตรง"
+                                                                        title={`สลับโหมดแปลง 3 ตัวโต๊ดเป็น 3 ตัว${round?.lottery_type === 'thai' ? 'บน' : 'ตรง'}`}
                                                                         style={{
                                                                             padding: '0.2rem 0.55rem',
                                                                             fontSize: '0.75rem',
@@ -5486,7 +5484,7 @@ export default function RoundAccordionItem({
                                                                         }}
                                                                     >
                                                                         <FiRotateCcw size={12} style={{ transform: isConvertTodToTopRemainingActive ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                                                                        <span>แปลงโต๊ดเป็นตรง: {isConvertTodToTopRemainingActive ? 'เปิด (ON)' : 'ปิด (OFF)'}</span>
+                                                                        <span>แปลงโต๊ดเป็น{round?.lottery_type === 'thai' ? 'บน' : 'ตรง'}: {isConvertTodToTopRemainingActive ? 'เปิด (ON)' : 'ปิด (OFF)'}</span>
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -5665,6 +5663,119 @@ export default function RoundAccordionItem({
                                                                         )
                                                                     })}
                                                                 </div>
+
+                                                                {/* Retain Settings per Bet Type */}
+                                                                <div style={{
+                                                                    marginTop: '0.45rem',
+                                                                    paddingTop: '0.65rem',
+                                                                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    gap: '0.5rem'
+                                                                }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-main)' }}>
+                                                                                🛡️ ยอดเก็บไว้ตัวละ (แยกตามประเภทเลข):
+                                                                            </span>
+                                                                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                                                                (เว้นว่าง = ตีออกหมด 100% | ยอดไม่ถึง = เก็บเท่าที่มี)
+                                                                            </span>
+                                                                        </div>
+                                                                        {Object.values(remainingRetainByType).some(v => v !== '' && v !== undefined && v !== null) && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setRemainingRetainByType({})}
+                                                                                style={{
+                                                                                    background: 'transparent',
+                                                                                    border: '1px solid var(--color-border)',
+                                                                                    color: 'var(--color-text-muted)',
+                                                                                    borderRadius: '4px',
+                                                                                    padding: '0.15rem 0.5rem',
+                                                                                    fontSize: '0.72rem',
+                                                                                    cursor: 'pointer'
+                                                                                }}
+                                                                            >
+                                                                                ล้างยอดเก็บทั้งหมด
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <div style={{
+                                                                        display: 'grid',
+                                                                        gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                                                                        gap: '0.5rem'
+                                                                    }}>
+                                                                        {betTypeList.map(bt => {
+                                                                            const retainVal = remainingRetainByType[bt.bet_type] ?? ''
+                                                                            const hasRetain = retainVal !== '' && !isNaN(Number(retainVal)) && Number(retainVal) >= 0
+                                                                            return (
+                                                                                <div
+                                                                                    key={`retain-${bt.bet_type}`}
+                                                                                    style={{
+                                                                                        display: 'flex',
+                                                                                        alignItems: 'center',
+                                                                                        justifyContent: 'space-between',
+                                                                                        padding: '0.35rem 0.65rem',
+                                                                                        background: hasRetain ? 'rgba(245, 158, 11, 0.1)' : 'rgba(0, 0, 0, 0.25)',
+                                                                                        border: `1px solid ${hasRetain ? 'rgba(245, 158, 11, 0.4)' : 'var(--color-border, #334155)'}`,
+                                                                                        borderRadius: '6px',
+                                                                                        gap: '0.5rem'
+                                                                                    }}
+                                                                                >
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                                                                                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: hasRetain ? '#fbbf24' : 'var(--color-text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                                            {bt.label}
+                                                                                        </span>
+                                                                                        <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+                                                                                            {bt.count} รายการ {hasRetain ? `(เก็บ ฿${Number(retainVal).toLocaleString()})` : '(ออกหมด)'}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>เก็บ:</span>
+                                                                                        <div style={{ position: 'relative', width: '90px' }}>
+                                                                                            <input
+                                                                                                type="number"
+                                                                                                min="0"
+                                                                                                placeholder="ออกหมด"
+                                                                                                value={retainVal}
+                                                                                                onChange={(e) => {
+                                                                                                    const val = e.target.value
+                                                                                                    setRemainingRetainByType(prev => ({
+                                                                                                        ...prev,
+                                                                                                        [bt.bet_type]: val
+                                                                                                    }))
+                                                                                                }}
+                                                                                                style={{
+                                                                                                    width: '100%',
+                                                                                                    padding: '0.25rem 1.2rem 0.25rem 0.45rem',
+                                                                                                    fontSize: '0.78rem',
+                                                                                                    fontWeight: 600,
+                                                                                                    borderRadius: '4px',
+                                                                                                    border: '1px solid var(--color-border)',
+                                                                                                    background: 'var(--color-surface, #0f172a)',
+                                                                                                    color: hasRetain ? '#fbbf24' : 'var(--color-text-main)',
+                                                                                                    textAlign: 'right'
+                                                                                                }}
+                                                                                            />
+                                                                                            <span style={{
+                                                                                                position: 'absolute',
+                                                                                                right: '0.35rem',
+                                                                                                top: '50%',
+                                                                                                transform: 'translateY(-50%)',
+                                                                                                fontSize: '0.7rem',
+                                                                                                color: 'var(--color-text-muted)',
+                                                                                                pointerEvents: 'none'
+                                                                                            }}>
+                                                                                                {round?.currency_symbol || '฿'}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )
+                                                                        })}
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         )}
 
@@ -5689,19 +5800,24 @@ export default function RoundAccordionItem({
                                                                 />
                                                                 <span style={{ fontWeight: 600 }}>เลือกทั้งหมด ({filteredRemainingItems.length})</span>
                                                             </label>
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                                                                 {filteredSelectedCount > 0 && (
-                                                                    <span style={{ fontSize: '0.82rem', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                                                        {(round?.currency_symbol || '฿')}{(filteredSelectedAmount || 0).toLocaleString()}
+                                                                    <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                                                                        เลือก {filteredSelectedCount} รายการ 
+                                                                        {calculatedRemainingTransferItems.length > 0 ? (
+                                                                            <span> (ยอดตีออก {calculatedRemainingTransferItems.length} รายการ: <strong style={{ color: 'var(--color-warning)' }}>{round?.currency_symbol || '฿'}{totalRemainingTransferAmount.toLocaleString()}</strong>)</span>
+                                                                        ) : (
+                                                                            <span style={{ color: '#ef4444' }}> (ไม่มียอดเกินที่ตั้งเก็บไว้)</span>
+                                                                        )}
                                                                     </span>
                                                                 )}
                                                                 <button
                                                                     className="btn btn-warning"
                                                                     onClick={(e) => { e.stopPropagation(); handleOpenRemainingTransferModal(); }}
-                                                                    disabled={filteredSelectedCount === 0}
+                                                                    disabled={filteredSelectedCount === 0 || calculatedRemainingTransferItems.length === 0}
                                                                     style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}
                                                                 >
-                                                                    <FiSend /> ตีออก ({filteredSelectedCount})
+                                                                    <FiSend /> ตีออก ({calculatedRemainingTransferItems.length})
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -5721,6 +5837,10 @@ export default function RoundAccordionItem({
                                                                 <tbody>
                                                                     {filteredRemainingItems.map((item, idx) => {
                                                                         const isSelected = !!selectedRemainingItems[`${item.bet_type}|${item.numbers}`]
+                                                                        const retainVal = remainingRetainByType[item.bet_type]
+                                                                        const hasRetain = retainVal !== undefined && retainVal !== null && retainVal !== '' && !isNaN(Number(retainVal)) && Number(retainVal) >= 0
+                                                                        const retain = hasRetain ? Number(retainVal) : 0
+                                                                        const transferAmt = hasRetain ? Math.max(0, item.remainingAmount - retain) : item.remainingAmount
                                                                         return (
                                                                             <tr
                                                                                 key={`${item.numbers}-${item.bet_type}-${idx}`}
@@ -5745,23 +5865,18 @@ export default function RoundAccordionItem({
                                                                                     </div>
                                                                                 </td>
                                                                                 <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                                                                    <div>{item.display_bet_type}</div>
-                                                                                    {item.isMergedWithTod && (
-                                                                                        <div style={{ fontSize: '0.72rem', color: '#fbbf24', marginTop: '0.1rem', fontWeight: 500 }}>
-                                                                                            (ตรงเดิม {(round?.currency_symbol || '฿')}{(Number(item.originalTopExcess) || 0).toLocaleString()} + แปลงจากโต๊ด {(round?.currency_symbol || '฿')}{(Number(item.convertedTodExcess) || 0).toLocaleString()})
-                                                                                        </div>
-                                                                                    )}
-                                                                                    {item.isConvertedFromTod && !item.isMergedWithTod && (
-                                                                                        <div style={{ fontSize: '0.72rem', color: '#38bdf8', marginTop: '0.1rem', fontWeight: 500 }}>
-                                                                                            💫 แตกจากโต๊ด {item.originalTodNumbers}
-                                                                                        </div>
-                                                                                    )}
+                                                                                    <div>{item.display_bet_type || getRemainingBetTypeDisplay(item.bet_type, round?.lottery_type)}</div>
                                                                                 </td>
                                                                                 <td style={{ color: 'var(--color-text-muted)' }}>
                                                                                     {(round?.currency_symbol || '฿')}{(Number(item.totalAmount) || 0).toLocaleString()}
                                                                                 </td>
                                                                                 <td style={{ fontWeight: 600, color: 'var(--color-warning)', textAlign: 'right' }}>
-                                                                                    {(round?.currency_symbol || '฿')}{(Number(item.remainingAmount) || 0).toLocaleString()}
+                                                                                    <div>{(round?.currency_symbol || '฿')}{(Number(item.remainingAmount) || 0).toLocaleString()}</div>
+                                                                                    {hasRetain && (
+                                                                                        <div style={{ fontSize: '0.7rem', fontWeight: 400, color: transferAmt > 0 ? '#38bdf8' : 'var(--color-text-muted)', marginTop: '0.1rem' }}>
+                                                                                            {transferAmt > 0 ? `ตีออก ${(round?.currency_symbol || '฿')}${transferAmt.toLocaleString()}` : 'เก็บหมด'}
+                                                                                        </div>
+                                                                                    )}
                                                                                 </td>
                                                                             </tr>
                                                                         )
@@ -5887,7 +6002,7 @@ export default function RoundAccordionItem({
                                                                             setIsConvertTodToTopActive(prev => !prev)
                                                                             setSelectedExcessItems({})
                                                                         }}
-                                                                        title="สลับโหมดแปลง 3 ตัวโต๊ดเป็น 3 ตัวตรง"
+                                                                        title={`สลับโหมดแปลง 3 ตัวโต๊ดเป็น 3 ตัว${round?.lottery_type === 'thai' ? 'บน' : 'ตรง'}`}
                                                                         style={{
                                                                             padding: '0.2rem 0.55rem',
                                                                             fontSize: '0.75rem',
@@ -5903,7 +6018,7 @@ export default function RoundAccordionItem({
                                                                         }}
                                                                     >
                                                                         <FiRotateCcw size={12} style={{ transform: isConvertTodToTopActive ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-                                                                        <span>แปลงโต๊ดเป็นตรง: {isConvertTodToTopActive ? 'เปิด (ON)' : 'ปิด (OFF)'}</span>
+                                                                        <span>แปลงโต๊ดเป็น{round?.lottery_type === 'thai' ? 'บน' : 'ตรง'}: {isConvertTodToTopActive ? 'เปิด (ON)' : 'ปิด (OFF)'}</span>
                                                                     </button>
                                                                 )}
                                                             </div>
@@ -6207,183 +6322,114 @@ export default function RoundAccordionItem({
                                                     <button className="modal-close" onClick={() => setShowTransferModal(false)}><FiX /></button>
                                                 </div>
                                                 <div className="modal-body">
-                                                    {/* Remaining Layoff Mode & Retain Settings */}
+                                                    {/* Remaining Tab: Summary Banner */}
                                                     {transferSource === 'remaining' && (
                                                         <div style={{
                                                             background: 'rgba(245, 158, 11, 0.08)',
                                                             border: '1px solid rgba(245, 158, 11, 0.25)',
                                                             borderRadius: '8px',
-                                                            padding: '0.85rem',
-                                                            marginBottom: '1rem'
+                                                            padding: '0.75rem 0.9rem',
+                                                            marginBottom: '1rem',
+                                                            display: 'flex',
+                                                            justifyContent: 'space-between',
+                                                            alignItems: 'center',
+                                                            flexWrap: 'wrap',
+                                                            gap: '0.5rem'
                                                         }}>
-                                                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-main)', marginBottom: '0.5rem' }}>
-                                                                รูปแบบการตีออก:
-                                                            </div>
-                                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setRemainingLayoffMode('all')}
-                                                                    style={{
-                                                                        padding: '0.55rem 0.5rem',
-                                                                        borderRadius: '6px',
-                                                                        border: `1.5px solid ${remainingLayoffMode === 'all' ? 'var(--color-warning)' : 'var(--color-border)'}`,
-                                                                        background: remainingLayoffMode === 'all' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(0,0,0,0.2)',
-                                                                        color: remainingLayoffMode === 'all' ? '#fbbf24' : 'var(--color-text-muted)',
-                                                                        fontWeight: 600,
-                                                                        fontSize: '0.85rem',
-                                                                        cursor: 'pointer',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        gap: '0.4rem',
-                                                                        transition: 'all 0.15s ease'
-                                                                    }}
-                                                                >
-                                                                    <span>⚡ ตีออกทั้งหมด (100%)</span>
-                                                                </button>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setRemainingLayoffMode('retain')}
-                                                                    style={{
-                                                                        padding: '0.55rem 0.5rem',
-                                                                        borderRadius: '6px',
-                                                                        border: `1.5px solid ${remainingLayoffMode === 'retain' ? 'var(--color-warning)' : 'var(--color-border)'}`,
-                                                                        background: remainingLayoffMode === 'retain' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(0,0,0,0.2)',
-                                                                        color: remainingLayoffMode === 'retain' ? '#fbbf24' : 'var(--color-text-muted)',
-                                                                        fontWeight: 600,
-                                                                        fontSize: '0.85rem',
-                                                                        cursor: 'pointer',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        gap: '0.4rem',
-                                                                        transition: 'all 0.15s ease'
-                                                                    }}
-                                                                >
-                                                                    <span>🛡️ เก็บไว้ตัวละ... (ตีส่วนเกิน)</span>
-                                                                </button>
-                                                            </div>
-
-                                                            {remainingLayoffMode === 'retain' && (
-                                                                <div style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.25)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.25rem' }}>
-                                                                        <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>
-                                                                            จำนวนเงินที่ต้องการเก็บไว้ตัวละ:
-                                                                        </span>
-                                                                        <span style={{ fontSize: '0.74rem', color: '#fbbf24' }}>
-                                                                            (จะส่งตีออกเฉพาะส่วนที่เกิน)
-                                                                        </span>
-                                                                    </div>
-                                                                    <div style={{ position: 'relative', marginBottom: '0.5rem' }}>
-                                                                        <input
-                                                                            type="number"
-                                                                            min="0"
-                                                                            className="form-input"
-                                                                            placeholder="ระบุจำนวนเก็บ เช่น 20"
-                                                                            value={remainingRetainAmount}
-                                                                            onChange={(e) => setRemainingRetainAmount(e.target.value)}
-                                                                            style={{ paddingRight: '2.5rem', fontWeight: 600, fontSize: '0.95rem' }}
-                                                                        />
-                                                                        <span style={{ position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-                                                                            {round.currency_symbol}
-                                                                        </span>
-                                                                    </div>
-                                                                    {/* Quick preset buttons */}
-                                                                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                                                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', marginRight: '0.25rem' }}>ลัด:</span>
-                                                                        {[10, 20, 50, 100, 200, 500].map(val => (
-                                                                            <button
-                                                                                key={val}
-                                                                                type="button"
-                                                                                onClick={() => setRemainingRetainAmount(val.toString())}
-                                                                                style={{
-                                                                                    padding: '0.2rem 0.55rem',
-                                                                                    fontSize: '0.75rem',
-                                                                                    borderRadius: '4px',
-                                                                                    border: '1px solid var(--color-border)',
-                                                                                    background: Number(remainingRetainAmount) === val ? 'var(--color-warning)' : 'rgba(255,255,255,0.05)',
-                                                                                    color: Number(remainingRetainAmount) === val ? '#000' : 'var(--color-text-main)',
-                                                                                    fontWeight: 600,
-                                                                                    cursor: 'pointer'
-                                                                                }}
-                                                                            >
-                                                                                {round.currency_symbol}{val}
-                                                                            </button>
-                                                                        ))}
-                                                                    </div>
+                                                            <div>
+                                                                <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                                                    สรุปยอดที่จะตีออก:
                                                                 </div>
+                                                                <div style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--color-warning)' }}>
+                                                                    {modalSelectedCount} รายการ • {round?.currency_symbol || '฿'}{(Number(modalSelectedAmount) || 0).toLocaleString()}
+                                                                </div>
+                                                            </div>
+                                                            {((transferSource === 'remaining' && isConvertTodToTopRemainingActive) || (transferSource === 'excess' && isConvertTodToTopActive)) && (
+                                                                <span style={{
+                                                                    fontSize: '0.74rem',
+                                                                    color: '#38bdf8',
+                                                                    background: 'rgba(56, 189, 248, 0.12)',
+                                                                    border: '1px solid rgba(56, 189, 248, 0.3)',
+                                                                    padding: '0.25rem 0.55rem',
+                                                                    borderRadius: '4px',
+                                                                    fontWeight: 500
+                                                                }}>
+                                                                    ✨ แปลง 3 ตัวโต๊ดเป็น{round?.lottery_type === 'thai' ? 'บน' : 'ตรง'}แล้ว
+                                                                </span>
                                                             )}
                                                         </div>
                                                     )}
 
-                                                    {/* Bet Type Breakdown & Selection Checklist */}
-                                                    <div style={{
-                                                        background: 'var(--color-surface-light, rgba(255,255,255,0.04))',
-                                                        border: '1px solid var(--color-border, #334155)',
-                                                        borderRadius: '8px',
-                                                        padding: '0.75rem 0.85rem',
-                                                        marginBottom: '1rem'
-                                                    }}>
-                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
-                                                            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-main)' }}>
-                                                                ประเภทเลขที่จะตีออกในรอบนี้:
-                                                            </span>
-                                                            <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                                                {modalSelectedCount} รายการ ({round?.currency_symbol || '฿'}{(Number(modalSelectedAmount) || 0).toLocaleString()})
-                                                            </span>
-                                                        </div>
+                                                    {/* Bet Type Breakdown & Selection Checklist (Only for Excess Tab) */}
+                                                    {transferSource === 'excess' && (
+                                                        <div style={{
+                                                            background: 'var(--color-surface-light, rgba(255,255,255,0.04))',
+                                                            border: '1px solid var(--color-border, #334155)',
+                                                            borderRadius: '8px',
+                                                            padding: '0.75rem 0.85rem',
+                                                            marginBottom: '1rem'
+                                                        }}>
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                                                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text-main)' }}>
+                                                                    ประเภทเลขที่จะตีออกในรอบนี้:
+                                                                </span>
+                                                                <span style={{ fontSize: '0.8rem', color: 'var(--color-warning)', fontWeight: 600 }}>
+                                                                    {modalSelectedCount} รายการ ({round?.currency_symbol || '฿'}{(Number(modalSelectedAmount) || 0).toLocaleString()})
+                                                                </span>
+                                                            </div>
 
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '180px', overflowY: 'auto' }}>
-                                                            {Object.entries(modalBetTypeBreakdown).map(([bt, info]) => {
-                                                                const isChecked = transferModalBetTypes[bt] !== false
-                                                                return (
-                                                                    <label
-                                                                        key={bt}
-                                                                        style={{
-                                                                            display: 'flex',
-                                                                            alignItems: 'center',
-                                                                            justifyContent: 'space-between',
-                                                                            padding: '0.45rem 0.65rem',
-                                                                            background: isChecked ? 'rgba(245, 158, 11, 0.12)' : 'rgba(0,0,0,0.2)',
-                                                                            border: `1px solid ${isChecked ? 'rgba(245, 158, 11, 0.35)' : 'var(--color-border)'}`,
-                                                                            borderRadius: '6px',
-                                                                            cursor: 'pointer',
-                                                                            transition: 'all 0.15s ease'
-                                                                        }}
-                                                                    >
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
-                                                                            <input
-                                                                                type="checkbox"
-                                                                                checked={isChecked}
-                                                                                onChange={() => {
-                                                                                    setTransferModalBetTypes(prev => ({
-                                                                                        ...prev,
-                                                                                        [bt]: !isChecked
-                                                                                    }))
-                                                                                }}
-                                                                                style={{ width: '16px', height: '16px', accentColor: 'var(--color-warning)' }}
-                                                                            />
-                                                                            <span style={{ fontSize: '0.85rem', fontWeight: 500, color: isChecked ? 'var(--color-text-main)' : 'var(--color-text-muted)' }}>
-                                                                                {info.label}
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem', maxHeight: '180px', overflowY: 'auto' }}>
+                                                                {Object.entries(modalBetTypeBreakdown).map(([bt, info]) => {
+                                                                    const isChecked = transferModalBetTypes[bt] !== false
+                                                                    return (
+                                                                        <label
+                                                                            key={bt}
+                                                                            style={{
+                                                                                display: 'flex',
+                                                                                alignItems: 'center',
+                                                                                justifyContent: 'space-between',
+                                                                                padding: '0.45rem 0.65rem',
+                                                                                background: isChecked ? 'rgba(245, 158, 11, 0.12)' : 'rgba(0,0,0,0.2)',
+                                                                                border: `1px solid ${isChecked ? 'rgba(245, 158, 11, 0.35)' : 'var(--color-border)'}`,
+                                                                                borderRadius: '6px',
+                                                                                cursor: 'pointer',
+                                                                                transition: 'all 0.15s ease'
+                                                                            }}
+                                                                        >
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                                                                                <input
+                                                                                    type="checkbox"
+                                                                                    checked={isChecked}
+                                                                                    onChange={() => {
+                                                                                        setTransferModalBetTypes(prev => ({
+                                                                                            ...prev,
+                                                                                            [bt]: !isChecked
+                                                                                        }))
+                                                                                    }}
+                                                                                    style={{ width: '16px', height: '16px', accentColor: 'var(--color-warning)' }}
+                                                                                />
+                                                                                <span style={{ fontSize: '0.85rem', fontWeight: 500, color: isChecked ? 'var(--color-text-main)' : 'var(--color-text-muted)' }}>
+                                                                                    {info.label}
+                                                                                </span>
+                                                                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                                                                                    ({info.count} รายการ)
+                                                                                </span>
+                                                                            </div>
+                                                                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: isChecked ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
+                                                                                {info.isSetBased ? `${info.excessSets} ชุด` : `${round?.currency_symbol || '฿'}${(Number(info.amount) || 0).toLocaleString()}`}
                                                                             </span>
-                                                                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                ({info.count} รายการ)
-                                                                            </span>
-                                                                        </div>
-                                                                        <span style={{ fontSize: '0.82rem', fontWeight: 600, color: isChecked ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
-                                                                            {info.isSetBased ? `${info.excessSets} ชุด` : `${round?.currency_symbol || '฿'}${(Number(info.amount) || 0).toLocaleString()}`}
-                                                                        </span>
-                                                                    </label>
-                                                                )
-                                                            })}
-                                                        </div>
+                                                                        </label>
+                                                                    )
+                                                                })}
+                                                            </div>
 
-                                                        {modalSelectedCount === 0 && (
-                                                            <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.78rem', marginTop: '0.5rem', textAlign: 'center' }}>
-                                                                * กรุณาเลือกประเภทเลขที่จะตีออกอย่างน้อย 1 ประเภท (หรือปรับยอดเก็บไว้ใหม่)
-                                                            </p>
-                                                        )}
-                                                    </div>
+                                                            {modalSelectedCount === 0 && (
+                                                                <p style={{ color: 'var(--color-danger, #ef4444)', fontSize: '0.78rem', marginTop: '0.5rem', textAlign: 'center' }}>
+                                                                    * กรุณาเลือกประเภทเลขที่จะตีออกอย่างน้อย 1 ประเภท
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    )}
 
                                                     {/* Items Preview for Remaining tab */}
                                                     {transferSource === 'remaining' && (
@@ -6396,9 +6442,6 @@ export default function RoundAccordionItem({
                                                         }}>
                                                             <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                 <span>รายการที่จะตีออก ({modalSelectedCount} รายการ):</span>
-                                                                {remainingLayoffMode === 'retain' && Number(remainingRetainAmount) > 0 && (
-                                                                    <span style={{ color: '#94a3b8' }}>เก็บไว้ตัวละ {round?.currency_symbol || '฿'}{Number(remainingRetainAmount).toLocaleString()}</span>
-                                                                )}
                                                             </div>
                                                             <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                                                                 {modalSelectedItems.length === 0 ? (
@@ -6424,7 +6467,7 @@ export default function RoundAccordionItem({
                                                                                     {item.displayNumbers || item.numbers}
                                                                                 </span>
                                                                                 <span style={{ color: 'var(--color-text-muted)', fontSize: '0.74rem' }}>
-                                                                                    {BET_TYPES_BY_LOTTERY[round?.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                    {item.display_bet_type || getRemainingBetTypeDisplay(item.bet_type, round?.lottery_type)}
                                                                                 </span>
                                                                                 {item.isConvertedFromTod && (
                                                                                     <span style={{ fontSize: '0.68rem', color: '#38bdf8', background: 'rgba(56, 189, 248, 0.12)', padding: '0.05rem 0.3rem', borderRadius: '3px' }}>
