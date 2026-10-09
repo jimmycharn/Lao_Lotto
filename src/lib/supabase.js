@@ -70,7 +70,10 @@ export async function fetchAllRows(queryBuilder, pageSize = 1000) {
 
   while (hasMore) {
     const to = from + pageSize - 1
-    const { data, error } = await queryBuilder(from, to)
+    const query = typeof queryBuilder === 'function'
+      ? queryBuilder(from, to)
+      : (typeof queryBuilder?.range === 'function' ? queryBuilder.range(from, to) : queryBuilder)
+    const { data, error } = await query
 
     if (error) {
       return { data: allData.length > 0 ? allData : null, error }

@@ -18,7 +18,8 @@ import {
     isUpstreamPaymentMatch,
     filterUpstreamPaymentsForTransfer,
     isUpstreamPrizePayment,
-    calculateUpstreamPrizeCollected
+    calculateUpstreamPrizeCollected,
+    calculateUserRoundSummary
 } from './memberSettlementCalculator'
 
 describe('memberSettlementCalculator', () => {
@@ -863,6 +864,67 @@ describe('calculateRoundOutstandingDetails', () => {
             ]
             expect(calculateUpstreamPrizeCollected(payments)).toBe(2000)
             expect(calculateUpstreamPrizeCollected([])).toBe(0)
+        })
+    })
+
+    describe('calculateUserRoundSummary', () => {
+        it('returns zero values for empty or non-array submissions', () => {
+            const empty = calculateUserRoundSummary({ lottery_type: 'lao' }, [])
+            expect(empty).toEqual({
+                totalEntries: 0,
+                totalAmount: 0,
+                totalCommission: 0,
+                totalWinnings: 0,
+                profitLoss: 0,
+                winCount: 0
+            })
+            expect(calculateUserRoundSummary(null, null)).toEqual(empty)
+        })
+
+        it('calculates totals, commissions, winnings and profit/loss accurately', () => {
+            const round = { lottery_type: 'thai' }
+            const submissions = [
+                {
+                    amount: 100,
+                    commission_amount: 15,
+                    is_winner: false,
+                    bet_type: '2_top'
+                },
+                {
+                    amount: 200,
+                    prize_amount: 14000,
+                    is_winner: true,
+                    bet_type: '2_bottom'
+                }
+            ]
+            const summary = calculateUserRoundSummary(round, submissions, null)
+            expect(summary.totalEntries).toBe(2)
+            expect(summary.totalAmount).toBe(300)
+            // Default commission for 2_top (15%) = 15; 2_bottom (15%) = 30 => total = 45 (or 15 + 30)
+            expect(summary.totalCommission).toBe(45)
+            expect(summary.totalWinnings).toBe(14000)
+            expect(summary.winCount).toBe(1)
+            // profitLoss = 14000 + 45 - 300 = 13745
+            expect(summary.profitLoss).toBe(13745)
+        })
+
+        it('supports Lao 4_set prize calculation with multiple sets', () => {
+            const round = { lottery_type: 'lao', set_prices: { '4_top': 120 } }
+            const submissions = [
+                {
+                    amount: 240, // 2 sets
+                    prize_amount: 100000, // per single set
+                    is_winner: true,
+                    bet_type: '4_set'
+                }
+            ]
+            const summary = calculateUserRoundSummary(round, submissions, null)
+            expect(summary.totalAmount).toBe(240)
+            // 2 sets * 100000 = 200000
+            expect(summary.totalWinnings).toBe(200000)
+            // 2 sets * 25 default commission = 50
+            expect(summary.totalCommission).toBe(50)
+            expect(summary.profitLoss).toBe(200000 + 50 - 240)
         })
     })
 })

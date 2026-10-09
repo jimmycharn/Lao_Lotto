@@ -47,9 +47,12 @@ import { BET_TYPES_BY_LOTTERY } from '../constants/lotteryTypes'
 import DealerInfoTab from '../components/user/DealerInfoTab'
 import ReferralAffiliateTab from '../components/referral/ReferralAffiliateTab'
 import UserQRScannerModal from '../components/user/UserQRScannerModal'
+import UserHistoryTab from '../components/user/UserHistoryTab'
 import { createBill } from '../services/submissionService'
 import { formatCopyText, copyToClipboard } from '../utils/copyFormat'
 import { confirmDialog } from '../utils/confirmDialog'
+import { calculateUserRoundSummary } from '../utils/memberSettlementCalculator'
+import { getRoundCloseDate } from '../utils/crossRoundOffsetCalculator'
 
 // Import constants from centralized file
 import {
@@ -545,7 +548,7 @@ export default function UserDashboard() {
         if (activeTab === 'history') {
             fetchUserHistory()
         }
-    }, [activeTab])
+    }, [activeTab, selectedDealer?.id])
 
     async function fetchRounds() {
         if (!selectedDealer) return
@@ -690,94 +693,14 @@ export default function UserDashboard() {
                     const subs = subsByRound[round.id]
                     if (!subs || subs.length === 0) continue
 
-                    const totalAmount = subs.reduce((sum, s) => sum + (s.amount || 0), 0)
-                    const winCount = subs.filter(s => s.is_winner).length
-
-                    // Calculate total prize and commission using same logic as getCalculatedPrize/getCalculatedCommission
-                    const lotteryKey = (() => {
-                        if (round.lottery_type === 'thai') return 'thai'
-                        if (round.lottery_type === 'lao' || round.lottery_type === 'hanoi') return 'lao'
-                        if (round.lottery_type === 'stock') return 'stock'
-                        return 'thai'
-                    })()
-
-                    // Always recalculate commission from current user_settings so that
-                    // when commission rates change, all entries reflect the updated rate
-                    const calcCommissionFallback = (s) => {
-                        const POSITION_MAP_C = {
-                            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
-                            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
-                        }
-                        let settingsKeyC = POSITION_MAP_C[s.bet_type] || s.bet_type
-                        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-                            const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
-                            settingsKeyC = LAO_MAP[settingsKeyC] || settingsKeyC
-                        }
-                        const settingsC = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKeyC]
-                        if (s.bet_type === '4_set' || s.bet_type === '4_top') {
-                            if (settingsC?.isSet && settingsC?.commission !== undefined) {
-                                const setPrice = settingsC.setPrice || round?.set_prices?.['4_top'] || 120
-                                return Math.floor((s.amount || 0) / setPrice) * settingsC.commission
-                            }
-                            const defaultSetPrice = round?.set_prices?.['4_top'] || 120
-                            return Math.floor((s.amount || 0) / defaultSetPrice) * 25
-                        }
-                        if (settingsC?.commission !== undefined) {
-                            return settingsC.isFixed ? settingsC.commission : (s.amount || 0) * (settingsC.commission / 100)
-                        }
-                        const defRate = DEFAULT_COMMISSIONS[s.bet_type] || 15
-                        return (s.amount || 0) * (defRate / 100)
-                    }
-                    const totalCommission = subs.reduce((sum, s) => sum + calcCommissionFallback(s), 0)
-
-                    const totalPrize = subs.reduce((sum, s) => {
-                        if (!s.is_winner) return sum
-                        // For 4_set, DB stores single-set prize — multiply by numSets
-                        if (s.bet_type === '4_set') {
-                            const setPrice = round?.set_prices?.['4_top'] || 120
-                            const numSets = Math.max(1, Math.floor((s.amount || 0) / setPrice))
-                            return sum + (s.prize_amount || 0) * numSets
-                        }
-                        if (s.prize_amount !== undefined && s.prize_amount !== null && Number(s.prize_amount) > 0) {
-                            return sum + Number(s.prize_amount)
-                        }
-                        // Map position bet types to pak_top/pak_bottom settings
-                        const POSITION_MAP_P = {
-                            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
-                            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
-                        }
-                        let settingsKey = POSITION_MAP_P[s.bet_type] || s.bet_type
-                        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
-                            const LAO_BET_TYPE_MAP = {
-                                '3_top': '3_straight',
-                                '3_tod': '3_tod_single'
-                            }
-                            settingsKey = LAO_BET_TYPE_MAP[settingsKey] || settingsKey
-                        }
-                        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
-                        if (settings?.payout !== undefined) {
-                            return sum + (s.amount * settings.payout)
-                        }
-                        const defaultPayouts = {
-                            'run_top': 3, 'run_bottom': 4, 'pak_top': 8, 'pak_bottom': 6,
-                            'front_top_1': 8, 'middle_top_1': 8, 'back_top_1': 8,
-                            'front_bottom_1': 6, 'back_bottom_1': 6,
-                            '2_top': 65, '2_front': 65, '2_center': 65, '2_spread': 65, '2_run': 10, '2_bottom': 65,
-                            '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
-                            '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
-                        }
-                        return sum + (s.amount * (defaultPayouts[s.bet_type] || 1))
-                    }, 0)
-
-                    const netResult = totalCommission + totalPrize - totalAmount
-
+                    const s = calculateUserRoundSummary(round, subs, userSettings)
                     summaries[round.id] = {
-                        totalAmount,
-                        totalCommission,
-                        totalPrize,
-                        netResult,
-                        winCount,
-                        ticketCount: subs.length
+                        totalAmount: s.totalAmount,
+                        totalCommission: s.totalCommission,
+                        totalPrize: s.totalWinnings,
+                        netResult: s.profitLoss,
+                        winCount: s.winCount,
+                        ticketCount: s.totalEntries
                     }
                 }
                 setResultsSummaries(summaries)
@@ -819,21 +742,142 @@ export default function UserDashboard() {
         }
     }
 
-    // Fetch user history (archived rounds)
+    // Fetch user history (archived rounds + active announced rounds)
     async function fetchUserHistory() {
         if (!user?.id) return
         setHistoryLoading(true)
         try {
-            const { data, error } = await supabase
+            // 1. Fetch archived round history from user_round_history
+            let historyQuery = supabase
                 .from('user_round_history')
                 .select('*')
                 .eq('user_id', user.id)
-                .order('deleted_at', { ascending: false })
-                .limit(50)
 
-            if (!error && data) {
-                setUserHistory(data)
+            if (selectedDealer?.id) {
+                historyQuery = historyQuery.eq('dealer_id', selectedDealer.id)
             }
+
+            const { data: archivedData, error: archivedError } = await fetchAllRows(
+                (from, to) => historyQuery.order('deleted_at', { ascending: false }).range(from, to)
+            )
+
+            if (archivedError) {
+                console.error('Error fetching archived user history:', archivedError)
+            }
+
+            const archivedList = archivedData || []
+            const existingRoundIds = new Set(
+                archivedList.flatMap(h => [h.round_id, h.id]).filter(Boolean)
+            )
+
+            // 2. Fetch active rounds where results are announced (is_result_announced === true)
+            // even if dealer has not deleted/archived them yet
+            let announcedQuery = supabase
+                .from('lottery_rounds')
+                .select('*')
+                .eq('is_result_announced', true)
+
+            if (selectedDealer?.id) {
+                announcedQuery = announcedQuery.eq('dealer_id', selectedDealer.id)
+            }
+
+            const { data: announcedRounds, error: roundsErr } = await fetchAllRows(
+                (from, to) => announcedQuery
+                    .order('close_time', { ascending: false })
+                    .order('created_at', { ascending: false })
+                    .range(from, to)
+            )
+
+            if (roundsErr) {
+                console.error('Error fetching active announced rounds:', roundsErr)
+            }
+
+            // Filter out announced rounds that are already recorded in user_round_history
+            const unarchivedAnnouncedRounds = (announcedRounds || []).filter(
+                r => !existingRoundIds.has(r.id)
+            )
+
+            const activeHistoryItems = []
+            if (unarchivedAnnouncedRounds.length > 0) {
+                // Ensure member settings are available for commission/payout calculations
+                let currentSettings = userSettings
+                if (!currentSettings && selectedDealer?.id) {
+                    const { data: sData } = await supabase
+                        .from('user_settings')
+                        .select('*')
+                        .eq('user_id', user.id)
+                        .eq('dealer_id', selectedDealer.id)
+                        .maybeSingle()
+                    if (sData) {
+                        currentSettings = sData
+                        setUserSettings(sData)
+                    }
+                }
+
+                const roundIdsToCheck = unarchivedAnnouncedRounds.map(r => r.id)
+                const activeSubs = []
+                const chunkSize = 50
+                for (let i = 0; i < roundIdsToCheck.length; i += chunkSize) {
+                    const chunk = roundIdsToCheck.slice(i, i + chunkSize)
+                    const { data: subData } = await fetchAllRows(
+                        (from, to) => supabase
+                            .from('submissions')
+                            .select('*')
+                            .in('round_id', chunk)
+                            .eq('user_id', user.id)
+                            .eq('is_deleted', false)
+                            .order('created_at', { ascending: false })
+                            .range(from, to)
+                    )
+                    if (subData && subData.length > 0) {
+                        activeSubs.push(...subData)
+                    }
+                }
+
+                // Group member submissions by round_id
+                const subsByRound = {}
+                activeSubs.forEach(s => {
+                    if (!subsByRound[s.round_id]) subsByRound[s.round_id] = []
+                    subsByRound[s.round_id].push(s)
+                })
+
+                for (const round of unarchivedAnnouncedRounds) {
+                    const subs = subsByRound[round.id]
+                    // Skip rounds where member had no submissions
+                    if (!subs || subs.length === 0) continue
+
+                    const summary = calculateUserRoundSummary(round, subs, currentSettings)
+                    const roundCloseDate = getRoundCloseDate(round) || round.round_date || round.close_time?.split('T')[0]
+
+                    activeHistoryItems.push({
+                        id: `active_${round.id}`,
+                        round_id: round.id,
+                        dealer_id: round.dealer_id,
+                        user_id: user.id,
+                        lottery_type: round.lottery_type,
+                        lottery_name: round.lottery_name || LOTTERY_TYPES[round.lottery_type] || round.lottery_type,
+                        round_date: roundCloseDate,
+                        open_time: round.open_time,
+                        close_time: round.close_time,
+                        total_entries: summary.totalEntries,
+                        total_amount: summary.totalAmount,
+                        total_commission: summary.totalCommission,
+                        total_winnings: summary.totalWinnings,
+                        profit_loss: summary.profitLoss,
+                        winning_numbers: round.winning_numbers,
+                        is_active_announced: true
+                    })
+                }
+            }
+
+            // Combine active announced rounds and archived rounds, sorted by Bangkok close date descending
+            const combinedHistory = [...activeHistoryItems, ...archivedList].sort((a, b) => {
+                const dateA = new Date(getRoundCloseDate(a) || a.close_time || a.round_date || a.created_at || a.open_time || 0).getTime()
+                const dateB = new Date(getRoundCloseDate(b) || b.close_time || b.round_date || b.created_at || b.open_time || 0).getTime()
+                return dateB - dateA
+            })
+
+            setUserHistory(combinedHistory)
         } catch (error) {
             console.error('Error fetching user history:', error)
         } finally {
@@ -4616,66 +4660,12 @@ export default function UserDashboard() {
 
                     {activeTab === 'history' && (
                         <div className="history-tab-content">
-                            {historyLoading ? (
-                                <div className="loading-state">
-                                    <div className="spinner"></div>
-                                </div>
-                            ) : userHistory.length === 0 ? (
-                                <div className="empty-state card">
-                                    <FiClock className="empty-icon" />
-                                    <h3>ไม่มีประวัติ</h3>
-                                    <p>ประวัติจะแสดงเมื่อเจ้ามือลบงวดหวยที่คุณส่งเลข</p>
-                                </div>
-                            ) : (
-                                <div className="history-list">
-                                    {userHistory.map(item => (
-                                        <div key={item.id} className="card" style={{ marginBottom: '0.75rem', padding: '1rem' }}>
-                                            <div className="user-round-layout">
-                                                {/* Row 1: Logo, Name */}
-                                                <div className="user-round-header-row">
-                                                    <span className={`lottery-badge ${item.lottery_type}`}>
-                                                        {LOTTERY_TYPES[item.lottery_type] || item.lottery_type}
-                                                    </span>
-                                                    <span className="round-name">{item.lottery_name || LOTTERY_TYPES[item.lottery_type]}</span>
-                                                </div>
-                                                
-                                                {/* Row 2: Date/Time */}
-                                                <div className="user-round-datetime">
-                                                    <FiCalendar /> {new Date(item.open_time || item.round_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} {new Date(item.open_time || item.round_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} - {new Date(item.close_time || item.round_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' })} {new Date(item.close_time || item.round_date).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                                                </div>
-                                                
-                                                {/* Summary Stats */}
-                                                <div className="header-summary results-header-summary" style={{ marginTop: '0.5rem' }}>
-                                                    <span className="summary-item">
-                                                        <span className="label">ยอดส่ง</span>
-                                                        <span style={{ color: 'var(--color-danger)', fontWeight: 600 }}>
-                                                            -฿{Math.abs(Math.round(item.total_amount || 0)).toLocaleString()}
-                                                        </span>
-                                                    </span>
-                                                    <span className="summary-item">
-                                                        <span className="label">ค่าคอม</span>
-                                                        <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
-                                                            +฿{Math.abs(Math.round(item.total_commission || 0)).toLocaleString()}
-                                                        </span>
-                                                    </span>
-                                                    <span className="summary-item">
-                                                        <span className="label">รางวัล</span>
-                                                        <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>
-                                                            +฿{Math.abs(Math.round(item.total_winnings || 0)).toLocaleString()}
-                                                        </span>
-                                                    </span>
-                                                    <span className={`summary-item profit ${(item.profit_loss || 0) >= 0 ? 'positive' : 'negative'}`}>
-                                                        <span className="label">กำไร/ขาดทุน</span>
-                                                        <span style={{ fontWeight: 700 }}>
-                                                            {(item.profit_loss || 0) >= 0 ? '+' : '-'}฿{Math.abs(Math.round(item.profit_loss || 0)).toLocaleString()}
-                                                        </span>
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                            <UserHistoryTab
+                                history={userHistory}
+                                loading={historyLoading}
+                                onRefresh={fetchUserHistory}
+                                currencySymbol={selectedDealer?.currency_symbol || '฿'}
+                            />
                         </div>
                     )}
 

@@ -1,7 +1,9 @@
 import {
     DEFAULT_PAYOUTS,
+    DEFAULT_COMMISSIONS,
     calculate4SetPrizes,
-    getLotteryTypeKey
+    getLotteryTypeKey,
+    normalizeBetType
 } from '../constants/lotteryTypes'
 
 /**
@@ -803,6 +805,136 @@ export function synthesizeMissingRoundHistory(userHistories = [], existingRoundI
         ...item,
         profit: item.total_amount - item.total_commission - item.total_payout
     }))
+}
+
+/**
+ * Calculates member financial summary (total amount, commission, winnings, profit/loss)
+ * for a round's submissions, respecting user custom settings or default rates.
+ *
+ * @param {Object} round - Round object (lottery_type, set_prices, etc.)
+ * @param {Array<Object>} submissions - Member submissions for this round
+ * @param {Object} [userSettings] - Optional member settings containing custom lottery_settings
+ * @returns {Object} { totalEntries, totalAmount, totalCommission, totalWinnings, profitLoss, winCount }
+ */
+export function calculateUserRoundSummary(round, submissions = [], userSettings = null) {
+    if (!Array.isArray(submissions) || submissions.length === 0) {
+        return {
+            totalEntries: 0,
+            totalAmount: 0,
+            totalCommission: 0,
+            totalWinnings: 0,
+            profitLoss: 0,
+            winCount: 0
+        }
+    }
+
+    const lotteryType = round?.lottery_type || 'thai'
+    const lotteryKey = getLotteryTypeKey(lotteryType)
+
+    const POSITION_MAP = {
+        'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+        'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+    }
+
+    const resolveSettingsKey = (betType) => {
+        const normalized = typeof normalizeBetType === 'function' ? normalizeBetType(betType) : betType
+        let key = POSITION_MAP[normalized] || normalized
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+            key = LAO_MAP[key] || key
+        }
+        return key
+    }
+
+    const calcCommission = (s) => {
+        const normalized = typeof normalizeBetType === 'function' ? normalizeBetType(s.bet_type) : s.bet_type
+        const settingsKey = resolveSettingsKey(s.bet_type)
+        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+
+        if (s.bet_type === '4_set' || s.bet_type === '4_top') {
+            if (settings?.isSet && settings?.commission !== undefined) {
+                const setPrice = settings.setPrice || round?.set_prices?.['4_top'] || 120
+                return Math.floor((s.amount || 0) / setPrice) * settings.commission
+            }
+            const defaultSetPrice = round?.set_prices?.['4_top'] || 120
+            return Math.floor((s.amount || 0) / defaultSetPrice) * 25
+        }
+
+        if (settings?.commission !== undefined) {
+            return settings.isFixed ? settings.commission : (s.amount || 0) * (settings.commission / 100)
+        }
+
+        if (s.commission_amount != null && !isNaN(Number(s.commission_amount)) && Number(s.commission_amount) > 0) {
+            return Number(s.commission_amount)
+        }
+
+        let defaultRate = DEFAULT_COMMISSIONS?.[normalized] || DEFAULT_COMMISSIONS?.[s.bet_type] || 15
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_DEFAULTS = {
+                'run_top': 10, 'run_bottom': 10,
+                'pak_top': 20, 'pak_bottom': 20,
+                '2_top': 20, '2_bottom': 20, '2_front': 20, '2_center': 20, '2_spread': 20, '2_run': 20,
+                '3_top': 20, '3_tod': 20, '3_bottom': 20,
+                '4_float': 20, '5_float': 20
+            }
+            defaultRate = LAO_DEFAULTS[normalized] !== undefined ? LAO_DEFAULTS[normalized] : (LAO_DEFAULTS[s.bet_type] !== undefined ? LAO_DEFAULTS[s.bet_type] : 20)
+        }
+        return (s.amount || 0) * (defaultRate / 100)
+    }
+
+    const calcPrize = (s) => {
+        if (!s.is_winner) return 0
+
+        if (s.bet_type === '4_set') {
+            const setPrice = round?.set_prices?.['4_top'] || 120
+            const numSets = Math.max(1, Math.floor((s.amount || 0) / setPrice))
+            return (s.prize_amount || 0) * numSets
+        }
+
+        if (s.prize_amount !== undefined && s.prize_amount !== null && Number(s.prize_amount) > 0) {
+            return Number(s.prize_amount)
+        }
+
+        const normalized = typeof normalizeBetType === 'function' ? normalizeBetType(s.bet_type) : s.bet_type
+        const settingsKey = resolveSettingsKey(s.bet_type)
+        const settings = userSettings?.lottery_settings?.[lotteryKey]?.[settingsKey]
+
+        if (settings && settings.payout !== undefined) {
+            return (s.amount || 0) * settings.payout
+        }
+
+        let defaultRate = DEFAULT_PAYOUTS?.[normalized] || DEFAULT_PAYOUTS?.[s.bet_type] || 1
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalized)) {
+                defaultRate = 70
+            }
+        }
+        return (s.amount || 0) * defaultRate
+    }
+
+    let totalAmount = 0
+    let totalCommission = 0
+    let totalWinnings = 0
+    let winCount = 0
+
+    submissions.forEach(s => {
+        totalAmount += Number(s.amount || 0)
+        totalCommission += calcCommission(s)
+        const prize = calcPrize(s)
+        totalWinnings += prize
+        if (s.is_winner) winCount += 1
+    })
+
+    const profitLoss = totalWinnings + totalCommission - totalAmount
+
+    return {
+        totalEntries: submissions.length,
+        totalAmount,
+        totalCommission,
+        totalWinnings,
+        profitLoss,
+        winCount
+    }
 }
 
 
