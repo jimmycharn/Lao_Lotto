@@ -4589,8 +4589,8 @@ export default function Dealer() {
 
                                 {/* Filter bar for closed rounds */}
                                 {roundsTab === 'closed' && closedRounds.length > 0 && (
-                                    <div className="closed-rounds-filter-bar">
-                                        <div className="closed-rounds-filter-item">
+                                    <div className="history-filters-bar closed-rounds-filter-bar">
+                                        <div className="history-filter-item closed-rounds-filter-item">
                                             <label>🎯 ประเภทหวย:</label>
                                             <select
                                                 className="form-control"

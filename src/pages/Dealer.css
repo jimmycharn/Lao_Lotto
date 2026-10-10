@@ -6674,14 +6674,29 @@ html.theme-light .icon-btn-sm:hover {
     color: var(--color-text, #ffffff);
     border: 1px solid var(--color-border, rgba(255, 255, 255, 0.15));
     outline: none;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    color-scheme: dark;
+    transition: all 0.2s ease;
+}
+
+.closed-rounds-filter-item select.form-control:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(0, 0, 0, 0.45);
 }
 
 .closed-rounds-filter-item select.form-control:focus {
-    border-color: var(--color-primary, #f59e0b);
-    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+    border-color: var(--color-primary, #d4af37);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.25);
+    background: rgba(0, 0, 0, 0.5);
+    outline: none;
 }
 
+.closed-rounds-filter-item select.form-control option {
+    background: #16213e;
+    color: #ffffff;
+    padding: 0.4rem;
+}
+
+/* Light theme overrides */
 :root.theme-light .closed-rounds-filter-item select.form-control,
 [data-theme="light"] .closed-rounds-filter-item select.form-control {
     background: #ffffff;
@@ -6690,10 +6705,17 @@ html.theme-light .icon-btn-sm:hover {
     color-scheme: light;
 }
 
+:root.theme-light .closed-rounds-filter-item select.form-control:hover,
+[data-theme="light"] .closed-rounds-filter-item select.form-control:hover {
+    border-color: rgba(0, 0, 0, 0.3);
+    background: #fdfdfd;
+}
+
 :root.theme-light .closed-rounds-filter-item select.form-control:focus,
 [data-theme="light"] .closed-rounds-filter-item select.form-control:focus {
     border-color: var(--color-primary, #b8960c);
     box-shadow: 0 0 0 2px rgba(184, 150, 12, 0.2);
+    background: #ffffff;
 }
 
 :root.theme-light .closed-rounds-filter-item select.form-control option,
@@ -6707,6 +6729,7 @@ html.theme-light .icon-btn-sm:hover {
         max-width: 100%;
     }
 }
+
 
 
 
