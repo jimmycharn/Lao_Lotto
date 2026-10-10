@@ -64,6 +64,7 @@ import {
     getLotteryTypeKey
 } from '../constants/lotteryTypes'
 import { isRateLimitDefault } from '../utils/numberLimits'
+import { getAvailableClosedLotteryTypes, filterClosedRounds } from '../utils/closedRoundsFilterHelper'
 
 // Import separated modal components
 import ResultsModal from '../components/dealer/ResultsModal'
@@ -333,6 +334,7 @@ export default function Dealer() {
     const [historyLoading, setHistoryLoading] = useState(false)
     const [historyMonthFilter, setHistoryMonthFilter] = useState('all')
     const [historyTypeFilter, setHistoryTypeFilter] = useState('all')
+    const [closedLotteryTypeFilter, setClosedLotteryTypeFilter] = useState('all')
     const [historySettlementFilter, setHistorySettlementFilter] = useState('pending') // 'all' | 'settled' | 'pending' (default: 'pending')
     const [historySenderSearch, setHistorySenderSearch] = useState('')
     const [expandedHistoryId, setExpandedHistoryId] = useState(null)
@@ -4545,7 +4547,9 @@ export default function Dealer() {
                         // Filter rounds based on selected tab
                         const openRounds = rounds.filter(r => isRoundOpen(r))
                         const closedRounds = rounds.filter(r => !isRoundOpen(r))
-                        const displayedRounds = roundsTab === 'open' ? openRounds : closedRounds
+                        const availableClosedLotteryTypes = getAvailableClosedLotteryTypes(closedRounds)
+                        const filteredClosedRounds = filterClosedRounds(closedRounds, closedLotteryTypeFilter)
+                        const displayedRounds = roundsTab === 'open' ? openRounds : filteredClosedRounds
 
                         return (
                             <div className="rounds-section">
@@ -4573,7 +4577,7 @@ export default function Dealer() {
                                         className={`sub-tab-btn ${roundsTab === 'closed' ? 'active' : ''}`}
                                         onClick={() => setRoundsTab('closed')}
                                     >
-                                        งวดที่ปิดแล้ว ({closedRounds.length})
+                                        งวดที่ปิดแล้ว ({filteredClosedRounds.length})
                                     </button>
                                     <button
                                         className={`sub-tab-btn ${roundsTab === 'history' ? 'active' : ''}`}
@@ -4582,6 +4586,27 @@ export default function Dealer() {
                                         ประวัติ
                                     </button>
                                 </div>
+
+                                {/* Filter bar for closed rounds */}
+                                {roundsTab === 'closed' && closedRounds.length > 0 && (
+                                    <div className="closed-rounds-filter-bar">
+                                        <div className="closed-rounds-filter-item">
+                                            <label>🎯 ประเภทหวย:</label>
+                                            <select
+                                                className="form-control"
+                                                value={closedLotteryTypeFilter}
+                                                onChange={e => setClosedLotteryTypeFilter(e.target.value)}
+                                            >
+                                                <option value="all">หวยทุกประเภท</option>
+                                                {availableClosedLotteryTypes.map(type => (
+                                                    <option key={type} value={type}>
+                                                        {LOTTERY_TYPES[type] || type}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Rounds List or History */}
                                 {roundsTab === 'history' ? (
@@ -5831,8 +5856,30 @@ export default function Dealer() {
                                     ) : displayedRounds.length === 0 ? (
                                         <div className="empty-state card">
                                             <FiCalendar className="empty-icon" />
-                                            <h3>{roundsTab === 'open' ? 'ไม่มีงวดที่เปิดอยู่' : 'ไม่มีงวดที่ปิดแล้ว'}</h3>
-                                            <p>{roundsTab === 'open' ? 'กดปุ่ม "สร้างงวดใหม่" เพื่อเริ่มต้น' : 'สลับไปที่แท็บ "งวดที่เปิดอยู่" เพื่อดูงวดที่ยังเปิดรับ'}</p>
+                                            <h3>
+                                                {roundsTab === 'open' 
+                                                    ? 'ไม่มีงวดที่เปิดอยู่' 
+                                                    : closedRounds.length > 0 
+                                                        ? 'ไม่พบงวดที่ปิดแล้วสำหรับประเภทที่เลือก' 
+                                                        : 'ไม่มีงวดที่ปิดแล้ว'}
+                                            </h3>
+                                            <p>
+                                                {roundsTab === 'open' 
+                                                    ? 'กดปุ่ม "สร้างงวดใหม่" เพื่อเริ่มต้น' 
+                                                    : closedRounds.length > 0 
+                                                        ? 'ลองเลือกประเภทหวยอื่น หรือกดดูหวยทุกประเภท' 
+                                                        : 'สลับไปที่แท็บ "งวดที่เปิดอยู่" เพื่อดูงวดที่ยังเปิดรับ'}
+                                            </p>
+                                            {roundsTab === 'closed' && closedRounds.length > 0 && closedLotteryTypeFilter !== 'all' && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary"
+                                                    style={{ marginTop: '0.75rem' }}
+                                                    onClick={() => setClosedLotteryTypeFilter('all')}
+                                                >
+                                                    แสดงหวยทุกประเภท
+                                                </button>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="rounds-list">
