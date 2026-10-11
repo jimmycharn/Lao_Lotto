@@ -176,3 +176,147 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
 
     return lines.join('\n')
 }
+
+export interface CrossRoundDebtItem {
+    roundId: string
+    roundDate: string
+    lotteryType?: string
+    debt: number
+}
+
+export interface CrossRoundAllocationParams {
+    pastDebts: CrossRoundDebtItem[]
+    currentRoundPrize: number
+    slipAmount: number
+    dealerId: string
+    memberUserId: string
+    currentRound: {
+        id: string
+        round_date?: string
+        close_time?: string
+        lottery_type?: string
+    }
+    paidAt: string
+    transRef?: string
+    adjustmentNote?: string | null
+}
+
+export interface AllocatedPayment {
+    dealer_id: string
+    user_id: string
+    round_id: string
+    lottery_type?: string
+    round_date?: string
+    payment_type: 'net_settlement' | 'prize_payout'
+    direction: 'member_to_dealer' | 'dealer_to_member'
+    amount: number
+    paid_at: string
+    notes: string
+    created_by: string
+}
+
+export interface CrossRoundAllocationResult {
+    payments: AllocatedPayment[]
+    remainingFunds: number
+}
+
+/**
+ * Extracts and formats the true round date (YYYY-MM-DD) which ALWAYS corresponds
+ * to the draw/closing date (close_time / close_date), NOT open_time / open_date.
+ * Uses 'Asia/Bangkok' timezone formatting.
+ */
+export function getRoundCloseDate(roundOrVal: any): string {
+    if (!roundOrVal) return ''
+    let raw = roundOrVal
+    if (typeof roundOrVal === 'object' && !(roundOrVal instanceof Date)) {
+        raw = roundOrVal.close_time || roundOrVal.close_date || roundOrVal.round_date || roundOrVal.open_time || roundOrVal.created_at || ''
+    }
+    if (!raw) return ''
+    if (typeof raw === 'string') {
+        const trimmed = raw.trim()
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+            return trimmed
+        }
+    }
+    try {
+        const d = new Date(raw)
+        if (!isNaN(d.getTime())) {
+            return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })
+        }
+    } catch {
+        // Fallback
+    }
+    return typeof raw === 'string' ? raw.slice(0, 10) : ''
+}
+
+/**
+ * Allocates clearing funds (current round prize + slip payment) to past debts in FIFO order.
+ */
+export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): CrossRoundAllocationResult {
+    const {
+        pastDebts,
+        currentRoundPrize = 0,
+        slipAmount = 0,
+        dealerId,
+        memberUserId,
+        currentRound,
+        paidAt,
+        transRef = '',
+        adjustmentNote = null
+    } = params
+
+    const payments: AllocatedPayment[] = []
+    const curRoundDate = getRoundCloseDate(currentRound)
+    const prize = Math.max(0, Number(currentRoundPrize) || 0)
+    const slip = Math.max(0, Number(slipAmount) || 0)
+
+    // 1. Current round prize payout record (if prize > 0)
+    if (prize > 0) {
+        payments.push({
+            dealer_id: dealerId,
+            user_id: memberUserId,
+            round_id: currentRound.id,
+            lottery_type: currentRound.lottery_type,
+            round_date: curRoundDate,
+            payment_type: 'prize_payout',
+            direction: 'dealer_to_member',
+            amount: prize,
+            paid_at: paidAt,
+            notes: `หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ]${transRef ? ` (Ref: ${transRef})` : ''}`,
+            created_by: dealerId
+        })
+    }
+
+    // 2. Allocate clearing funds (prize + slip) to past debts
+    let remaining = Math.round((prize + slip) * 100) / 100
+
+    for (const past of pastDebts) {
+        if (remaining <= 0) break
+        const debtAmt = Math.max(0, Number(past.debt) || 0)
+        if (debtAmt <= 0) continue
+
+        const alloc = Math.min(debtAmt, remaining)
+        remaining = Math.round((remaining - alloc) * 100) / 100
+
+        if (alloc > 0) {
+            payments.push({
+                dealer_id: dealerId,
+                user_id: memberUserId,
+                round_id: past.roundId,
+                lottery_type: past.lotteryType,
+                round_date: past.roundDate,
+                payment_type: 'net_settlement',
+                direction: 'member_to_dealer',
+                amount: alloc,
+                paid_at: paidAt,
+                notes: `[สลิปอัตโนมัติ] หักล้างยอดข้ามงวด${transRef ? ` (Ref: ${transRef})` : ''}${adjustmentNote ? ` - ${adjustmentNote}` : ''}`,
+                created_by: dealerId
+            })
+        }
+    }
+
+    return {
+        payments,
+        remainingFunds: remaining
+    }
+}
