@@ -338,133 +338,32 @@ export default function UpstreamSettlementInline({
 
     return (
         <div className="upstream-settlement-inline-container">
-            {/* 1. Summary Strip */}
-            <div className="upstream-settlement-strip">
-                <div className="upstream-strip-col">
-                    <span className="upstream-strip-label">ยอดตีออกสุทธิ (หักคอม)</span>
-                    <span className="upstream-strip-val" style={{ color: '#ef4444' }}>
-                        -฿{netLayoff.toLocaleString()}
-                    </span>
-                </div>
-                <div className="upstream-strip-col">
-                    <span className="upstream-strip-label">รับคืนรางวัล</span>
-                    <span 
-                        className="upstream-strip-val" 
-                        style={{ 
-                            color: 'var(--color-success)',
-                            textDecoration: isPrizeFullyPaid ? 'line-through' : 'none',
-                            textDecorationThickness: isPrizeFullyPaid ? '1.5px' : 'auto',
-                            opacity: isPrizeFullyPaid ? 0.65 : 1
-                        }}
-                        title={isPrizeFullyPaid ? (status.isSettled ? `เคลียร์ยอดครบแล้ว (รวมเงินรางวัล ฿${totalWinnings.toLocaleString()})` : `รับคืนเงินรางวัลครบแล้ว (฿${prizeCollected.toLocaleString()})`) : undefined}
-                    >
-                        +฿{totalWinnings.toLocaleString()}
-                    </span>
-                    {isPrizePartiallyPaid && (
-                        <span 
-                            style={{ 
-                                fontSize: '0.68rem', 
-                                color: 'var(--color-warning, #f59e0b)', 
-                                fontWeight: 'normal',
-                                marginTop: '0.15rem' 
-                            }}
-                            title={`รับแล้ว ฿${prizeCollected.toLocaleString()} / ค้างรับอีก ฿${(totalWinnings - prizeCollected).toLocaleString()}`}
-                        >
-                            (รับแล้ว ฿{prizeCollected.toLocaleString()})
-                        </span>
-                    )}
-                </div>
-                <div className="upstream-strip-col">
-                    <span className="upstream-strip-label">ชำระแล้ว (เราจ่าย / เจ้ามือจ่าย)</span>
-                    <span className="upstream-strip-val" style={{ fontSize: '0.9rem' }}>
-                        ฿{paidByDealer.toLocaleString()} / ฿{paidByUpstream.toLocaleString()}
-                    </span>
-                </div>
-                <div className="upstream-strip-col">
-                    <span className="upstream-strip-label">ยอดคงค้างปัจจุบัน</span>
-                    <span
-                        className="upstream-strip-badge"
-                        style={{
-                            background: status.badgeBg,
-                            color: status.color,
-                            border: `1px solid ${status.badgeBorder}`
-                        }}
-                    >
-                        {status.formattedText}
-                    </span>
-                </div>
-            </div>
-
-            {/* Smart Detection Banner for Cross-Round Offset */}
+            {/* Smart Detection Banner for Cross-Round Offset (compact & concise) */}
             {pastUnpaidRounds.length > 0 && (availableWinnings > 0 || pastPrizesTotal > 0 || pastDebtsTotal > 0) && (
                 <div className="cross-round-smart-banner">
-                    <div className="banner-left">
-                        <span className="banner-icon"><FiZap color="#facc15" size={18} /></span>
-                        <div className="banner-text">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <strong>ตรวจพบยอดคงค้างจากงวดก่อนหน้า</strong>
-                                <span className="banner-count-badge">{pastUnpaidRounds.length} งวด</span>
-                            </div>
-                            <span>
-                                {pastDebtsTotal > 0 && pastPrizesTotal > 0 ? (
-                                    <>
-                                        เรามียอดค้างชำระ <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong> และยอดถูกรางวัลงวดเก่า <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong>{availableWinnings > 0 ? ` พร้อมยอดถูกรางวัลงวดนี้ (฿${availableWinnings.toLocaleString()})` : ''} สามารถนำมาหักล้างกันได้
-                                    </>
-                                ) : pastDebtsTotal > 0 ? (
-                                    <>
-                                        เรามียอดค้างชำระรวม <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong>{availableWinnings > 0 ? ` สามารถนำยอดถูกรางวัลงวดนี้ (฿${availableWinnings.toLocaleString()}) ไปหักล้างได้` : ' สามารถเลือกหักล้างข้ามงวดได้'}
-                                    </>
-                                ) : (
-                                    <>
-                                        มียอดถูกรางวัลค้างรับ <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong> สามารถนำมาหักล้างหรือเคลียร์พร้อมงวดนี้ได้
-                                    </>
-                                )}
-                            </span>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        className="btn-payment-notice"
-                        onClick={() => setShowPaymentNoticeModal(true)}
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.45rem',
-                            background: '#10b981',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '0.45rem 1rem',
-                            fontSize: '0.85rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
-                            transition: 'all 0.15s ease'
-                        }}
-                    >
-                        <FiSend size={14} /> แจ้งชำระเงิน
-                    </button>
+                    <span className="banner-icon"><FiZap color="#facc15" size={14} /></span>
+                    <span className="banner-text-compact">
+                        <strong>ค้างงวดก่อน ({pastUnpaidRounds.length} งวด):</strong>{' '}
+                        {pastDebtsTotal > 0 && pastPrizesTotal > 0 ? (
+                            <>ค้างจ่าย <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong> | ค้างรับรางวัล <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong></>
+                        ) : pastDebtsTotal > 0 ? (
+                            <>ค้างจ่ายรวม <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong></>
+                        ) : (
+                            <>ค้างรับรางวัลรวม <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong></>
+                        )}
+                    </span>
                 </div>
             )}
 
-            {/* 2. Action Buttons Header */}
+            {/* Action Buttons Header (Aligned Left for mobile accessibility) */}
             <div className="upstream-settlement-actions-header">
-                <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
-                    จัดการการชำระเงินสำหรับ: <strong>{upstreamName}</strong>
-                </span>
                 <div className="upstream-settlement-btn-group">
-                    {Math.round(currentBalance) !== 0 && pastUnpaidRounds.length === 0 && (
+                    {(Math.round(currentBalance) !== 0 || pastUnpaidRounds.length > 0) && (
                         <button
                             type="button"
                             className="btn-upstream-settle-action btn-settle-notice"
                             onClick={() => setShowPaymentNoticeModal(true)}
                             title="ส่งใบแจ้งชำระเงิน / คัดลอกใบแจ้งยอดให้เจ้ามือตีออก"
-                            style={{
-                                background: 'rgba(16, 185, 129, 0.12)',
-                                color: '#10b981',
-                                border: '1px solid rgba(16, 185, 129, 0.35)',
-                                fontWeight: 600
-                            }}
                         >
                             <FiSend size={14} /> แจ้งชำระเงิน
                         </button>

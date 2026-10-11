@@ -393,120 +393,27 @@ export default function MemberSettlementInline({
 
     return (
         <div className="member-settlement-inline">
-            {/* 1. Summary Strip */}
-            <div className="settlement-summary-strip">
-                <div className="settlement-summary-item">
-                    <span className="label">ยอดส่งสุทธิ (หักคอม)</span>
-                    <span className="value">฿{netBetAmount.toLocaleString()}</span>
-                </div>
-                <div className="settlement-summary-item">
-                    <span className="label">เงินถูกรางวัล</span>
-                    <span 
-                        className="value" 
-                        style={{ 
-                            color: totalWinnings > 0 ? 'var(--color-danger)' : 'inherit',
-                            textDecoration: isPrizeFullyPaid ? 'line-through' : 'none',
-                            textDecorationThickness: isPrizeFullyPaid ? '1.5px' : 'auto',
-                            opacity: isPrizeFullyPaid ? 0.65 : 1
-                        }}
-                        title={isPrizeFullyPaid ? (status.isSettled ? `เคลียร์ยอดครบแล้ว (รวมเงินรางวัล ฿${totalWinnings.toLocaleString()})` : `ชำระเงินรางวัลครบแล้ว (฿${prizePaid.toLocaleString()})`) : undefined}
-                    >
-                        ฿{totalWinnings.toLocaleString()}
-                    </span>
-                    {isPrizePartiallyPaid && (
-                        <span 
-                            style={{ 
-                                fontSize: '0.68rem', 
-                                color: 'var(--color-warning, #f59e0b)', 
-                                fontWeight: 'normal',
-                                marginTop: '0.15rem' 
-                            }}
-                            title={`ชำระแล้ว ฿${prizePaid.toLocaleString()} / ค้างจ่ายอีก ฿${(totalWinnings - prizePaid).toLocaleString()}`}
-                        >
-                            (จ่ายแล้ว ฿{prizePaid.toLocaleString()})
-                        </span>
-                    )}
-                </div>
-                <div className="settlement-summary-item">
-                    <span className="label">ชำระแล้ว (ผู้ส่ง / เจ้ามือ)</span>
-                    <span className="value" style={{ fontSize: '0.85rem' }}>
-                        ฿{paidByMember.toLocaleString()} / ฿{paidByDealer.toLocaleString()}
-                    </span>
-                </div>
-                <div className="settlement-summary-item">
-                    <span className="label">ยอดคงค้างปัจจุบัน</span>
-                    <span
-                        className="settlement-balance-badge"
-                        style={{
-                            background: status.badgeBg,
-                            border: `1px solid ${status.badgeBorder}`,
-                            color: status.color
-                        }}
-                    >
-                        {status.formattedText}
-                    </span>
-                </div>
-            </div>
-
-            {/* Smart Detection Banner for Payment Notice: when member has past unpaid rounds */}
+            {/* Smart Detection Banner: when member has past unpaid rounds (compact & concise) */}
             {pastUnpaidRounds.length > 0 && (
                 <div className="cross-round-smart-banner">
-                    <div className="banner-left">
-                        <span className="banner-icon"><FiZap color="#facc15" size={18} /></span>
-                        <div className="banner-text">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                <strong>ตรวจพบยอดคงค้างจากงวดก่อนหน้า</strong>
-                                <span className="banner-count-badge">{pastUnpaidRounds.length} งวด</span>
-                            </div>
-                            <span>
-                                {pastDebtsTotal > 0 && pastPrizesTotal > 0 ? (
-                                    <>
-                                        มียอดค้างชำระ <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong> และค้างจ่ายรางวัลเก่า <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong>{availableWinnings > 0 ? ` พร้อมเงินรางวัลงวดนี้ (฿${availableWinnings.toLocaleString()})` : ''} สามารถนำมาหักล้างกันได้
-                                    </>
-                                ) : pastDebtsTotal > 0 ? (
-                                    <>
-                                        มียอดค้างรวม <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong>{availableWinnings > 0 ? ` สามารถนำเงินรางวัลงวดนี้ (฿${availableWinnings.toLocaleString()}) ไปหักล้างได้` : ' สามารถเลือกหักล้างข้ามงวดได้'}
-                                    </>
-                                ) : (
-                                    <>
-                                        มียอดค้างจ่ายรางวัลเก่า <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong> สามารถนำมาหักล้างหรือเคลียร์พร้อมงวดนี้ได้
-                                    </>
-                                )}
-                            </span>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        className="btn-payment-notice"
-                        onClick={() => setShowPaymentNoticeModal(true)}
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '0.45rem',
-                            background: '#10b981',
-                            color: '#ffffff',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '0.45rem 1rem',
-                            fontSize: '0.85rem',
-                            fontWeight: 700,
-                            cursor: 'pointer',
-                            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
-                            transition: 'all 0.15s ease'
-                        }}
-                    >
-                        <FiSend size={14} /> แจ้งชำระเงิน
-                    </button>
+                    <span className="banner-icon"><FiZap color="#facc15" size={14} /></span>
+                    <span className="banner-text-compact">
+                        <strong>ค้างงวดก่อน ({pastUnpaidRounds.length} งวด):</strong>{' '}
+                        {pastDebtsTotal > 0 && pastPrizesTotal > 0 ? (
+                            <>ค้างส่ง <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong> | ค้างรางวัล <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong></>
+                        ) : pastDebtsTotal > 0 ? (
+                            <>ค้างส่งรวม <strong style={{ color: '#ef4444' }}>฿{pastDebtsTotal.toLocaleString()}</strong></>
+                        ) : (
+                            <>ค้างรางวัลรวม <strong style={{ color: '#22c55e' }}>฿{pastPrizesTotal.toLocaleString()}</strong></>
+                        )}
+                    </span>
                 </div>
             )}
 
-            {/* 2. Actions Header */}
+            {/* Actions Header (Aligned Left for mobile accessibility) */}
             <div className="settlement-actions-header">
-                <span style={{ fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
-                    จัดการการชำระเงินสำหรับ: <strong>{memberName}</strong>
-                </span>
                 <div className="settlement-btn-group">
-                    {hasDebt && pastUnpaidRounds.length === 0 && (
+                    {hasDebt && (
                         <button
                             type="button"
                             className="btn-settle-action btn-settle-notice"
