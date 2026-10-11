@@ -686,6 +686,23 @@ export default function MemberSettlementInline({
                                                     className="settlement-log-notes-cell"
                                                     title={p.notes || ''}
                                                 >
+                                                    {p.notes && (p.notes.includes('สลิป') || p.notes.includes('SlipOK')) && (
+                                                        <span style={{
+                                                            display: 'inline-flex',
+                                                            alignItems: 'center',
+                                                            gap: '3px',
+                                                            padding: '1px 6px',
+                                                            borderRadius: '4px',
+                                                            fontSize: '0.7rem',
+                                                            fontWeight: 600,
+                                                            background: 'rgba(34, 197, 94, 0.15)',
+                                                            color: '#22c55e',
+                                                            border: '1px solid rgba(34, 197, 94, 0.3)',
+                                                            marginRight: '6px'
+                                                        }}>
+                                                            🤖 สลิปอัตโนมัติ
+                                                        </span>
+                                                    )}
                                                     {p.notes || '-'}
                                                 </div>
                                             </td>
