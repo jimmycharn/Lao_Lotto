@@ -13,7 +13,12 @@ import {
     FiSettings,
     FiRefreshCw,
     FiTerminal,
-    FiX
+    FiX,
+    FiCreditCard,
+    FiEye,
+    FiEyeOff,
+    FiSave,
+    FiCheckCircle
 } from 'react-icons/fi'
 import CopyButton from '../CopyButton'
 import { LOTTERY_TYPES } from '../../constants/lotteryTypes'
@@ -23,6 +28,16 @@ export default function DealerLineBotTab({ user, profile }) {
     const { toast } = useToast()
     const [loading, setLoading] = useState(true)
     const [lineGroups, setLineGroups] = useState([])
+    const [slipSettings, setSlipSettings] = useState({
+        auto_slip_verification_enabled: false,
+        slip_provider: 'slipok',
+        slipok_api_key: '',
+        slipok_branch_id: '',
+        slip_tolerance_amount: 0,
+        slip_tolerance_mode: 'forgive_difference'
+    })
+    const [savingSlipSettings, setSavingSlipSettings] = useState(false)
+    const [showApiKey, setShowApiKey] = useState(false)
     const [generatingCode, setGeneratingCode] = useState(false)
     const [activeCode, setActiveCode] = useState(null)
     const [openRounds, setOpenRounds] = useState([])
@@ -223,6 +238,76 @@ export default function DealerLineBotTab({ user, profile }) {
         }
     }
 
+    const fetchSlipSettings = async () => {
+        if (!user?.id) return
+        try {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('auto_slip_verification_enabled, slip_provider, slipok_api_key, slipok_branch_id, slip_tolerance_amount, slip_tolerance_mode')
+                .eq('id', user.id)
+                .maybeSingle()
+            if (error) throw error
+            if (data) {
+                setSlipSettings({
+                    auto_slip_verification_enabled: !!data.auto_slip_verification_enabled,
+                    slip_provider: data.slip_provider || 'slipok',
+                    slipok_api_key: data.slipok_api_key || '',
+                    slipok_branch_id: data.slipok_branch_id || '',
+                    slip_tolerance_amount: Number(data.slip_tolerance_amount) || 0,
+                    slip_tolerance_mode: data.slip_tolerance_mode || 'forgive_difference'
+                })
+            }
+        } catch (err) {
+            console.error('Error fetching slip settings:', err)
+        }
+    }
+
+    const handleSaveSlipSettings = async (e) => {
+        if (e) e.preventDefault()
+        setSavingSlipSettings(true)
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({
+                    auto_slip_verification_enabled: slipSettings.auto_slip_verification_enabled,
+                    slip_provider: slipSettings.slip_provider,
+                    slipok_api_key: (slipSettings.slipok_api_key || '').trim(),
+                    slipok_branch_id: (slipSettings.slipok_branch_id || '').trim() || null,
+                    slip_tolerance_amount: Math.max(0, Number(slipSettings.slip_tolerance_amount) || 0),
+                    slip_tolerance_mode: slipSettings.slip_tolerance_mode
+                })
+                .eq('id', user.id)
+
+            if (error) throw error
+            toast.success('บันทึกการตั้งค่าระบบตรวจสลิปเรียบร้อยแล้ว')
+        } catch (err) {
+            console.error('Error saving slip settings:', err)
+            toast.error('ไม่สามารถบันทึกการตั้งค่าระบบตรวจสลิปได้')
+        } finally {
+            setSavingSlipSettings(false)
+        }
+    }
+
+    const handleUpdateGroupSettlementMode = async (groupId, newMode) => {
+        setLineGroups(prev => prev.map(g => g.id === groupId ? { ...g, settlement_mode: newMode } : g))
+        try {
+            const { error } = await supabase
+                .from('line_groups')
+                .update({
+                    settlement_mode: newMode,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', groupId)
+
+            if (error) throw error
+            toast.success('อัปเดตรูปแบบการเคลียร์เงินของกลุ่มสำเร็จ')
+        } catch (err) {
+            console.error('Error updating group settlement mode:', err)
+            toast.error('ไม่สามารถอัปเดตรูปแบบการเคลียร์เงินได้')
+            fetchLineGroups()
+        }
+    }
+
     useEffect(() => {
         const load = async () => {
             setLoading(true)
@@ -233,7 +318,8 @@ export default function DealerLineBotTab({ user, profile }) {
                     fetchLineGroups(),
                     fetchActiveMembers(),
                     fetchManagers(),
-                    fetchAllowedLotteryTypes()
+                    fetchAllowedLotteryTypes(),
+                    fetchSlipSettings()
                 ])
             } catch (err) {
                 console.error("Error in initial load:", err)
@@ -297,7 +383,8 @@ export default function DealerLineBotTab({ user, profile }) {
             fetchLineGroups(),
             fetchActiveMembers(),
             fetchManagers(),
-            fetchAllowedLotteryTypes()
+            fetchAllowedLotteryTypes(),
+            fetchSlipSettings()
         ])
     }
 
@@ -826,6 +913,190 @@ export default function DealerLineBotTab({ user, profile }) {
                 )}
             </div>
 
+            {/* Slip Verification Settings Card */}
+            <div className="card" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <div style={{
+                            width: '36px',
+                            height: '36px',
+                            borderRadius: '8px',
+                            background: slipSettings.auto_slip_verification_enabled ? 'rgba(34, 197, 94, 0.15)' : 'rgba(212, 175, 55, 0.15)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: slipSettings.auto_slip_verification_enabled ? '#22c55e' : 'var(--color-primary)'
+                        }}>
+                            <FiCreditCard size={20} />
+                        </div>
+                        <div>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem' }}>
+                                ระบบตรวจสอบสลิปธนาคารอัตโนมัติ (SlipOK)
+                            </h3>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                ตรวจสอบสลิปโอนเงินที่ส่งในกลุ่ม LINE อัตโนมัติและตัดยอดบัญชีทันที
+                            </p>
+                        </div>
+                    </div>
+                    <div>
+                        <label style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.6rem',
+                            cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed',
+                            userSelect: 'none',
+                            padding: '0.4rem 0.8rem',
+                            borderRadius: '8px',
+                            background: slipSettings.auto_slip_verification_enabled ? 'rgba(34, 197, 94, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                            border: `1px solid ${slipSettings.auto_slip_verification_enabled ? 'rgba(34, 197, 94, 0.3)' : 'rgba(255, 255, 255, 0.1)'}`
+                        }}>
+                            <input
+                                type="checkbox"
+                                checked={slipSettings.auto_slip_verification_enabled}
+                                disabled={!isOwnerOrSuper}
+                                onChange={e => setSlipSettings(prev => ({ ...prev, auto_slip_verification_enabled: e.target.checked }))}
+                                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                            />
+                            <span style={{
+                                fontWeight: 600,
+                                fontSize: '0.88rem',
+                                color: slipSettings.auto_slip_verification_enabled ? '#22c55e' : 'var(--color-text-muted)'
+                            }}>
+                                {slipSettings.auto_slip_verification_enabled ? 'เปิดใช้งานระบบตรวจสลิป' : 'ปิดใช้งาน'}
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <form onSubmit={handleSaveSlipSettings}>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+                        gap: '1rem',
+                        marginTop: '1rem',
+                        padding: '1rem',
+                        background: 'rgba(255, 255, 255, 0.02)',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.06)'
+                    }}>
+                        {/* SlipOK API Key */}
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+                                SlipOK API Key <span style={{ color: 'var(--color-danger)' }}>*</span>
+                            </label>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <input
+                                    type={showApiKey ? 'text' : 'password'}
+                                    className="form-input"
+                                    placeholder="ใส่ API Key จาก SlipOK"
+                                    value={slipSettings.slipok_api_key}
+                                    disabled={!isOwnerOrSuper}
+                                    onChange={e => setSlipSettings(prev => ({ ...prev, slipok_api_key: e.target.value }))}
+                                    style={{ width: '100%', paddingRight: '2.5rem', fontSize: '0.85rem' }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowApiKey(v => !v)}
+                                    title={showApiKey ? 'ซ่อน API Key' : 'แสดง API Key'}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '8px',
+                                        background: 'none',
+                                        border: 'none',
+                                        color: 'var(--color-text-muted)',
+                                        cursor: 'pointer',
+                                        padding: '4px',
+                                        display: 'flex',
+                                        alignItems: 'center'
+                                    }}
+                                >
+                                    {showApiKey ? <FiEyeOff size={16} /> : <FiEye size={16} />}
+                                </button>
+                            </div>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                                สมัครและรับ API Key ได้ที่ <a href="https://slipok.com" target="_blank" rel="noreferrer" style={{ color: 'var(--color-primary)' }}>slipok.com</a>
+                            </span>
+                        </div>
+
+                        {/* SlipOK Branch ID */}
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+                                SlipOK Branch ID (ถ้ามี)
+                            </label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="เว้นว่างได้ (ค่าเริ่มต้น branch หลัก)"
+                                value={slipSettings.slipok_branch_id}
+                                disabled={!isOwnerOrSuper}
+                                onChange={e => setSlipSettings(prev => ({ ...prev, slipok_branch_id: e.target.value }))}
+                                style={{ width: '100%', fontSize: '0.85rem' }}
+                            />
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                                ใช้กรณีแยกสาขาใน SlipOK
+                            </span>
+                        </div>
+
+                        {/* Tolerance Amount */}
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+                                ส่วนต่างยอดเงินที่ยอมรับได้ (บาท)
+                            </label>
+                            <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                className="form-input"
+                                placeholder="0"
+                                value={slipSettings.slip_tolerance_amount}
+                                disabled={!isOwnerOrSuper}
+                                onChange={e => setSlipSettings(prev => ({ ...prev, slip_tolerance_amount: e.target.value }))}
+                                style={{ width: '100%', fontSize: '0.85rem' }}
+                            />
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                                ยอดสลิปคลาดเคลื่อนได้ไม่เกิน ±จำนวนนี้ (เช่น 0, 5, 10 บาท)
+                            </span>
+                        </div>
+
+                        {/* Tolerance Mode */}
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>
+                                รูปแบบการจัดการเมื่อยอดมีส่วนต่าง
+                            </label>
+                            <select
+                                className="form-input"
+                                value={slipSettings.slip_tolerance_mode}
+                                disabled={!isOwnerOrSuper}
+                                onChange={e => setSlipSettings(prev => ({ ...prev, slip_tolerance_mode: e.target.value }))}
+                                style={{ width: '100%', fontSize: '0.85rem' }}
+                            >
+                                <option value="forgive_difference">ปัดเศษยกประโยชน์ให้สมาชิก (ตัดยอดเต็ม)</option>
+                                <option value="carry_remainder">ตัดตามเงินที่โอนจริง (เศษค้างต่อ)</option>
+                            </select>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                                {slipSettings.slip_tolerance_mode === 'forgive_difference'
+                                    ? 'ตัดยอดหนี้ให้เต็มงวดทันที แม้โอนขาดไม่เกินส่วนต่างที่กำหนด'
+                                    : 'บันทึกชำระตามยอดโอนจริง เศษที่โอนขาดจะยังคงค้างอยู่ในระบบ'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {isOwnerOrSuper && (
+                        <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button
+                                type="submit"
+                                className="btn btn-primary"
+                                disabled={savingSlipSettings}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', padding: '0.55rem 1.25rem' }}
+                            >
+                                <FiSave size={16} />
+                                {savingSlipSettings ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่าสลิป'}
+                            </button>
+                        </div>
+                    )}
+                </form>
+            </div>
+
             {/* Bound Groups Table */}
             <div className="card" style={{ padding: '1.5rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -926,6 +1197,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                     <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
                                         <th style={{ textAlign: 'left', padding: '0.75rem' }}>ชื่อกลุ่ม / กลุ่ม ID</th>
                                         <th style={{ textAlign: 'center', padding: '0.75rem', width: '150px' }}>ประเภทหวยหลัก</th>
+                                        <th style={{ textAlign: 'center', padding: '0.75rem', width: '160px' }}>รูปแบบเคลียร์เงิน</th>
                                         <th style={{ textAlign: 'center', padding: '0.75rem', width: '220px' }}>เจ้ามือ/แอดมินส่งเลขได้</th>
                                         <th style={{ textAlign: 'center', padding: '0.75rem', width: '120px' }}>สถานะ</th>
                                         <th style={{ textAlign: 'center', padding: '0.75rem', width: '80px' }}>การจัดการ</th>
@@ -934,7 +1206,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                 <tbody>
                                     {filteredActiveGroups.length === 0 ? (
                                         <tr>
-                                            <td colSpan={5} style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+                                            <td colSpan={6} style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
                                                 <FiAlertCircle size={24} style={{ display: 'block', margin: '0 auto 0.5rem auto', opacity: 0.6 }} />
                                                 ไม่พบกลุ่มแชทที่ตรงกับการค้นหาของคุณ
                                             </td>
@@ -1002,6 +1274,19 @@ export default function DealerLineBotTab({ user, profile }) {
                                                             </select>
                                                         </td>
                                                         <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                                                            <select
+                                                                className="form-input"
+                                                                value={group.settlement_mode || 'immediate'}
+                                                                disabled={!isOwnerOrSuper}
+                                                                onChange={e => handleUpdateGroupSettlementMode(group.id, e.target.value)}
+                                                                style={{ padding: '0.25rem 0.5rem', width: '100%', fontSize: '0.85rem' }}
+                                                                title="รูปแบบการเคลียร์เงินเมื่อสมาชิกส่งสลิป"
+                                                            >
+                                                                <option value="immediate">งวดต่องวด (ชำระทันที)</option>
+                                                                <option value="cross_round">งวดชนงวด (หักรางวัล/ยกยอด)</option>
+                                                            </select>
+                                                        </td>
+                                                        <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                                             {renderStaffBetControls(group, false)}
                                                         </td>
                                                         <td style={{ padding: '0.75rem', textAlign: 'center' }}>
@@ -1049,7 +1334,7 @@ export default function DealerLineBotTab({ user, profile }) {
                                                     </tr>
                                                     {isExpanded && (
                                                         <tr style={{ background: 'rgba(0,0,0,0.15)' }}>
-                                                            <td colSpan={5} style={{ padding: '1rem' }}>
+                                                            <td colSpan={6} style={{ padding: '1rem' }}>
                                                                 <div style={{
                                                                     background: 'var(--color-background-dark)',
                                                                     borderRadius: '8px',
@@ -1165,6 +1450,21 @@ export default function DealerLineBotTab({ user, profile }) {
                                                     {Object.entries(LOTTERY_TYPES).map(([typeKey, label]) => (
                                                         <option key={typeKey} value={typeKey}>{label}</option>
                                                     ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Settlement Mode Selection */}
+                                            <div className="line-group-mobile-row">
+                                                <label>รูปแบบเคลียร์เงิน</label>
+                                                <select
+                                                    className="form-input"
+                                                    value={group.settlement_mode || 'immediate'}
+                                                    disabled={!isOwnerOrSuper}
+                                                    onChange={e => handleUpdateGroupSettlementMode(group.id, e.target.value)}
+                                                    style={{ padding: '0.3rem 0.5rem', fontSize: '0.85rem', flex: '1 1 auto', maxWidth: '200px' }}
+                                                >
+                                                    <option value="immediate">งวดต่องวด (ชำระทันที)</option>
+                                                    <option value="cross_round">งวดชนงวด (หักรางวัล/ยกยอด)</option>
                                                 </select>
                                             </div>
 
