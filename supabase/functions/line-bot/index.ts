@@ -5504,6 +5504,19 @@ async function handleLineSlipMessage({
           .range(from, to)
       );
 
+      // Deduct any prize payouts already paid to the member for the current round
+      let curRoundAlreadyPrizePaid = 0;
+      if (currentRoundId && allPayments) {
+        for (const p of allPayments) {
+          if (String(p.round_id) === String(currentRoundId)) {
+            if (p.payment_type === 'prize_payout' && p.direction === 'dealer_to_member') {
+              curRoundAlreadyPrizePaid += Number(p.amount) || 0;
+            }
+          }
+        }
+      }
+      curRoundPrize = Math.max(0, Math.round((curRoundPrize - curRoundAlreadyPrizePaid) * 100) / 100);
+
       const pastDebts: Array<{ roundId: string; roundDate: string; lotteryType?: string; debt: number }> = [];
 
       if (pastHistories) {
