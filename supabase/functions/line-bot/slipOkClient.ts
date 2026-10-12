@@ -54,9 +54,8 @@ export async function verifySlipWithSlipOk(
     branchId?: string
 ): Promise<SlipOkResponse> {
     try {
-        const endpoint = branchId
-            ? `https://api.slipok.com/api/line/apikey/${branchId}`
-            : 'https://api.slipok.com/api/line/apikey/1'
+        const cleanBranch = branchId && /^\d+$/.test(branchId.trim()) ? branchId.trim() : '59644'
+        const endpoint = `https://api.slipok.com/api/line/apikey/${cleanBranch}`
 
         const blob = new Blob([imageBytes], { type: 'image/jpeg' })
         const formData = new FormData()

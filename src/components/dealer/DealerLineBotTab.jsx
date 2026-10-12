@@ -264,6 +264,10 @@ export default function DealerLineBotTab({ user, profile }) {
 
     const handleSaveSlipSettings = async (e) => {
         if (e) e.preventDefault()
+        if (slipSettings.slipok_branch_id && slipSettings.slipok_branch_id.includes('@')) {
+            toast.error('SlipOK Branch ID ต้องเป็นรหัสตัวเลขสาขา เช่น 59644 (ห้ามใส่อีเมล)')
+            return
+        }
         setSavingSlipSettings(true)
         try {
             const { error } = await supabase
@@ -1026,15 +1030,25 @@ export default function DealerLineBotTab({ user, profile }) {
                             <input
                                 type="text"
                                 className="form-input"
-                                placeholder="เว้นว่างได้ (ค่าเริ่มต้น branch หลัก)"
+                                placeholder="เช่น 59644 (ตัวเลขรหัสสาขา)"
                                 value={slipSettings.slipok_branch_id}
                                 disabled={!isOwnerOrSuper}
                                 onChange={e => setSlipSettings(prev => ({ ...prev, slipok_branch_id: e.target.value }))}
-                                style={{ width: '100%', fontSize: '0.85rem' }}
+                                style={{ 
+                                    width: '100%', 
+                                    fontSize: '0.85rem',
+                                    borderColor: slipSettings.slipok_branch_id?.includes('@') ? 'var(--color-danger)' : undefined 
+                                }}
                             />
-                            <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '0.25rem' }}>
-                                ใช้กรณีแยกสาขาใน SlipOK
-                            </span>
+                            {slipSettings.slipok_branch_id?.includes('@') ? (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-danger)', display: 'block', marginTop: '0.25rem' }}>
+                                    ⚠️ Branch ID ต้องเป็นตัวเลข เช่น 59644 (ห้ามใส่อีเมล)
+                                </span>
+                            ) : (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)', display: 'block', marginTop: '0.25rem' }}>
+                                    รหัสตัวเลขสาขาใน SlipOK เช่น 59644 (ไม่ใช่ที่อยู่อีเมล)
+                                </span>
+                            )}
                         </div>
 
                         {/* Tolerance Amount */}
