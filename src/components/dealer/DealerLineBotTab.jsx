@@ -252,7 +252,7 @@ export default function DealerLineBotTab({ user, profile }) {
                     auto_slip_verification_enabled: !!data.auto_slip_verification_enabled,
                     slip_provider: data.slip_provider || 'slipok',
                     slipok_api_key: data.slipok_api_key || '',
-                    slipok_branch_id: data.slipok_branch_id || '',
+                    slipok_branch_id: (data.slipok_branch_id && !data.slipok_branch_id.includes('@')) ? data.slipok_branch_id : '',
                     slip_tolerance_amount: Number(data.slip_tolerance_amount) || 0,
                     slip_tolerance_mode: data.slip_tolerance_mode || 'forgive_difference'
                 })
@@ -264,10 +264,8 @@ export default function DealerLineBotTab({ user, profile }) {
 
     const handleSaveSlipSettings = async (e) => {
         if (e) e.preventDefault()
-        if (slipSettings.slipok_branch_id && slipSettings.slipok_branch_id.includes('@')) {
-            toast.error('SlipOK Branch ID ต้องเป็นรหัสตัวเลขสาขา เช่น 59644 (ห้ามใส่อีเมล)')
-            return
-        }
+        const rawBranch = (slipSettings.slipok_branch_id || '').trim()
+        const cleanBranchId = rawBranch && !rawBranch.includes('@') ? rawBranch : null
         setSavingSlipSettings(true)
         try {
             const { error } = await supabase
@@ -276,13 +274,14 @@ export default function DealerLineBotTab({ user, profile }) {
                     auto_slip_verification_enabled: slipSettings.auto_slip_verification_enabled,
                     slip_provider: slipSettings.slip_provider,
                     slipok_api_key: (slipSettings.slipok_api_key || '').trim(),
-                    slipok_branch_id: (slipSettings.slipok_branch_id || '').trim() || null,
+                    slipok_branch_id: cleanBranchId,
                     slip_tolerance_amount: Math.max(0, Number(slipSettings.slip_tolerance_amount) || 0),
                     slip_tolerance_mode: slipSettings.slip_tolerance_mode
                 })
                 .eq('id', user.id)
 
             if (error) throw error
+            setSlipSettings(prev => ({ ...prev, slipok_branch_id: cleanBranchId || '' }))
             toast.success('บันทึกการตั้งค่าระบบตรวจสลิปเรียบร้อยแล้ว')
         } catch (err) {
             console.error('Error saving slip settings:', err)
@@ -972,7 +971,7 @@ export default function DealerLineBotTab({ user, profile }) {
                     </div>
                 </div>
 
-                <form onSubmit={handleSaveSlipSettings}>
+                <form onSubmit={handleSaveSlipSettings} autoComplete="off">
                     <div style={{
                         display: 'grid',
                         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
@@ -991,6 +990,8 @@ export default function DealerLineBotTab({ user, profile }) {
                             <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                 <input
                                     type={showApiKey ? 'text' : 'password'}
+                                    name="slipok_api_key_field"
+                                    autoComplete="new-password"
                                     className="form-input"
                                     placeholder="ใส่ API Key จาก SlipOK"
                                     value={slipSettings.slipok_api_key}
@@ -1024,11 +1025,31 @@ export default function DealerLineBotTab({ user, profile }) {
 
                         {/* SlipOK Branch ID */}
                         <div>
-                            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.35rem' }}>
-                                SlipOK Branch ID (ถ้ามี)
-                            </label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, margin: 0 }}>
+                                    SlipOK Branch ID (ถ้ามี)
+                                </label>
+                                {slipSettings.slipok_branch_id && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSlipSettings(prev => ({ ...prev, slipok_branch_id: '' }))}
+                                        style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            color: 'var(--color-text-muted)',
+                                            fontSize: '0.75rem',
+                                            cursor: 'pointer',
+                                            textDecoration: 'underline'
+                                        }}
+                                    >
+                                        ล้างค่า
+                                    </button>
+                                )}
+                            </div>
                             <input
                                 type="text"
+                                name="slipok_branch_id_field"
+                                autoComplete="off"
                                 className="form-input"
                                 placeholder="เช่น 59644 (ตัวเลขรหัสสาขา)"
                                 value={slipSettings.slipok_branch_id}
