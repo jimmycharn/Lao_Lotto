@@ -5138,11 +5138,11 @@ async function handleLineSlipMessage({
   userId,
   messageId,
   replyToken
-}: HandleSlipParams): Promise<void> {
+}: HandleSlipParams): Promise<string> {
   try {
     // Only process if in a group or room
     if (!groupId || (!groupId.startsWith('C') && !groupId.startsWith('R'))) {
-      return;
+      return `[SLIP] Ignored: not a group or room (${groupId})`;
     }
 
     // 1. Fetch group link
@@ -5154,7 +5154,7 @@ async function handleLineSlipMessage({
       .maybeSingle();
 
     if (!groupLink || !groupLink.dealer_id) {
-      return;
+      return `[SLIP] Group ${groupId} is not bound or is inactive in line_groups`;
     }
 
     const dealerId = groupLink.dealer_id;
@@ -5168,15 +5168,15 @@ async function handleLineSlipMessage({
       .maybeSingle();
 
     if (!dealerProfile || !dealerProfile.auto_slip_verification_enabled || !dealerProfile.slipok_api_key) {
-      // Dealer has not enabled auto slip verification or has no API key; return silently
-      return;
+      return `[SLIP] Dealer ${dealerId} slip verification disabled (enabled=${dealerProfile?.auto_slip_verification_enabled}, hasKey=${!!dealerProfile?.slipok_api_key})`;
     }
 
     // 3. Download image content from LINE Messaging API
     const imageBytes = await fetchLineMessageImage(LINE_CHANNEL_ACCESS_TOKEN, messageId);
     if (!imageBytes) {
-      console.warn(`[SLIP BOT] Failed to download image ${messageId} from LINE`);
-      return;
+      const err = `[SLIP] Failed to download image ${messageId} from LINE API (tokenLen=${LINE_CHANNEL_ACCESS_TOKEN?.length || 0})`;
+      console.warn(err);
+      return err;
     }
 
     // 4. Verify with SlipOK
@@ -5186,10 +5186,32 @@ async function handleLineSlipMessage({
       dealerProfile.slipok_branch_id
     );
 
-    // If SlipOK says unsuccessful (not a slip or unreadable QR code), ignore silently
+    // 4.1 Handle duplicate slip detected by SlipOK (Code 1012 or message contains สลิปซ้ำ)
+    if (slipRes.code === 1012 || (slipRes.message && slipRes.message.includes('สลิปซ้ำ'))) {
+      const transRef = slipRes.data?.transRef || '';
+      const dupMsg = formatSlipSettlementLineMessage({
+        status: 'duplicate_slip',
+        transRef,
+        transferDateText: slipRes.message ? slipRes.message.replace(/^สลิปซ้ำ\s*/, '') : ''
+      });
+      await sendLineReply(replyToken, dupMsg, groupId);
+      return `[SLIP] SlipOK detected duplicate slip (code 1012), replied duplicate_slip`;
+    }
+
+    // 4.2 If SlipOK says unsuccessful
     if (!slipRes.success || !slipRes.data) {
-      console.log(`[SLIP BOT] Image ${messageId} is not a valid QR bank slip: ${slipRes.message || ''}`);
-      return;
+      // If code is 1007 ("รูปภาพไม่มี QR Code") -> pure non-QR photo, stay silent so we don't spam random chat pictures
+      if (slipRes.code === 1007 || (slipRes.message && slipRes.message.includes('ไม่มี QR Code'))) {
+        return `[SLIP] No QR Code in image (pure non-QR photo), silent ignore`;
+      }
+
+      // If it has an unreadable/invalid/expired QR code:
+      const invalidMsg = formatSlipSettlementLineMessage({
+        status: 'invalid_slip',
+        adjustmentNote: slipRes.message || 'ไม่พบข้อมูลสลิปในระบบธนาคาร'
+      });
+      await sendLineReply(replyToken, invalidMsg, groupId);
+      return `[SLIP] SlipOK error (${slipRes.code}): ${slipRes.message}, replied invalid_slip`;
     }
 
     const slipData = slipRes.data;
@@ -5197,8 +5219,9 @@ async function handleLineSlipMessage({
     const slipAmount = Number(slipData.amount) || 0;
 
     if (!transRef || slipAmount <= 0) {
-      console.warn(`[SLIP BOT] Slip missing transRef or amount: transRef=${transRef}, amount=${slipAmount}`);
-      return;
+      const msg = `[SLIP] Slip missing transRef or amount: transRef=${transRef}, amount=${slipAmount}`;
+      console.warn(msg);
+      return msg;
     }
 
     // 5. Look up member profile by line_user_id
@@ -8278,12 +8301,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         if (event.type === 'message' && event.message?.type === 'image') {
           const msgId = event.message?.id;
           if (msgId && replyToken) {
-            await handleLineSlipMessage({
+            const slipDiag = await handleLineSlipMessage({
               groupId,
               userId,
               messageId: msgId,
               replyToken
             });
+            if (slipDiag) {
+              debugInfo = slipDiag;
+              console.log(slipDiag);
+            }
           }
           continue;
         }

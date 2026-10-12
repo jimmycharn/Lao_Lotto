@@ -125,6 +125,27 @@ describe('slipSettlementHelper', () => {
             expect(msg).toContain('ยอดเงินในสลิป: ฿500.00')
             expect(msg).toContain('❌ ยังไม่ได้ตัดยอดในระบบ')
         })
+
+        it('formats error message for duplicate slip', () => {
+            const msg = formatSlipSettlementLineMessage({
+                status: 'duplicate_slip',
+                transRef: 'REF123456',
+                transferDateText: '11 ต.ค. 2569'
+            })
+            expect(msg).toContain('⚠️ สลิปนี้เคยใช้งานในระบบแล้ว')
+            expect(msg).toContain('REF123456')
+            expect(msg).toContain('❌ ระบบปฏิเสธการทำรายการซ้ำ')
+        })
+
+        it('formats error message for invalid slip', () => {
+            const msg = formatSlipSettlementLineMessage({
+                status: 'invalid_slip',
+                adjustmentNote: 'ไม่พบข้อมูลสลิปในระบบธนาคาร'
+            })
+            expect(msg).toContain('⚠️ ไม่พบข้อมูลสลิปการโอนเงิน')
+            expect(msg).toContain('ไม่พบข้อมูลสลิปในระบบธนาคาร')
+            expect(msg).toContain('❌ กรุณาตรวจสอบ QR Code หรือความชัดเจนของรูปภาพอีกครั้งค่ะ')
+        })
     })
 
     describe('getRoundCloseDate', () => {

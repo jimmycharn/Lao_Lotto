@@ -13,7 +13,7 @@ export interface ToleranceResult {
 }
 
 export interface SlipResultMessageParams {
-    status: 'success' | 'amount_mismatch' | 'duplicate_slip' | 'unlinked_member' | 'wrong_bank' | 'no_debt'
+    status: 'success' | 'amount_mismatch' | 'duplicate_slip' | 'unlinked_member' | 'wrong_bank' | 'no_debt' | 'invalid_slip'
     memberName?: string
     memberCode?: string
     lotteryTypeName?: string
@@ -172,6 +172,10 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
         lines.push('ℹ️ ตรวจสอบสลิปเรียบร้อย')
         lines.push(`👤 สมาชิก: ${memberLabel}`)
         lines.push('⚪ ปัจจุบันไม่มียอดหนี้ค้างชำระในงวดนี้')
+    } else if (params.status === 'invalid_slip') {
+        lines.push('⚠️ ไม่พบข้อมูลสลิปการโอนเงิน')
+        if (params.adjustmentNote) lines.push(`- สาเหตุ: ${params.adjustmentNote}`)
+        lines.push('❌ กรุณาตรวจสอบ QR Code หรือความชัดเจนของรูปภาพอีกครั้งค่ะ')
     }
 
     return lines.join('\n')

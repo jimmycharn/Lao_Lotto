@@ -1,10 +1,12 @@
 export interface SlipOkResponse {
     success: boolean
+    code?: number
+    message?: string
     data?: {
-        success: boolean
-        transRef: string
-        date: string
-        amount: number
+        success?: boolean
+        transRef?: string
+        date?: string
+        amount?: number
         sender?: {
             displayName?: string
             name?: string
@@ -16,7 +18,6 @@ export interface SlipOkResponse {
             account?: { bank?: string; name?: string; value?: string }
         }
     }
-    message?: string
 }
 
 /**
