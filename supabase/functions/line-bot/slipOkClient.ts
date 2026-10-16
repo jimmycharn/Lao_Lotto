@@ -83,6 +83,19 @@ export async function verifySlipWithSlipOk(
 }
 
 /**
+ * Normalizes Thai names for comparison:
+ * - Removes honorifics/prefixes (นาย, นาง, นางสาว, ฯลฯ)
+ * - Removes whitespaces, dots, asterisks, and hyphens
+ * - Normalizes sara-a (ะ) so variations like ธีระเดช and ธีรเดช match
+ */
+function normalizeThaiName(str: string): string {
+    return String(str || '')
+        .replace(/^(นาย|นาง|นางสาว|บจก\.|หจก\.|ด\.ช\.|ด\.ญ\.|mr\.|mrs\.|miss)\s*/i, '')
+        .replace(/[\s\.\*\-]+/g, '')
+        .replace(/ะ/g, '')
+}
+
+/**
  * Verifies whether the receiver in the slip matches one of the dealer's active bank accounts.
  */
 export function isReceiverMatchingDealer(receiverData: any, dealerBankAccounts: any[]): boolean {
@@ -90,31 +103,85 @@ export function isReceiverMatchingDealer(receiverData: any, dealerBankAccounts: 
         return true // Permissive fallback if dealer hasn't configured bank accounts
     }
 
-    if (!receiverData || !receiverData.account || !receiverData.account.value) {
+    if (!receiverData) {
         return false
     }
 
-    // Clean account strings to digits only
-    const rawSlipVal = String(receiverData.account.value).trim()
+    // Clean account strings
+    const rawSlipVal = String(receiverData.account?.value || receiverData.proxy?.value || '').trim()
     const slipDigitsOnly = rawSlipVal.replace(/\D/g, '')
+
+    // Extract all possible receiver names from SlipOK payload
+    const slipNames = [
+        receiverData.displayName,
+        receiverData.name,
+        receiverData.account?.name
+    ].filter(Boolean).map(n => String(n).trim())
 
     for (const dAcc of dealerBankAccounts) {
         const dealerDigits = String(dAcc.bank_account || '').replace(/\D/g, '')
-        if (!dealerDigits) continue
 
         // 1. Exact digit match
-        if (dealerDigits === slipDigitsOnly) return true
-
-        // 2. Partial match (e.g. xxx-x-x7890-x -> check if last 4 digits match)
-        if (slipDigitsOnly.length >= 4 && dealerDigits.endsWith(slipDigitsOnly.slice(-4))) {
+        if (dealerDigits && slipDigitsOnly && dealerDigits === slipDigitsOnly) {
             return true
         }
 
-        // 3. Name fuzzy match if receiver displayName exists
-        if (receiverData.displayName && dAcc.account_name) {
-            const cleanAccName = dAcc.account_name.replace(/^(นาย|นาง|นางสาว|บจก\.|หจก\.)\s*/, '').trim()
-            if (cleanAccName && receiverData.displayName.includes(cleanAccName)) {
+        // 2. Continuous digit runs (e.g. '2578' from 'xxx-x-x2578-x92')
+        // Checks if any continuous block of 4+ digits from the slip exists in dealer account
+        const digitChunks = rawSlipVal.match(/\d+/g) || []
+        for (const chunk of digitChunks) {
+            if (chunk.length >= 4 && dealerDigits.includes(chunk)) {
                 return true
+            }
+        }
+
+        // 3. Positional mask match (e.g. 'xxx-x-x2578-x92' vs '020432578092')
+        // Check character-by-character where 'x', 'X', '*' are wildcards
+        const cleanSlipMask = rawSlipVal.replace(/[^0-9xX*]/g, '')
+        if (dealerDigits && cleanSlipMask.length === dealerDigits.length) {
+            let unmaskedMatchCount = 0
+            let mismatch = false
+            for (let i = 0; i < cleanSlipMask.length; i++) {
+                const c = cleanSlipMask[i]
+                if (c === 'x' || c === 'X' || c === '*') continue
+                if (c === dealerDigits[i]) {
+                    unmaskedMatchCount++
+                } else {
+                    mismatch = true
+                    break
+                }
+            }
+            if (!mismatch && unmaskedMatchCount >= 3) {
+                return true
+            }
+        }
+
+        // 4. Name match across displayName, name, account.name
+        const normDealer = normalizeThaiName(dAcc.account_name)
+        if (normDealer) {
+            // Split tokens from dealer name (e.g. ['ธีรเดช', 'บรรจงแก้ว'])
+            const rawDealerTokens = String(dAcc.account_name || '')
+                .replace(/^(นาย|นาง|นางสาว|บจก\.|หจก\.|ด\.ช\.|ด\.ญ\.|mr\.|mrs\.|miss)\s*/i, '')
+                .trim()
+                .split(/\s+/)
+                .map(t => normalizeThaiName(t))
+                .filter(t => t.length >= 3)
+
+            for (const slipName of slipNames) {
+                const normSlip = normalizeThaiName(slipName)
+                if (!normSlip) continue
+
+                // Check two-way containment if normalized slip has meaningful length (e.g. "ธีรเดชบ" in "ธีรเดชบรรจงแก้ว")
+                if (normSlip.length >= 3 && (normDealer.includes(normSlip) || normSlip.includes(normDealer))) {
+                    return true
+                }
+
+                // Check if slip name matches dealer tokens
+                for (const tok of rawDealerTokens) {
+                    if (normSlip.includes(tok) || (tok.length >= 4 && normSlip.length >= 4 && (tok.startsWith(normSlip) || normSlip.startsWith(tok)))) {
+                        return true
+                    }
+                }
             }
         }
     }

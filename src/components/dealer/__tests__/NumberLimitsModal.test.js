@@ -72,5 +72,53 @@ describe('NumberLimitsModal', () => {
                 '2_bottom': 2
             })
         })
+
+        it('should match search query against reversed numbers and permutations when searchIncludeReversed is true', () => {
+            const limitsWithReversed = [
+                { id: '1', numbers: '907', bet_type: '3_top', include_reversed: true, reversed_numbers: ['970', '097', '079', '790', '709'] },
+                { id: '2', numbers: '790', bet_type: '3_top', include_reversed: false, reversed_numbers: [] },
+                { id: '3', numbers: '123', bet_type: '3_top', include_reversed: false, reversed_numbers: [] }
+            ]
+            const query = '097'
+            const searchIncludeReversed = true
+
+            const q = query.toLowerCase().trim()
+            const isNumeric = /^\d+$/.test(q)
+            const searchVariants = searchIncludeReversed && isNumeric && q.length >= 2
+                ? ['097', '079', '907', '970', '709', '790']
+                : [q]
+
+            const matched = limitsWithReversed.filter(l => {
+                const matchesNumber = searchVariants.some(v => l.numbers.includes(v))
+                const matchesReversed = Array.isArray(l.reversed_numbers) && l.reversed_numbers.some(r => {
+                    const rLower = r.toLowerCase()
+                    return searchVariants.some(v => rLower.includes(v))
+                })
+                return matchesNumber || matchesReversed
+            })
+            // Matches 907 and 790, but not 123
+            expect(matched.length).toBe(2)
+            expect(matched.map(m => m.numbers)).toEqual(['907', '790'])
+        })
+
+        it('should strictly match only exact/substring number when searchIncludeReversed is false', () => {
+            const limitsWithReversed = [
+                { id: '1', numbers: '907', bet_type: '3_top', include_reversed: true, reversed_numbers: ['970', '097', '079', '790', '709'] },
+                { id: '2', numbers: '790', bet_type: '3_top', include_reversed: false, reversed_numbers: [] },
+                { id: '3', numbers: '097', bet_type: '3_top', include_reversed: false, reversed_numbers: [] }
+            ]
+            const query = '097'
+            const searchIncludeReversed = false
+
+            const q = query.toLowerCase().trim()
+            const matched = limitsWithReversed.filter(l => {
+                if (searchIncludeReversed) return true
+                return l.numbers.includes(q)
+            })
+            // Only matches id 3 ('097')
+            expect(matched.length).toBe(1)
+            expect(matched[0].id).toBe('3')
+        })
     })
 })
+

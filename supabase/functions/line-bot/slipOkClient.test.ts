@@ -49,6 +49,59 @@ describe('slipOkClient', () => {
             expect(isReceiverMatchingDealer(receiver, dealerAccounts)).toBe(false)
         })
 
+        it('matches receiver by middle-masked digits (e.g. KBank xxx-x-x2578-xxx to GSB)', () => {
+            const gsbDealerAccounts = [
+                {
+                    bank_name: 'ธนาคารออมสิน',
+                    bank_account: '020432578092',
+                    account_name: 'นายธีระเดช บรรจงแก้ว'
+                }
+            ]
+            const receiver = {
+                displayName: 'นาย ธีระเดช บ...',
+                name: 'MR. THEERADET BANJONGKAEW',
+                account: {
+                    value: 'xxx-x-x2578-xxx'
+                }
+            }
+            expect(isReceiverMatchingDealer(receiver, gsbDealerAccounts)).toBe(true)
+        })
+
+        it('matches receiver by surname token when spelling varies', () => {
+            const gsbDealerAccounts = [
+                {
+                    bank_name: 'ธนาคารออมสิน',
+                    bank_account: '020432578092',
+                    account_name: 'นายธีรเดช บรรจงแก้ว' // note spelling without ะ
+                }
+            ]
+            const receiver = {
+                displayName: 'นาย ธีระเดช บรรจงแก้ว',
+                account: {
+                    value: 'xxx-x-x9999-xxx'
+                }
+            }
+            expect(isReceiverMatchingDealer(receiver, gsbDealerAccounts)).toBe(true)
+        })
+
+        it('matches real-world KBank slip to GSB with xxx-x-x2578-x92 and abbreviated นาย ธีระเดช บ', () => {
+            const gsbDealerAccounts = [
+                {
+                    bank_name: 'ธนาคารออมสิน',
+                    bank_account: '020432578092',
+                    account_name: 'นายธีรเดช บรรจงแก้ว' // In DB: นายธีรเดช (no ะ)
+                }
+            ]
+            const receiver = {
+                displayName: 'นาย ธีระเดช บ', // In SlipOK: นาย ธีระเดช บ (with ะ and initial บ)
+                name: 'นาย ธีระเดช บ',
+                account: {
+                    value: 'xxx-x-x2578-x92' // KBank masked account
+                }
+            }
+            expect(isReceiverMatchingDealer(receiver, gsbDealerAccounts)).toBe(true)
+        })
+
         it('returns true if dealer has no bank accounts registered (fallback permissive)', () => {
             expect(isReceiverMatchingDealer({ displayName: 'ใครก็ได้' }, [])).toBe(true)
         })

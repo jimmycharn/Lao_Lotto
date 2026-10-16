@@ -928,6 +928,24 @@ describe('crossRoundOffsetCalculator', () => {
             expect(parsePaymentNotes(undefined)).toEqual({ customNotes: '', paidTime: '', referenceDoc: '', prefix: '', senderBank: '' })
             expect(buildPaymentNotes({})).toBe('ชำระหนี้งวดนี้')
         })
+
+        it('parses legacy automated slip note with Ref: correctly', () => {
+            const legacyNote = '[สลิปอัตโนมัติ] นาย ธีระเดช บ (Ref: 016287203327BOR03490)'
+            const parsed = parsePaymentNotes(legacyNote)
+            expect(parsed.referenceDoc).toBe('016287203327BOR03490')
+            expect(parsed.customNotes).toBe('โอนไป นาย ธีระเดช บ')
+            expect(parsed.prefix).toBe('ชำระหนี้งวดนี้')
+        })
+
+        it('parses full standard note with time, sender bank, destination bank, and ref', () => {
+            const note = 'ชำระหนี้งวดนี้ (กสิกรไทย โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว) เวลา 20:33 #016287203327BOR03490)'
+            const parsed = parsePaymentNotes(note)
+            expect(parsed.prefix).toBe('ชำระหนี้งวดนี้')
+            expect(parsed.senderBank).toBe('กสิกรไทย')
+            expect(parsed.customNotes).toBe('โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)')
+            expect(parsed.paidTime).toBe('20:33')
+            expect(parsed.referenceDoc).toBe('016287203327BOR03490')
+        })
     })
 
     describe('formatThaiDate and formatThaiDateDDMMYYYY', () => {

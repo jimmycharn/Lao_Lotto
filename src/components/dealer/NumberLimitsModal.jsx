@@ -19,6 +19,7 @@ export default function NumberLimitsModal({ round, onClose }) {
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [searchQuery, setSearchQuery] = useState('')
+    const [searchIncludeReversed, setSearchIncludeReversed] = useState(true)
     const [digitFilter, setDigitFilter] = useState('all')
     const [editingId, setEditingId] = useState(null)
     const [editForm, setEditForm] = useState({})
@@ -533,12 +534,35 @@ export default function NumberLimitsModal({ round, onClose }) {
         }
     }
 
-    // Filtered limits based on search and digit filter
+    // Filtered limits based on search, searchIncludeReversed, and digit filter
     const filteredLimits = useMemo(() => {
         return limits.filter(l => {
             if (searchQuery) {
-                const q = searchQuery.toLowerCase()
-                const matchSearch = l.numbers.includes(q) || (BET_TYPES[l.bet_type] || '').toLowerCase().includes(q)
+                const q = searchQuery.toLowerCase().trim()
+                const isNumeric = /^\d+$/.test(q)
+
+                let searchVariants = [q]
+                if (searchIncludeReversed && isNumeric && q.length >= 2) {
+                    const perms = getPermutations(q)
+                    searchVariants = Array.from(new Set([q, ...perms]))
+                }
+
+                let matchSearch = false
+                if (searchIncludeReversed) {
+                    // Check if base number matches q or any permutation of q
+                    const matchesNumber = searchVariants.some(v => l.numbers.includes(v))
+                    // Check if any permutation matches any reversed_numbers in limit
+                    const matchesReversed = Array.isArray(l.reversed_numbers) && l.reversed_numbers.some(r => {
+                        const rLower = r.toLowerCase()
+                        return searchVariants.some(v => rLower.includes(v))
+                    })
+                    const matchesBetType = (BET_TYPES[l.bet_type] || '').toLowerCase().includes(q)
+                    matchSearch = matchesNumber || matchesReversed || matchesBetType
+                } else {
+                    // Strict search: only exact or substring match of q on l.numbers or bet_type
+                    matchSearch = l.numbers.includes(q) || (BET_TYPES[l.bet_type] || '').toLowerCase().includes(q)
+                }
+
                 if (!matchSearch) return false
             }
             if (digitFilter !== 'all') {
@@ -547,7 +571,7 @@ export default function NumberLimitsModal({ round, onClose }) {
             }
             return true
         })
-    }, [limits, searchQuery, digitFilter])
+    }, [limits, searchQuery, searchIncludeReversed, digitFilter])
 
     // Group limits by number for display
     const groupedLimits = useMemo(() => {
@@ -906,6 +930,35 @@ export default function NumberLimitsModal({ round, onClose }) {
                                     )}
                                 </div>
 
+                                {/* Checkbox ตัวกลับ (Default: true) */}
+                                <label
+                                    style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.28rem',
+                                        fontSize: '0.78rem',
+                                        cursor: 'pointer',
+                                        userSelect: 'none',
+                                        color: searchIncludeReversed ? 'var(--color-primary, #d4af37)' : 'var(--color-text-secondary)',
+                                        fontWeight: searchIncludeReversed ? '600' : 'normal',
+                                        padding: '0.2rem 0.45rem',
+                                        borderRadius: '6px',
+                                        background: searchIncludeReversed ? 'rgba(212, 175, 55, 0.12)' : 'transparent',
+                                        border: '1px solid ' + (searchIncludeReversed ? 'rgba(212, 175, 55, 0.35)' : 'var(--color-border)'),
+                                        height: '30px',
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                    title="ค้นหาทั้งเลขที่ป้อนและตัวกลับทั้งหมด"
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={searchIncludeReversed}
+                                        onChange={e => setSearchIncludeReversed(e.target.checked)}
+                                        style={{ cursor: 'pointer', accentColor: 'var(--color-primary, #d4af37)' }}
+                                    />
+                                    <span>ตัวกลับ</span>
+                                </label>
+
                                 {/* Batch Adjust Button */}
                                 {limits.length > 0 && (
                                     <button
@@ -1163,6 +1216,13 @@ export default function NumberLimitsModal({ round, onClose }) {
                                                 {group.items[0]?.include_reversed && (
                                                     <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>
                                                         <FiRefreshCw size={10} /> กลับ
+                                                    </span>
+                                                )}
+                                                {searchQuery && !group.numbers.includes(searchQuery.trim()) && searchIncludeReversed && (
+                                                    <span style={{ fontSize: '0.72rem', color: 'var(--color-primary, #d4af37)', background: 'rgba(212, 175, 55, 0.15)', padding: '0.1rem 0.35rem', borderRadius: '4px', fontWeight: '600' }}>
+                                                        {group.items[0]?.reversed_numbers?.some(r => r.includes(searchQuery.trim())) 
+                                                            ? `ตรงกับเลขกลับ (${group.items[0].reversed_numbers.filter(r => r.includes(searchQuery.trim())).join(', ')})`
+                                                            : `ตัวกลับของ ${searchQuery.trim()}`}
                                                     </span>
                                                 )}
                                             </div>

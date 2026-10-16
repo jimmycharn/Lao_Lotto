@@ -14,7 +14,13 @@ import {
   calculateImmediateDebt,
   formatSlipSettlementLineMessage,
   getRoundCloseDate,
-  allocateCrossRoundOffset
+  allocateCrossRoundOffset,
+  extractSlipTransferDetails,
+  getSlipDestinationAccountNote,
+  calculateMemberPastDebts,
+  calculateImmediateModeDebt,
+  allocateImmediateSettlement,
+  calculateCrossRoundModeDebt
 } from "./slipSettlementHelper.ts"
 import {
   fetchLineMessageImage,
@@ -83,6 +89,15 @@ const DEFAULT_TYPE_LIMITS: Record<string, Record<string, number>> = {
   hanoi: { '4_set': 1, '3_set': 2, run_top: 5000, run_bottom: 5000, pak_top: 5000, pak_bottom: 5000, '2_top': 1000, '2_front': 1000, '2_center': 1000, '2_run': 1000, '2_bottom': 1000, '3_top': 500, '3_tod': 500, '4_float': 200, '5_float': 100 },
   stock: { '2_top': 1000, '2_bottom': 1000 }
 };
+
+function isRateLimitDefault(limit: any): boolean {
+  if (!limit) return false;
+  const isRate = limit.limit_type === 'rate_limit' || limit.time_condition?.is_rate_limit === true;
+  const isDef = limit.use_default_limit === true ||
+    limit.time_condition?.use_default_limit === true ||
+    (limit.limit_type !== 'blocked' && Number(limit.max_amount) === 0);
+  return Boolean((isRate && isDef) || (limit.limit_type !== 'blocked' && Number(limit.max_amount) === 0 && Number(limit.payout_percent) < 100));
+}
 
 async function fetchAllRows(
   queryBuilder: (from: number, to: number) => any,
@@ -2173,7 +2188,7 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
 
   const { data: numberLimits, error: nlErr } = await supabase
     .from('number_limits')
-    .select('bet_type, numbers, max_amount, include_reversed, reversed_numbers')
+    .select('bet_type, numbers, max_amount, include_reversed, reversed_numbers, limit_type, payout_percent, time_condition')
     .eq('round_id', roundId);
 
   const numberLimitsMap: Record<string, number> = {};
@@ -2362,7 +2377,8 @@ async function calculateRoundExcess(roundId: string): Promise<ExcessItem[]> {
       });
     }
 
-    const numLimit = numberLimit !== undefined ? Number(numberLimit.max_amount) : undefined;
+    const isRateDef = isRateLimitDefault(numberLimit);
+    const numLimit = (numberLimit !== undefined && !isRateDef) ? Number(numberLimit.max_amount) : undefined;
     const defaultTypeLimit = (DEFAULT_TYPE_LIMITS[lotteryType] || {})[limitLookupBetType];
     const typeLimit = typeLimitsMap[limitLookupBetType] !== undefined ? typeLimitsMap[limitLookupBetType] : defaultTypeLimit;
     const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
@@ -5189,13 +5205,35 @@ async function handleLineSlipMessage({
     // 4.1 Handle duplicate slip detected by SlipOK (Code 1012 or message contains สลิปซ้ำ)
     if (slipRes.code === 1012 || (slipRes.message && slipRes.message.includes('สลิปซ้ำ'))) {
       const transRef = slipRes.data?.transRef || '';
-      const dupMsg = formatSlipSettlementLineMessage({
-        status: 'duplicate_slip',
-        transRef,
-        transferDateText: slipRes.message ? slipRes.message.replace(/^สลิปซ้ำ\s*/, '') : ''
-      });
-      await sendLineReply(replyToken, dupMsg, groupId);
-      return `[SLIP] SlipOK detected duplicate slip (code 1012), replied duplicate_slip`;
+      if (transRef) {
+        const { data: existingSlip } = await supabase
+          .from('used_slips')
+          .select('id, trans_ref, used_at')
+          .eq('dealer_id', dealerId)
+          .eq('trans_ref', transRef)
+          .maybeSingle();
+
+        if (existingSlip) {
+          const dupMsg = formatSlipSettlementLineMessage({
+            status: 'duplicate_slip',
+            transRef,
+            transferDateText: existingSlip.used_at ? new Date(existingSlip.used_at).toLocaleDateString('th-TH') : ''
+          });
+          await sendLineReply(replyToken, dupMsg, groupId);
+          return `[SLIP] SlipOK detected duplicate slip (code 1012), already recorded in used_slips`;
+        }
+      }
+
+      if (!slipRes.data || !transRef) {
+        const dupMsg = formatSlipSettlementLineMessage({
+          status: 'duplicate_slip',
+          transRef,
+          transferDateText: slipRes.message ? slipRes.message.replace(/^สลิปซ้ำ\s*/, '') : ''
+        });
+        await sendLineReply(replyToken, dupMsg, groupId);
+        return `[SLIP] SlipOK detected duplicate slip (code 1012) without valid data`;
+      }
+      console.log(`[SLIP] SlipOK returned duplicate (1012) for ${transRef}, but slip was not yet recorded in used_slips. Continuing settlement.`);
     }
 
     // 4.2 If SlipOK says unsuccessful
@@ -5225,20 +5263,39 @@ async function handleLineSlipMessage({
     }
 
     // 5. Look up member profile by line_user_id
-    const { data: memberProfile } = await supabase
+    let { data: memberProfile, error: profileErr } = await supabase
       .from('profiles')
-      .select('id, full_name, member_code, line_display_name')
+      .select('id, full_name, member_code')
       .eq('line_user_id', userId)
       .maybeSingle();
+
+    if (profileErr) {
+      console.error('[SLIP] Error querying member profile for line_user_id', userId, profileErr);
+    }
+
+    // Fallback: check line_group_members in this group if direct lookup was not found
+    if (!memberProfile && groupId) {
+      const { data: groupMember } = await supabase
+        .from('line_group_members')
+        .select('user_id, profiles:user_id(id, full_name, member_code)')
+        .eq('line_group_id', groupId)
+        .eq('line_user_id', userId)
+        .maybeSingle();
+
+      if (groupMember?.profiles) {
+        memberProfile = groupMember.profiles as any;
+      }
+    }
 
     if (!memberProfile) {
       // Valid slip, but sender LINE account is not linked to any member profile in system
       const unlinkedMsg = formatSlipSettlementLineMessage({
         status: 'unlinked_member',
-        slipAmount
+        slipAmount,
+        senderLineUserId: userId
       });
       await sendLineReply(replyToken, unlinkedMsg, groupId);
-      return;
+      return `[SLIP] Valid slip (฿${slipAmount}) but sender ${userId} is not linked to any member profile`;
     }
 
     // 6. Check duplicate slip in used_slips table
@@ -5267,31 +5324,117 @@ async function handleLineSlipMessage({
 
     const isBankMatch = isReceiverMatchingDealer(slipData.receiver, dealerAccounts || []);
     if (!isBankMatch) {
+      const recAcc = slipData.receiver?.account?.value || '';
+      const recName = slipData.receiver?.displayName || slipData.receiver?.name || '';
       const wrongBankMsg = formatSlipSettlementLineMessage({
-        status: 'wrong_bank'
+        status: 'wrong_bank',
+        bankAccountText: recAcc ? `${recAcc} (${recName})` : recName
       });
       await sendLineReply(replyToken, wrongBankMsg, groupId);
-      return;
+      return `[SLIP] Receiver ${recName} ${recAcc} does not match any dealer bank accounts`;
     }
 
-    const memberName = memberProfile.full_name || memberProfile.line_display_name || 'สมาชิก';
+    const memberName = memberProfile.full_name || 'สมาชิก';
     const memberCode = memberProfile.member_code || '';
     const lotteryTypeName = LOTTERY_TYPE_NAMES[groupLink.lottery_type] || groupLink.lottery_type;
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 
     // 8. Process settlement based on settlementMode
+    // 8.1 Fetch past member payments
+    const { data: allPayments } = await fetchAllRows(
+      (from, to) => supabase
+        .from('member_round_payments')
+        .select('round_id, round_date, lottery_type, amount, direction, payment_type, created_at')
+        .eq('dealer_id', dealerId)
+        .eq('user_id', memberProfile.id)
+        .order('created_at', { ascending: false })
+        .range(from, to)
+    );
+
+    // 8.2 Fetch past user_round_history strictly for this lottery type
+    const { data: pastHistories } = await fetchAllRows(
+      (from, to) => supabase
+        .from('user_round_history')
+        .select('round_id, round_date, lottery_type, total_amount, total_commission, total_winnings, created_at')
+        .eq('dealer_id', dealerId)
+        .eq('user_id', memberProfile.id)
+        .eq('lottery_type', groupLink.lottery_type)
+        .order('created_at', { ascending: false })
+        .range(from, to)
+    );
+
+    const allHistoriesCombined = [...(pastHistories || [])];
+    const existingHistoryRoundIds = new Set(allHistoriesCombined.map(h => String(h.round_id)).filter(Boolean));
+
+    // 8.3 Fetch recent announced/closed rounds from lottery_rounds to supplement any rounds not yet summarized
+    const { data: recentLotteryRounds } = await supabase
+      .from('lottery_rounds')
+      .select('id, lottery_type, lottery_name, round_date, close_time, status')
+      .eq('dealer_id', dealerId)
+      .eq('lottery_type', groupLink.lottery_type)
+      .in('status', ['announced', 'closed'])
+      .order('close_time', { ascending: false })
+      .limit(15);
+
+    if (recentLotteryRounds) {
+      for (const ar of recentLotteryRounds) {
+        const rId = String(ar.id);
+        if (existingHistoryRoundIds.has(rId)) continue;
+
+        const { data: subData } = await fetchAllRows(
+          (from, to) => supabase
+            .from('submissions')
+            .select('amount, commission_amount, prize_amount, is_winner')
+            .eq('round_id', ar.id)
+            .eq('user_id', memberProfile.id)
+            .eq('is_deleted', false)
+            .order('created_at', { ascending: false })
+            .range(from, to)
+        );
+
+        if (subData && subData.length > 0) {
+          let totAmt = 0;
+          let totComm = 0;
+          let totWin = 0;
+          for (const s of subData) {
+            totAmt += Number(s.amount) || 0;
+            totComm += Number(s.commission_amount) || 0;
+            if (s.is_winner) totWin += Number(s.prize_amount) || 0;
+          }
+          allHistoriesCombined.push({
+            round_id: rId,
+            user_id: memberProfile.id,
+            round_date: getRoundCloseDate(ar),
+            lottery_type: ar.lottery_type,
+            total_amount: totAmt,
+            total_commission: totComm,
+            total_winnings: totWin
+          });
+          existingHistoryRoundIds.add(rId);
+        }
+      }
+    }
+
     if (settlementMode === 'immediate') {
       // --- MODE 1: IMMEDIATE SETTLEMENT (งวดต่องวด) ---
-      const { data: latestRounds } = await supabase
-        .from('lottery_rounds')
-        .select('id, lottery_type, lottery_name, round_date, close_time, status')
-        .eq('dealer_id', dealerId)
-        .eq('lottery_type', groupLink.lottery_type)
-        .order('close_time', { ascending: false })
-        .limit(1);
+      // User Rule 1:
+      // "แบบงวดต่องวด หมายถึงถ้าไม่มียอดค้างในงวดก่อนๆ ก็ให้หักลบกันเลยระหว่าง ยอดสุทธิคือ(ยอดส่ง-ค่าคอม) - เงิน ถูกรางวัล
+      //  ถ้าเป็น+ ก็คือเงินที่สมาชิกต้องโอนให้กับเจ้ามือ แต่ถ้ามียอดค้างงวดอื่นๆอยู่ด้วยในประเภทหวยนั้นก็ให้เอามาคิดรวมไปด้วย
+      //  ไม่ว่าจะเป็นส่วนที่สมาชิกค้างเจ้ามือ หรือ เจ้ามือค้างเงินรางวัลสมาชิกก็ตาม ในประเภทหวยนั้น"
 
-      const currentRound = latestRounds?.[0];
-      if (!currentRound) {
+      let latestRound = recentLotteryRounds?.[0];
+      if (!latestRound) {
+        const { data: anyRounds } = await supabase
+          .from('lottery_rounds')
+          .select('id, lottery_type, lottery_name, round_date, close_time, status')
+          .eq('dealer_id', dealerId)
+          .eq('lottery_type', groupLink.lottery_type)
+          .order('close_time', { ascending: false })
+          .limit(1);
+        latestRound = anyRounds?.[0];
+      }
+
+      if (!latestRound) {
         await sendLineReply(replyToken, formatSlipSettlementLineMessage({
           status: 'no_debt',
           memberName,
@@ -5302,83 +5445,67 @@ async function handleLineSlipMessage({
         return;
       }
 
-      const currentRoundDate = getRoundCloseDate(currentRound);
-
-      let totalAmt = 0;
-      let totalComm = 0;
-      let totalWin = 0;
-
-      const { data: userHist } = await supabase
-        .from('user_round_history')
-        .select('total_amount, total_commission, total_winnings')
-        .eq('dealer_id', dealerId)
-        .eq('user_id', memberProfile.id)
-        .eq('round_id', currentRound.id)
-        .maybeSingle();
-
-      if (userHist) {
-        totalAmt = Number(userHist.total_amount) || 0;
-        totalComm = Number(userHist.total_commission) || 0;
-        totalWin = Number(userHist.total_winnings) || 0;
-      } else {
+      // Check if latestRound has raw submissions if not in existingHistoryRoundIds
+      if (!existingHistoryRoundIds.has(String(latestRound.id))) {
         const { data: subData } = await fetchAllRows(
           (from, to) => supabase
             .from('submissions')
             .select('amount, commission_amount, prize_amount, is_winner')
-            .eq('round_id', currentRound.id)
+            .eq('round_id', latestRound.id)
             .eq('user_id', memberProfile.id)
             .eq('is_deleted', false)
             .order('created_at', { ascending: false })
             .range(from, to)
         );
 
-        if (subData) {
+        if (subData && subData.length > 0) {
+          let totAmt = 0;
+          let totComm = 0;
+          let totWin = 0;
           for (const s of subData) {
-            totalAmt += Number(s.amount) || 0;
-            totalComm += Number(s.commission_amount) || 0;
-            if (s.is_winner) {
-              totalWin += Number(s.prize_amount) || 0;
-            }
+            totAmt += Number(s.amount) || 0;
+            totComm += Number(s.commission_amount) || 0;
+            if (s.is_winner) totWin += Number(s.prize_amount) || 0;
           }
+          allHistoriesCombined.push({
+            round_id: String(latestRound.id),
+            user_id: memberProfile.id,
+            round_date: getRoundCloseDate(latestRound),
+            lottery_type: latestRound.lottery_type,
+            total_amount: totAmt,
+            total_commission: totComm,
+            total_winnings: totWin
+          });
+          existingHistoryRoundIds.add(String(latestRound.id));
         }
       }
 
-      const { data: existingPayments } = await fetchAllRows(
-        (from, to) => supabase
-          .from('member_round_payments')
-          .select('amount, payment_type, direction')
-          .eq('dealer_id', dealerId)
-          .eq('round_id', currentRound.id)
-          .eq('user_id', memberProfile.id)
-          .order('created_at', { ascending: false })
-          .range(from, to)
-      );
+      const immediateRes = calculateImmediateModeDebt({
+        userId: memberProfile.id,
+        latestRound,
+        userHistories: allHistoriesCombined,
+        payments: allPayments || [],
+        targetLotteryType: groupLink.lottery_type
+      });
 
-      let alreadyPaid = 0;
-      let alreadyPrizePaid = 0;
-      if (existingPayments) {
-        for (const p of existingPayments) {
-          if (p.payment_type === 'net_settlement' && p.direction === 'member_to_dealer') {
-            alreadyPaid += Number(p.amount) || 0;
-          } else if (p.payment_type === 'prize_payout' && p.direction === 'dealer_to_member') {
-            alreadyPrizePaid += Number(p.amount) || 0;
-          }
-        }
-      }
+      const {
+        currentRoundDebt,
+        pastDebtsTotal,
+        pastCreditsTotal,
+        totalExpectedAmount,
+        debtsToPay,
+        pastCredits
+      } = immediateRes;
 
-      const expectedDebt = calculateImmediateDebt(
-        totalAmt,
-        totalComm,
-        Math.max(0, totalWin - alreadyPrizePaid),
-        alreadyPaid
-      );
+      const currentRoundDate = getRoundCloseDate(latestRound) || todayStr;
 
-      if (expectedDebt <= 0) {
+      if (totalExpectedAmount <= 0) {
         await sendLineReply(replyToken, formatSlipSettlementLineMessage({
           status: 'no_debt',
           memberName,
           memberCode,
           lotteryTypeName,
+          roundDateText: currentRoundDate,
           settlementMode: 'immediate'
         }), groupId);
         return;
@@ -5386,7 +5513,7 @@ async function handleLineSlipMessage({
 
       const tolRes = validateSlipTolerance({
         slipAmount,
-        expectedAmount: expectedDebt,
+        expectedAmount: totalExpectedAmount,
         toleranceAmount: Number(dealerProfile.slip_tolerance_amount) || 0,
         toleranceMode: dealerProfile.slip_tolerance_mode || 'forgive_difference'
       });
@@ -5398,7 +5525,11 @@ async function handleLineSlipMessage({
           memberCode,
           lotteryTypeName,
           settlementMode: 'immediate',
-          expectedAmount: expectedDebt,
+          roundDateText: currentRoundDate,
+          currentRoundDebt,
+          pastDebtTotal: pastDebtsTotal,
+          pastCreditsTotal,
+          expectedAmount: totalExpectedAmount,
           slipAmount,
           toleranceAmount: Number(dealerProfile.slip_tolerance_amount) || 0
         });
@@ -5406,29 +5537,33 @@ async function handleLineSlipMessage({
         return;
       }
 
-      const bankDesc = slipData.receiver?.account?.name || 'ธนาคาร';
-      const paymentNote = `[สลิปอัตโนมัติ] ${bankDesc} (Ref: ${transRef})${tolRes.adjustmentNote ? ` - ${tolRes.adjustmentNote}` : ''}`;
+      const allocResult = allocateImmediateSettlement({
+        debtsToPay,
+        pastCredits,
+        slipAmount: tolRes.recordedAmount,
+        dealerId,
+        memberUserId: memberProfile.id,
+        latestRound,
+        paidAt: todayStr,
+        transRef,
+        adjustmentNote: tolRes.adjustmentNote,
+        slipData,
+        dealerAccounts: dealerAccounts || []
+      });
 
-      const { data: insertedPayment, error: insertErr } = await supabase
-        .from('member_round_payments')
-        .insert({
-          dealer_id: dealerId,
-          user_id: memberProfile.id,
-          round_id: currentRound.id,
-          lottery_type: currentRound.lottery_type,
-          round_date: currentRoundDate,
-          payment_type: 'net_settlement',
-          direction: 'member_to_dealer',
-          amount: tolRes.recordedAmount,
-          paid_at: todayStr,
-          notes: paymentNote,
-          created_by: dealerId
-        })
-        .select('id')
-        .single();
-
-      if (insertErr) {
-        console.error('[SLIP BOT] Error inserting member_round_payments:', insertErr);
+      let firstPaymentId: string | null = null;
+      for (const p of allocResult.payments) {
+        const { data: insP, error: insErr } = await supabase
+          .from('member_round_payments')
+          .insert(p)
+          .select('id')
+          .single();
+        if (!firstPaymentId && insP?.id) {
+          firstPaymentId = insP.id;
+        }
+        if (insErr) {
+          console.error('[SLIP BOT] Error inserting immediate settlement payment:', insErr);
+        }
       }
 
       await supabase
@@ -5436,15 +5571,16 @@ async function handleLineSlipMessage({
         .insert({
           dealer_id: dealerId,
           member_id: memberProfile.id,
-          payment_id: insertedPayment?.id || null,
+          payment_id: firstPaymentId,
           trans_ref: transRef,
           amount: slipAmount,
           used_at: new Date().toISOString(),
           slip_data: slipData
         });
 
-      const receiverText = slipData.receiver?.account?.name
-        ? `${slipData.receiver.account.name} (${slipData.receiver.account.value || ''})`
+      const immDestNote = getSlipDestinationAccountNote(slipData?.receiver, dealerAccounts || []);
+      const receiverText = immDestNote
+        ? immDestNote.replace(/^โอนไป\s*/, '')
         : (slipData.receiver?.displayName || '');
 
       const successMsg = formatSlipSettlementLineMessage({
@@ -5454,7 +5590,10 @@ async function handleLineSlipMessage({
         lotteryTypeName,
         settlementMode: 'immediate',
         roundDateText: currentRoundDate,
-        expectedAmount: expectedDebt,
+        currentRoundDebt,
+        pastDebtTotal: pastDebtsTotal,
+        pastCreditsTotal,
+        expectedAmount: totalExpectedAmount,
         slipAmount,
         toleranceAmount: Number(dealerProfile.slip_tolerance_amount) || 0,
         bankAccountText: receiverText,
@@ -5464,137 +5603,15 @@ async function handleLineSlipMessage({
 
     } else {
       // --- MODE 2: CROSS ROUND SETTLEMENT (งวดชนงวด) ---
-      const { data: latestRounds } = await supabase
-        .from('lottery_rounds')
-        .select('id, lottery_type, lottery_name, round_date, close_time, status')
-        .eq('dealer_id', dealerId)
-        .eq('lottery_type', groupLink.lottery_type)
-        .order('close_time', { ascending: false })
-        .limit(1);
+      // User Rule 2:
+      // "แบบงวดชนงวด ก็ให้หมายถึง คำว่างวดล่าสุด ให้หมายถึงงวดล่าสุดที่ประกาศผลรางวัลแล้ว
+      //  ให้ยึดงวดล่าสุดถ้าไม่มีการถูกรางวัล เงินที่สมาชิกต้องโอน ก็คือเงินงวดก่อนหน้าที่ยังค้างอยู่ ไม่ว่ากี่งวดก็ตามที่มีในระบบ
+      //  และถ้างวดล่าสุดสมาชิกมีการถูกรางวัล ก็ให้เอาเงินรางวัลนั้นมาหักกับเงินค้างงวดอื่นๆ โดยยังไม่ต้องโอน เงินจ่ายสุทธิ ซึ่งก็คือ(ยอดส่ง-ค่าคอม)"
 
-      const currentRound = latestRounds?.[0];
-      const currentRoundId = currentRound?.id;
-      const currentRoundDate = currentRound ? getRoundCloseDate(currentRound) : todayStr;
+      // Latest announced round strictly has status in ('announced', 'closed')
+      const latestAnnouncedRound = recentLotteryRounds?.find(r => r.status === 'announced' || r.status === 'closed');
 
-      let curRoundPrize = 0;
-      if (currentRoundId) {
-        const { data: curHist } = await supabase
-          .from('user_round_history')
-          .select('total_winnings')
-          .eq('dealer_id', dealerId)
-          .eq('user_id', memberProfile.id)
-          .eq('round_id', currentRoundId)
-          .maybeSingle();
-
-        if (curHist) {
-          curRoundPrize = Number(curHist.total_winnings) || 0;
-        } else {
-          const { data: subWin } = await fetchAllRows(
-            (from, to) => supabase
-              .from('submissions')
-              .select('prize_amount')
-              .eq('round_id', currentRoundId)
-              .eq('user_id', memberProfile.id)
-              .eq('is_winner', true)
-              .eq('is_deleted', false)
-              .order('created_at', { ascending: false })
-              .range(from, to)
-          );
-          if (subWin) {
-            curRoundPrize = subWin.reduce((sum, s) => sum + (Number(s.prize_amount) || 0), 0);
-          }
-        }
-      }
-
-      const { data: pastHistories } = await fetchAllRows(
-        (from, to) => supabase
-          .from('user_round_history')
-          .select('round_id, round_date, lottery_type, total_amount, total_commission, total_winnings, created_at')
-          .eq('dealer_id', dealerId)
-          .eq('user_id', memberProfile.id)
-          .neq('round_id', currentRoundId || '00000000-0000-0000-0000-000000000000')
-          .order('created_at', { ascending: false })
-          .range(from, to)
-      );
-
-      const { data: allPayments } = await fetchAllRows(
-        (from, to) => supabase
-          .from('member_round_payments')
-          .select('round_id, round_date, lottery_type, amount, direction, payment_type, created_at')
-          .eq('dealer_id', dealerId)
-          .eq('user_id', memberProfile.id)
-          .order('created_at', { ascending: false })
-          .range(from, to)
-      );
-
-      // Deduct any prize payouts already paid to the member for the current round
-      let curRoundAlreadyPrizePaid = 0;
-      if (currentRoundId && allPayments) {
-        for (const p of allPayments) {
-          if (String(p.round_id) === String(currentRoundId)) {
-            if (p.payment_type === 'prize_payout' && p.direction === 'dealer_to_member') {
-              curRoundAlreadyPrizePaid += Number(p.amount) || 0;
-            }
-          }
-        }
-      }
-      curRoundPrize = Math.max(0, Math.round((curRoundPrize - curRoundAlreadyPrizePaid) * 100) / 100);
-
-      const pastDebts: Array<{ roundId: string; roundDate: string; lotteryType?: string; debt: number }> = [];
-
-      if (pastHistories) {
-        const roundMap: Record<string, any> = {};
-        for (const h of pastHistories) {
-          if (!h.round_id) continue;
-          const rId = String(h.round_id);
-          if (!roundMap[rId]) {
-            roundMap[rId] = {
-              roundId: rId,
-              roundDate: getRoundCloseDate(h) || h.round_date || '',
-              lotteryType: h.lottery_type,
-              total_amount: 0,
-              total_commission: 0,
-              total_winnings: 0
-            };
-          }
-          roundMap[rId].total_amount += Number(h.total_amount) || 0;
-          roundMap[rId].total_commission += Number(h.total_commission) || 0;
-          roundMap[rId].total_winnings += Number(h.total_winnings) || 0;
-        }
-
-        for (const rId of Object.keys(roundMap)) {
-          const item = roundMap[rId];
-          const initial = (item.total_amount - item.total_commission - item.total_winnings);
-          const paymentsForRound = (allPayments || []).filter(p => String(p.round_id) === rId);
-
-          let netPaid = 0;
-          let prizePaid = 0;
-          for (const p of paymentsForRound) {
-            if (p.payment_type === 'net_settlement' && p.direction === 'member_to_dealer') {
-              netPaid += Number(p.amount) || 0;
-            } else if (p.payment_type === 'prize_payout' && p.direction === 'dealer_to_member') {
-              prizePaid += Number(p.amount) || 0;
-            }
-          }
-
-          const bal = Math.round((initial - netPaid + prizePaid) * 100) / 100;
-          if (bal > 0) {
-            pastDebts.push({
-              roundId: rId,
-              roundDate: item.roundDate,
-              lotteryType: item.lotteryType,
-              debt: bal
-            });
-          }
-        }
-      }
-
-      pastDebts.sort((a, b) => (a.roundDate || '').localeCompare(b.roundDate || ''));
-
-      const pastDebtTotal = pastDebts.reduce((sum, d) => sum + d.debt, 0);
-      const expectedAmount = Math.max(0, Math.round((pastDebtTotal - curRoundPrize) * 100) / 100);
-
-      if (expectedAmount <= 0 && pastDebtTotal <= 0) {
+      if (!latestAnnouncedRound) {
         await sendLineReply(replyToken, formatSlipSettlementLineMessage({
           status: 'no_debt',
           memberName,
@@ -5605,11 +5622,58 @@ async function handleLineSlipMessage({
         return;
       }
 
+      const crossDebtRes = calculateCrossRoundModeDebt({
+        userId: memberProfile.id,
+        latestAnnouncedRound,
+        userHistories: allHistoriesCombined,
+        payments: allPayments || [],
+        targetLotteryType: groupLink.lottery_type
+      });
+
+      const {
+        latestRoundPrize,
+        pastDebtsTotal,
+        expectedAmount,
+        pastDebts,
+        currentRoundDebt,
+        totalDebtWithCurrent
+      } = crossDebtRes;
+
+      const currentRoundDate = getRoundCloseDate(latestAnnouncedRound) || todayStr;
+
+      // Determine which expected amount the slip matches (within tolerance):
+      // 1. Combined debt (all past debts + current round debt)
+      // 2. Primary expectedAmount (past debts after deducting current winnings, or currentRoundDebt if no past debts)
+      // 3. Current round debt alone (if past debts exist but member paid current round)
+      let effectiveExpectedAmount = expectedAmount;
+      const tolAmt = Number(dealerProfile.slip_tolerance_amount) || 0;
+      const tolMode = dealerProfile.slip_tolerance_mode || 'forgive_difference';
+
+      if (totalDebtWithCurrent > 0 && Math.abs(slipAmount - totalDebtWithCurrent) <= tolAmt) {
+        effectiveExpectedAmount = totalDebtWithCurrent;
+      } else if (expectedAmount > 0 && Math.abs(slipAmount - expectedAmount) <= tolAmt) {
+        effectiveExpectedAmount = expectedAmount;
+      } else if (currentRoundDebt > 0 && Math.abs(slipAmount - currentRoundDebt) <= tolAmt) {
+        effectiveExpectedAmount = currentRoundDebt;
+      }
+
+      if (effectiveExpectedAmount <= 0) {
+        await sendLineReply(replyToken, formatSlipSettlementLineMessage({
+          status: 'no_debt',
+          memberName,
+          memberCode,
+          lotteryTypeName,
+          roundDateText: currentRoundDate,
+          settlementMode: 'cross_round'
+        }), groupId);
+        return;
+      }
+
       const tolRes = validateSlipTolerance({
         slipAmount,
-        expectedAmount,
-        toleranceAmount: Number(dealerProfile.slip_tolerance_amount) || 0,
-        toleranceMode: dealerProfile.slip_tolerance_mode || 'forgive_difference'
+        expectedAmount: effectiveExpectedAmount,
+        toleranceAmount: tolAmt,
+        toleranceMode: tolMode
       });
 
       if (!tolRes.isValid) {
@@ -5619,9 +5683,13 @@ async function handleLineSlipMessage({
           memberCode,
           lotteryTypeName,
           settlementMode: 'cross_round',
-          expectedAmount,
+          roundDateText: currentRoundDate,
+          expectedAmount: effectiveExpectedAmount,
           slipAmount,
-          toleranceAmount: Number(dealerProfile.slip_tolerance_amount) || 0
+          toleranceAmount: tolAmt,
+          pastDebtTotal,
+          currentRoundPrize: latestRoundPrize,
+          currentRoundDebt
         });
         await sendLineReply(replyToken, mismatchMsg, groupId);
         return;
@@ -5629,14 +5697,17 @@ async function handleLineSlipMessage({
 
       const allocResult = allocateCrossRoundOffset({
         pastDebts,
-        currentRoundPrize: curRoundPrize,
+        currentRoundPrize: latestRoundPrize,
         slipAmount: tolRes.recordedAmount,
         dealerId,
         memberUserId: memberProfile.id,
-        currentRound: currentRound || { id: '00000000-0000-0000-0000-000000000000', round_date: todayStr, lottery_type: groupLink.lottery_type },
+        currentRound: latestAnnouncedRound,
         paidAt: todayStr,
         transRef,
-        adjustmentNote: tolRes.adjustmentNote
+        adjustmentNote: tolRes.adjustmentNote,
+        slipData,
+        dealerAccounts: dealerAccounts || [],
+        currentRoundDebt
       });
 
       let firstPaymentId: string | null = null;
@@ -5666,8 +5737,9 @@ async function handleLineSlipMessage({
           slip_data: slipData
         });
 
-      const receiverText = slipData.receiver?.account?.name
-        ? `${slipData.receiver.account.name} (${slipData.receiver.account.value || ''})`
+      const crossDestNote = getSlipDestinationAccountNote(slipData?.receiver, dealerAccounts || []);
+      const receiverText = crossDestNote
+        ? crossDestNote.replace(/^โอนไป\s*/, '')
         : (slipData.receiver?.displayName || '');
 
       const successMsg = formatSlipSettlementLineMessage({
@@ -5676,12 +5748,14 @@ async function handleLineSlipMessage({
         memberCode,
         lotteryTypeName,
         settlementMode: 'cross_round',
-        expectedAmount,
+        roundDateText: currentRoundDate,
+        expectedAmount: effectiveExpectedAmount,
         slipAmount,
-        toleranceAmount: Number(dealerProfile.slip_tolerance_amount) || 0,
+        toleranceAmount: tolAmt,
         bankAccountText: receiverText,
         pastDebtTotal,
-        currentRoundPrize: curRoundPrize,
+        currentRoundPrize: latestRoundPrize,
+        currentRoundDebt,
         adjustmentNote: tolRes.adjustmentNote
       });
       await sendLineReply(replyToken, successMsg, groupId);
@@ -5926,7 +6000,8 @@ serve(async (req) => {
             return false;
           });
 
-          const numLimit = numberLimit !== undefined && numberLimit !== null ? Number(numberLimit.max_amount) : undefined;
+          const isRateDef = isRateLimitDefault(numberLimit);
+          const numLimit = (numberLimit !== undefined && numberLimit !== null && !isRateDef) ? Number(numberLimit.max_amount) : undefined;
           const typeLimit = typeLimitsMap[limitLookupBetType];
           const limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
 
@@ -13889,7 +13964,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                         if (nlItem.include_reversed && nlBetType === betType && nlItem.reversed_numbers?.includes(lookupNum)) return true;
                         return false;
                       });
-                      const numLimit = nl !== undefined ? Number(nl.max_amount) : undefined;
+                      const isRateDef = isRateLimitDefault(nl);
+                      const numLimit = (nl !== undefined && !isRateDef) ? Number(nl.max_amount) : undefined;
                       const typeLimit = typeLimitsMap[betType];
                       limit = numLimit !== undefined ? numLimit : (typeLimit !== undefined ? typeLimit : 999999999);
                     }
@@ -19179,7 +19255,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         // and to always show payout percent/เลขอั้นเฉพาะจ่าย% info), regardless of returnExcess setting
         const { data: numberLimitsData } = await supabase
           .from('number_limits')
-          .select('bet_type, numbers, max_amount, is_active, limit_type, payout_percent, include_reversed, reversed_numbers')
+          .select('bet_type, numbers, max_amount, is_active, limit_type, payout_percent, include_reversed, reversed_numbers, time_condition')
           .eq('round_id', activeRound.id);
         numberLimits = (numberLimitsData || []).filter((nl: any) => nl.is_active === undefined || nl.is_active === true);
 
@@ -19581,7 +19657,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               const matching4SetLimit = findMatchingLimit(numberLimits, '4_set', numbers);
               let payoutPercent4Set = 100;
-              const limit4Set = matching4SetLimit !== null
+              const isRateDef4Set = isRateLimitDefault(matching4SetLimit);
+              const limit4Set = (matching4SetLimit !== null && !isRateDef4Set)
                 ? (Number(matching4SetLimit.max_amount) / setPrice)
                 : (typeLimitsMap['4_set'] !== undefined ? typeLimitsMap['4_set'] : (typeLimitsMap['4_top'] !== undefined ? typeLimitsMap['4_top'] : 999999999));
               if (matching4SetLimit && matching4SetLimit.payout_percent) {
@@ -19595,8 +19672,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               const remaining4Set = Math.max(0, effectiveLimit4Set - currentExactSets);
 
               const matching3SetLimit = findMatchingLimit(numberLimits, '3_set', last3);
+              const isRateDef3Set = isRateLimitDefault(matching3SetLimit);
               const limit3Set = matching3SetLimit !== null
-                ? (matching3SetLimit.limit_type === 'blocked' ? 0 : Number(matching3SetLimit.max_amount) / setPrice)
+                ? (matching3SetLimit.limit_type === 'blocked' ? 0 : (isRateDef3Set ? (typeLimitsMap['3_set'] !== undefined ? typeLimitsMap['3_set'] : 999999999) : Number(matching3SetLimit.max_amount) / setPrice))
                 : (typeLimitsMap['3_set'] !== undefined ? typeLimitsMap['3_set'] : 999999999);
               const totalTransferred3Set = transfersList
                 .filter(t => (t.bet_type === '4_set' || t.bet_type === '3_set') && t.numbers?.slice(-3) === last3)
@@ -19642,7 +19720,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               let limit = 999999999;
               let payoutPercent = 100;
               if (matchingLimit) {
-                limit = Number(matchingLimit.max_amount);
+                if (isRateLimitDefault(matchingLimit)) {
+                  const typeLimit = typeLimitsMap[betType];
+                  if (typeLimit !== undefined) {
+                    limit = typeLimit;
+                  }
+                } else {
+                  limit = Number(matchingLimit.max_amount);
+                }
                 payoutPercent = matchingLimit.payout_percent || 100;
               } else {
                 const typeLimit = typeLimitsMap[betType];

@@ -3566,15 +3566,21 @@ export default function Dealer() {
     // Update Line User ID for member
     async function handleUpdateMemberLineUserId(memberId, lineUserId) {
         try {
+            const cleanLineUserId = (lineUserId || '').trim() || null
             const { error } = await supabase
                 .from('profiles')
-                .update({ line_user_id: lineUserId || null })
+                .update({ line_user_id: cleanLineUserId })
                 .eq('id', memberId)
 
-            if (error) throw error
+            if (error) {
+                if (error.code === '23505' || error.message?.includes('duplicate key') || error.message?.includes('unique constraint')) {
+                    throw new Error('Line UID นี้ถูกใช้ผูกกับสมาชิกคนอื่นในระบบแล้ว กรุณาตรวจสอบหรือล้างค่าจากสมาชิกเดิมก่อน')
+                }
+                throw error
+            }
 
             toast.success('อัปเดต Line User ID สำเร็จ')
-            setMembers(prev => prev.map(m => m.id === memberId ? { ...m, line_user_id: lineUserId } : m))
+            setMembers(prev => prev.map(m => m.id === memberId ? { ...m, line_user_id: cleanLineUserId } : m))
         } catch (err) {
             console.error('Error updating member line_user_id:', err)
             toast.error('เกิดข้อผิดพลาดในการอัปเดต Line User ID: ' + err.message)

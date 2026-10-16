@@ -1160,11 +1160,17 @@ export function parsePaymentNotes(notes) {
     let ref = ''
     let time = ''
 
-    // Extract reference: #[something]
+    // Extract reference: #[something] or fallback Ref:\s*([^\s\)]+)
     const refMatch = detailsPart.match(/#([^\s\)]+)/)
     if (refMatch) {
         ref = refMatch[1].trim()
         detailsPart = detailsPart.replace(/#([^\s\)]+)/, '').trim()
+    } else {
+        const legacyRefMatch = detailsPart.match(/\bRef:\s*([^\s\)]+)/i)
+        if (legacyRefMatch) {
+            ref = legacyRefMatch[1].trim()
+            detailsPart = detailsPart.replace(/\bRef:\s*[^\s\)]+/i, '').trim()
+        }
     }
 
     // Extract time: เวลา [HH:mm]
@@ -1182,6 +1188,15 @@ export function parsePaymentNotes(notes) {
         customNotes = raw
         prefix = ''
     } else {
+        // Fallback for legacy bot format: "[สลิปอัตโนมัติ] นาย ธีระเดช บ (Ref: ...)"
+        if (!customNotes && prefix && prefix.startsWith('[สลิปอัตโนมัติ]')) {
+            const destPart = prefix.replace(/^\[สลิปอัตโนมัติ\]\s*/, '').trim()
+            if (destPart) {
+                customNotes = destPart.startsWith('โอนไป') ? destPart : `โอนไป ${destPart}`
+            }
+            prefix = 'ชำระหนี้งวดนี้'
+        }
+
         // 1. If detailsPart has "... โอนไป ..." pattern, extract senderBank
         const transferMatch = customNotes.match(/^(.*?)\s+(โอนไป\s+.*)$/)
         if (transferMatch) {
