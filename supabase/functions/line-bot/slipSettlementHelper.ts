@@ -240,9 +240,25 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
         if (params.roundDateText) lines.push(`📅 งวดวันที่: ${formatThaiDate(params.roundDateText)}`)
         lines.push('⚪ ปัจจุบันไม่มียอดหนี้ค้างชำระ')
     } else if (params.status === 'invalid_slip') {
-        lines.push('⚠️ ไม่พบข้อมูลสลิปการโอนเงิน')
-        if (params.adjustmentNote) lines.push(`- สาเหตุ: ${params.adjustmentNote}`)
-        lines.push('❌ กรุณาตรวจสอบ QR Code หรือความชัดเจนของรูปภาพอีกครั้งค่ะ')
+        const isDelaySlip = params.adjustmentNote && (
+            params.adjustmentNote.includes('กรุณารอ') ||
+            params.adjustmentNote.includes('ล่าช้า') ||
+            params.adjustmentNote.includes('ธนาคารกรุงเทพ') ||
+            params.adjustmentNote.includes('delay')
+        )
+        if (isDelaySlip) {
+            lines.push('❌ ไม่สามารถบันทึกการชำระเงินได้ ❌')
+            if (params.adjustmentNote.includes('ธนาคารกรุงเทพ')) {
+                lines.push('- สาเหตุ: เนื่องจากเป็นสลิปจากธนาคารกรุงเทพ การประมวลผลต้องใช้เวลาประมาณ 7-10 นาที กรุณาโยนสลิปลงในกลุ่มอีกครั้งหลังโอน 7-10 นาที')
+            } else {
+                lines.push(`- สาเหตุ: ${params.adjustmentNote} การประมวลผลของธนาคารต้องใช้เวลา กรุณาโยนสลิปลงในกลุ่มอีกครั้ง`)
+            }
+            lines.push('และกรุณาตรวจสอบ QR Code หรือความชัดเจนของสลิปด้วยค่ะ')
+        } else {
+            lines.push('⚠️ ไม่พบข้อมูลสลิปการโอนเงิน')
+            if (params.adjustmentNote) lines.push(`- สาเหตุ: ${params.adjustmentNote}`)
+            lines.push('❌ กรุณาตรวจสอบ QR Code หรือความชัดเจนของรูปภาพอีกครั้งค่ะ')
+        }
     }
 
     return lines.join('\n')

@@ -167,6 +167,16 @@ describe('slipSettlementHelper', () => {
             expect(msg).toContain('ไม่พบข้อมูลสลิปในระบบธนาคาร')
             expect(msg).toContain('❌ กรุณาตรวจสอบ QR Code หรือความชัดเจนของรูปภาพอีกครั้งค่ะ')
         })
+
+        it('formats friendly message for delay slip (e.g. Bangkok Bank)', () => {
+            const msg = formatSlipSettlementLineMessage({
+                status: 'invalid_slip',
+                adjustmentNote: 'เนื่องจากเป็นสลิปจากธนาคารกรุงเทพ กรุณารอการตรวจสอบสลิปหลังการโอนประมาณ 7 นาที'
+            })
+            expect(msg).toContain('❌ ไม่สามารถบันทึกการชำระเงินได้ ❌')
+            expect(msg).toContain('- สาเหตุ: เนื่องจากเป็นสลิปจากธนาคารกรุงเทพ การประมวลผลต้องใช้เวลาประมาณ 7-10 นาที กรุณาโยนสลิปลงในกลุ่มอีกครั้งหลังโอน 7-10 นาที')
+            expect(msg).toContain('และกรุณาตรวจสอบ QR Code หรือความชัดเจนของสลิปด้วยค่ะ')
+        })
     })
 
     describe('getRoundCloseDate', () => {
