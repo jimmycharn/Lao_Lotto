@@ -188,3 +188,25 @@ export function isReceiverMatchingDealer(receiverData: any, dealerBankAccounts: 
 
     return false
 }
+
+/**
+ * Checks whether a SlipOK error response indicates that the receiving bank account
+ * does not match the shop/branch registered receiving accounts.
+ * E.g., Error Code 1014: "บัญชีผู้รับไม่ตรงกับบัญชีหลักของร้าน"
+ */
+export function isSlipReceiverMismatch(slipRes?: { code?: number; message?: string } | null): boolean {
+    if (!slipRes) return false
+    if (slipRes.code === 1014) return true
+    if (slipRes.message) {
+        const msg = String(slipRes.message)
+        if (
+            msg.includes('บัญชีผู้รับไม่ตรง') ||
+            msg.includes('บัญชีหลักของร้าน') ||
+            msg.includes('ไม่ได้โอนกับบัญชี') ||
+            msg.includes('ไม่ตรงกับบัญชี')
+        ) {
+            return true
+        }
+    }
+    return false
+}

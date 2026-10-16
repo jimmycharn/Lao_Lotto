@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isReceiverMatchingDealer } from './slipOkClient'
+import { isReceiverMatchingDealer, isSlipReceiverMismatch } from './slipOkClient'
 
 describe('slipOkClient', () => {
     describe('isReceiverMatchingDealer', () => {
@@ -104,6 +104,38 @@ describe('slipOkClient', () => {
 
         it('returns true if dealer has no bank accounts registered (fallback permissive)', () => {
             expect(isReceiverMatchingDealer({ displayName: 'ใครก็ได้' }, [])).toBe(true)
+        })
+    })
+
+    describe('isSlipReceiverMismatch', () => {
+        it('returns true for SlipOK error code 1014', () => {
+            expect(isSlipReceiverMismatch({ code: 1014, message: 'บัญชีผู้รับไม่ตรงกับบัญชีหลักของร้าน' })).toBe(true)
+        })
+
+        it('returns true if message contains บัญชีผู้รับไม่ตรง', () => {
+            expect(isSlipReceiverMismatch({ code: 9999, message: 'บัญชีผู้รับไม่ตรงกับที่กำหนด' })).toBe(true)
+        })
+
+        it('returns true if message contains บัญชีหลักของร้าน', () => {
+            expect(isSlipReceiverMismatch({ message: 'ตรวจสอบพบว่าปลายทางไม่ใช่บัญชีหลักของร้าน' })).toBe(true)
+        })
+
+        it('returns true if message contains ไม่ได้โอนกับบัญชี', () => {
+            expect(isSlipReceiverMismatch({ message: 'ไม่ได้โอนกับบัญชีที่เรากำหนดไว้ใน slipOK' })).toBe(true)
+        })
+
+        it('returns false for other errors like code 1007 (no QR)', () => {
+            expect(isSlipReceiverMismatch({ code: 1007, message: 'รูปภาพไม่มี QR Code' })).toBe(false)
+        })
+
+        it('returns false for duplicate slip code 1012', () => {
+            expect(isSlipReceiverMismatch({ code: 1012, message: 'สลิปซ้ำ' })).toBe(false)
+        })
+
+        it('returns false for empty or null', () => {
+            expect(isSlipReceiverMismatch(null)).toBe(false)
+            expect(isSlipReceiverMismatch(undefined)).toBe(false)
+            expect(isSlipReceiverMismatch({})).toBe(false)
         })
     })
 })

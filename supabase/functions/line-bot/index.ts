@@ -25,7 +25,8 @@ import {
 import {
   fetchLineMessageImage,
   verifySlipWithSlipOk,
-  isReceiverMatchingDealer
+  isReceiverMatchingDealer,
+  isSlipReceiverMismatch
 } from "./slipOkClient.ts"
 
 
@@ -5243,6 +5244,12 @@ async function handleLineSlipMessage({
         return `[SLIP] No QR Code in image (pure non-QR photo), silent ignore`;
       }
 
+      // If SlipOK indicates receiver account does not match branch/shop accounts (code 1014 or message)
+      // Stay silent without replying because dealer/banker might be transferring prize money to member
+      if (isSlipReceiverMismatch(slipRes)) {
+        return `[SLIP] Slip receiver account does not match shop accounts in SlipOK (${slipRes.code || ''}: ${slipRes.message}), silent ignore (likely dealer payout to member)`;
+      }
+
       // If it has an unreadable/invalid/expired QR code:
       const invalidMsg = formatSlipSettlementLineMessage({
         status: 'invalid_slip',
@@ -5262,7 +5269,22 @@ async function handleLineSlipMessage({
       return msg;
     }
 
-    // 5. Look up member profile by line_user_id
+    // 5. Verify receiver bank account against dealer's configured bank accounts FIRST
+    const { data: dealerAccounts } = await supabase
+      .from('dealer_bank_accounts')
+      .select('bank_name, bank_account, account_name, is_default')
+      .eq('dealer_id', dealerId);
+
+    const isBankMatch = isReceiverMatchingDealer(slipData.receiver, dealerAccounts || []);
+    if (!isBankMatch) {
+      const recAcc = slipData.receiver?.account?.value || '';
+      const recName = slipData.receiver?.displayName || slipData.receiver?.name || '';
+      // User request: If receiver account does not match dealer accounts, stay completely silent without replying
+      // (as it might be the dealer transferring prize money to a member)
+      return `[SLIP] Receiver ${recName} ${recAcc} does not match any dealer bank accounts, silent ignore (likely dealer payout to member)`;
+    }
+
+    // 6. Look up member profile by line_user_id
     let { data: memberProfile, error: profileErr } = await supabase
       .from('profiles')
       .select('id, full_name, member_code')
@@ -5298,7 +5320,7 @@ async function handleLineSlipMessage({
       return `[SLIP] Valid slip (฿${slipAmount}) but sender ${userId} is not linked to any member profile`;
     }
 
-    // 6. Check duplicate slip in used_slips table
+    // 7. Check duplicate slip in used_slips table
     const { data: existingSlip } = await supabase
       .from('used_slips')
       .select('id, trans_ref, used_at')
@@ -5314,24 +5336,6 @@ async function handleLineSlipMessage({
       });
       await sendLineReply(replyToken, dupMsg, groupId);
       return;
-    }
-
-    // 7. Verify receiver bank account against dealer's configured bank accounts
-    const { data: dealerAccounts } = await supabase
-      .from('dealer_bank_accounts')
-      .select('bank_name, bank_account, account_name, is_default')
-      .eq('dealer_id', dealerId);
-
-    const isBankMatch = isReceiverMatchingDealer(slipData.receiver, dealerAccounts || []);
-    if (!isBankMatch) {
-      const recAcc = slipData.receiver?.account?.value || '';
-      const recName = slipData.receiver?.displayName || slipData.receiver?.name || '';
-      const wrongBankMsg = formatSlipSettlementLineMessage({
-        status: 'wrong_bank',
-        bankAccountText: recAcc ? `${recAcc} (${recName})` : recName
-      });
-      await sendLineReply(replyToken, wrongBankMsg, groupId);
-      return `[SLIP] Receiver ${recName} ${recAcc} does not match any dealer bank accounts`;
     }
 
     const memberName = memberProfile.full_name || 'สมาชิก';
