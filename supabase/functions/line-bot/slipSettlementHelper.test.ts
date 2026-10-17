@@ -1146,7 +1146,7 @@ describe('slipSettlementHelper', () => {
             expect(res.matched).toBe(false)
             expect(res.candidateImmediate).toBe(2712)
             expect(res.candidateCrossRound).toBe(4596)
-            expect(res.candidateCrossRoundAll).toBe(7308)
+            expect(res.candidateCrossRoundAll).toBe(9408) // 2712 + 6696 (gross all)
         })
 
         it('handles member with no past debts correctly', () => {
@@ -1161,6 +1161,54 @@ describe('slipSettlementHelper', () => {
             expect(res.matched).toBe(true)
             expect(res.mode).toBe('cross_round') // curDebt is cross_round candidate when no past debt
             expect(res.expectedAmount).toBe(500)
+        })
+
+        it('evaluates Khun Phrae case (id 10047, slip 31,995 vs 31,130 / 29,889 / 93,969)', () => {
+            const res = evaluateAutoSettlementCandidate({
+                slipAmount: 31995,
+                toleranceAmount: 9,
+                currentRoundDebt: 31130,
+                netPastDebt: 29889, // 62839 - 32950
+                totalDebtWithCurrent: 61019, // 31130 + 29889
+                pastDebtsTotal: 62839
+            })
+            expect(res.matched).toBe(false)
+            expect(res.candidateImmediate).toBe(31130)
+            expect(res.candidateCrossRound).toBe(29889)
+            expect(res.candidateCrossRoundAll).toBe(93969) // 31130 + 62839
+        })
+
+        it('formats auto mode mismatch message with breakdown by round dates (Khun Phrae case)', () => {
+            const msg = formatSlipSettlementLineMessage({
+                status: 'amount_mismatch',
+                memberName: 'พี่แพร',
+                memberCode: '10047',
+                lotteryTypeName: 'หวยไทย',
+                roundDateText: '2026-10-16',
+                currentRoundDateText: '2026-10-16',
+                settlementMode: 'auto',
+                currentRoundDebt: 31130,
+                pastDebts: [
+                    { roundDate: '2026-10-01', debt: 62839 }
+                ],
+                totalAllDebts: 93969,
+                slipAmount: 31995,
+                toleranceAmount: 9
+            })
+
+            expect(msg).toContain('⚠️ แจ้งเตือนยอดเงินไม่ตรง')
+            expect(msg).toContain('👤 สมาชิก: พี่แพร (10047)')
+            expect(msg).toContain('🎯 ประเภทหวย: หวยไทย')
+            expect(msg).toContain('📅 งวดวันที่: 16 ต.ค. 2569')
+            expect(msg).toContain('📌 รูปแบบ: ตรวจสอบอัตโนมัติ')
+            expect(msg).toContain('- ยอดที่ต้องชำระในระบบ:')
+            expect(msg).toContain('  • ยอดงวดปัจจุบัน 16-10-2569: ฿31,130.00')
+            expect(msg).toContain('  • ยอดค้างจ่ายงวด 01-10-2569: ฿62,839.00')
+            expect(msg).toContain('  • รวมทุกงวด: ฿93,969.00')
+            expect(msg).toContain('- ยอดเงินในสลิป: ฿31,995.00')
+            expect(msg).toContain('- ยอดเงินในสลิป ไม่ตรงตามเงื่อนไขการชำระ')
+            expect(msg).toContain('❌ ยังไม่ได้ตัดยอดในระบบ กรุณาตรวจสอบกับเจ้ามือ')
+            expect(msg).not.toContain('ส่วนต่าง')
         })
     })
 })

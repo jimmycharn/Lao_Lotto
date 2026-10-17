@@ -5476,16 +5476,7 @@ async function handleLineSlipMessage({
           return;
         }
 
-        const candLines: string[] = ['- ยอดที่ต้องชำระในระบบ:'];
-        if ((autoRes.candidateCrossRound || 0) > 0) {
-          candLines.push(`  • งวดชนงวด: ฿${autoRes.candidateCrossRound!.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`);
-        }
-        if ((autoRes.candidateImmediate || 0) > 0 && autoRes.candidateImmediate !== autoRes.candidateCrossRound) {
-          candLines.push(`  • งวดต่องวด: ฿${autoRes.candidateImmediate!.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`);
-        }
-        if ((autoRes.candidateCrossRoundAll || 0) > 0 && autoRes.candidateCrossRoundAll !== autoRes.candidateCrossRound && autoRes.candidateCrossRoundAll !== autoRes.candidateImmediate) {
-          candLines.push(`  • รวมทุกงวด: ฿${autoRes.candidateCrossRoundAll!.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`);
-        }
+        const totalAllDebts = (crossDebtRes?.currentRoundDebt || 0) + (crossDebtRes?.pastDebtsTotal || 0);
 
         const mismatchMsg = formatSlipSettlementLineMessage({
           status: 'amount_mismatch',
@@ -5494,10 +5485,13 @@ async function handleLineSlipMessage({
           lotteryTypeName,
           settlementMode: 'auto',
           roundDateText: getRoundCloseDate(latestAnnouncedRound) || todayStr,
+          currentRoundDateText: getRoundCloseDate(latestAnnouncedRound) || todayStr,
+          currentRoundDebt: crossDebtRes?.currentRoundDebt || 0,
+          pastDebts: crossDebtRes?.pastDebts || [],
+          totalAllDebts,
           expectedAmount: autoRes.candidateCrossRound || autoRes.candidateImmediate || autoRes.candidateCrossRoundAll,
           slipAmount,
-          toleranceAmount: tolAmt,
-          autoCandidatesSummary: candLines.join('\n')
+          toleranceAmount: tolAmt
         });
         await sendLineReply(replyToken, mismatchMsg, groupId);
         return;
@@ -5724,9 +5718,16 @@ async function handleLineSlipMessage({
       const currentRoundDate = getRoundCloseDate(latestAnnouncedRound) || todayStr;
 
       let effectiveExpectedAmount = expectedAmount;
+      const grossDebtAll = (currentRoundDebt > 0 && pastDebtsTotal > 0) ? Math.round(currentRoundDebt + pastDebtsTotal) : 0;
 
       if (autoMatchedMode === 'cross_round_all') {
-        effectiveExpectedAmount = totalDebtWithCurrent;
+        if (grossDebtAll > 0 && Math.abs(slipAmount - grossDebtAll) <= tolAmt) {
+          effectiveExpectedAmount = grossDebtAll;
+        } else {
+          effectiveExpectedAmount = totalDebtWithCurrent;
+        }
+      } else if (grossDebtAll > 0 && Math.abs(slipAmount - grossDebtAll) <= tolAmt) {
+        effectiveExpectedAmount = grossDebtAll;
       } else if (totalDebtWithCurrent > 0 && Math.abs(slipAmount - totalDebtWithCurrent) <= tolAmt) {
         effectiveExpectedAmount = totalDebtWithCurrent;
       } else if (expectedAmount > 0 && Math.abs(slipAmount - expectedAmount) <= tolAmt) {
@@ -5758,19 +5759,23 @@ async function handleLineSlipMessage({
       });
 
       if (!tolRes.isValid) {
+        const totalAllDebts = currentRoundDebt + pastDebtsTotal;
         const mismatchMsg = formatSlipSettlementLineMessage({
           status: 'amount_mismatch',
           memberName,
           memberCode,
           lotteryTypeName,
-          settlementMode: autoMatchedMode || 'cross_round',
+          settlementMode: autoMatchedMode || settlementMode || 'cross_round',
           roundDateText: currentRoundDate,
+          currentRoundDateText: currentRoundDate,
+          currentRoundDebt,
+          pastDebts,
+          totalAllDebts,
           expectedAmount: effectiveExpectedAmount,
           slipAmount,
           toleranceAmount: tolAmt,
           pastDebtTotal: pastDebtsTotal,
-          currentRoundPrize: latestRoundPrize,
-          currentRoundDebt
+          currentRoundPrize: latestRoundPrize
         });
         await sendLineReply(replyToken, mismatchMsg, groupId);
         return;

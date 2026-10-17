@@ -19,6 +19,7 @@ export interface SlipResultMessageParams {
     lotteryTypeName?: string
     settlementMode?: 'immediate' | 'cross_round' | 'cross_round_all' | 'auto'
     roundDateText?: string
+    currentRoundDateText?: string
     expectedAmount?: number
     slipAmount?: number
     toleranceAmount?: number
@@ -27,6 +28,8 @@ export interface SlipResultMessageParams {
     currentRoundPrize?: number
     currentRoundDebt?: number
     pastCreditsTotal?: number
+    pastDebts?: Array<{ roundDate?: string; debt: number }>
+    totalAllDebts?: number
     adjustmentNote?: string | null
     transRef?: string
     transferDateText?: string
@@ -130,6 +133,28 @@ export function formatThaiDate(dateStr?: string): string {
     return dateStr
 }
 
+export function formatThaiDateDDMMYYYY(dateStr?: string, separator: string = '-'): string {
+    if (!dateStr) return '-'
+    try {
+        const iso = dateStr.slice(0, 10)
+        const parts = iso.split('-')
+        if (parts.length === 3) {
+            const y = parseInt(parts[0], 10)
+            const m = parseInt(parts[1], 10)
+            const d = parseInt(parts[2], 10)
+            if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                const thaiYear = y > 2500 ? y : y + 543
+                const dd = String(d).padStart(2, '0')
+                const mm = String(m).padStart(2, '0')
+                return `${dd}${separator}${mm}${separator}${thaiYear}`
+            }
+        }
+    } catch {
+        // Fallback
+    }
+    return dateStr
+}
+
 /**
  * Formats user-friendly LINE reply message.
  */
@@ -193,8 +218,36 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
         lines.push(`📌 รูปแบบ: ${formatSettlementModeLabel(params.settlementMode)}`)
         lines.push('----------------------------')
 
-        if (params.autoCandidatesSummary) {
+        if (params.settlementMode === 'auto' && (params.currentRoundDebt !== undefined || (params.pastDebts && params.pastDebts.length > 0))) {
+            lines.push('- ยอดที่ต้องชำระในระบบ:')
+            if (params.currentRoundDebt !== undefined && params.currentRoundDebt > 0) {
+                const curDate = formatThaiDateDDMMYYYY(params.currentRoundDateText || params.roundDateText)
+                lines.push(`  • ยอดงวดปัจจุบัน ${curDate}: ฿${params.currentRoundDebt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            }
+            if (params.pastDebts && params.pastDebts.length > 0) {
+                for (const pd of params.pastDebts) {
+                    if (pd.debt > 0) {
+                        const pastDate = formatThaiDateDDMMYYYY(pd.roundDate)
+                        lines.push(`  • ยอดค้างจ่ายงวด ${pastDate}: ฿${pd.debt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+                    }
+                }
+            }
+            lines.push('----------------------------')
+            const total = params.totalAllDebts !== undefined
+                ? params.totalAllDebts
+                : ((params.currentRoundDebt || 0) + (params.pastDebts?.reduce((s, d) => s + (d.debt || 0), 0) || 0))
+            lines.push(`  • รวมทุกงวด: ฿${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            lines.push(`- ยอดเงินในสลิป: ฿${(params.slipAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            lines.push('- ยอดเงินในสลิป ไม่ตรงตามเงื่อนไขการชำระ')
+            lines.push('----------------------------')
+            lines.push('❌ ยังไม่ได้ตัดยอดในระบบ กรุณาตรวจสอบกับเจ้ามือ')
+        } else if (params.autoCandidatesSummary) {
             lines.push(params.autoCandidatesSummary)
+            lines.push(`- ยอดเงินในสลิป: ฿${(params.slipAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            const diff = Math.abs((params.slipAmount || 0) - (params.expectedAmount || 0))
+            lines.push(`- ส่วนต่าง: ฿${diff.toLocaleString('th-TH', { minimumFractionDigits: 2 })} (ยอมรับได้ไม่เกิน ฿${(params.toleranceAmount || 0).toFixed(2)})`)
+            lines.push('----------------------------')
+            lines.push('❌ ยังไม่ได้ตัดยอดในระบบ กรุณาตรวจสอบกับเจ้ามือ')
         } else {
             if (params.settlementMode === 'cross_round' || params.settlementMode === 'cross_round_all') {
                 if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
@@ -212,12 +265,12 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
                 }
             }
             lines.push(`- ยอดที่ต้องชำระ: ฿${(params.expectedAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            lines.push(`- ยอดเงินในสลิป: ฿${(params.slipAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            const diff = Math.abs((params.slipAmount || 0) - (params.expectedAmount || 0))
+            lines.push(`- ส่วนต่าง: ฿${diff.toLocaleString('th-TH', { minimumFractionDigits: 2 })} (ยอมรับได้ไม่เกิน ฿${(params.toleranceAmount || 0).toFixed(2)})`)
+            lines.push('----------------------------')
+            lines.push('❌ ยังไม่ได้ตัดยอดในระบบ กรุณาตรวจสอบกับเจ้ามือ')
         }
-        lines.push(`- ยอดเงินในสลิป: ฿${(params.slipAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
-        const diff = Math.abs((params.slipAmount || 0) - (params.expectedAmount || 0))
-        lines.push(`- ส่วนต่าง: ฿${diff.toLocaleString('th-TH', { minimumFractionDigits: 2 })} (ยอมรับได้ไม่เกิน ฿${(params.toleranceAmount || 0).toFixed(2)})`)
-        lines.push('----------------------------')
-        lines.push('❌ ยังไม่ได้ตัดยอดในระบบ กรุณาตรวจสอบกับเจ้ามือ')
     } else if (params.status === 'duplicate_slip') {
         lines.push('⚠️ สลิปนี้เคยใช้งานในระบบแล้ว')
         if (params.transRef) lines.push(`- รหัสธุรกรรม: ${params.transRef}`)
@@ -1194,15 +1247,20 @@ export function evaluateAutoSettlementCandidate(params: {
     const curDebt = Math.max(0, Math.round(params.currentRoundDebt || 0))
     const netPast = Math.max(0, Math.round(params.netPastDebt || 0))
     const totDebt = Math.max(0, Math.round(params.totalDebtWithCurrent || 0))
-    const hasPast = (params.pastDebtsTotal || 0) > 0
+    const pastTot = Math.max(0, Math.round(params.pastDebtsTotal || 0))
+    const hasPast = pastTot > 0
 
     // Candidates:
     // 1. Immediate: currentRoundDebt
     // 2. Cross Round: netPastDebt (or curDebt if no past debt)
-    // 3. Cross Round All: totalDebtWithCurrent
+    // 3. Cross Round All:
+    //    - Gross All: currentRoundDebt + pastDebtsTotal (e.g. 31130 + 62839 = 93969)
+    //    - Net All: totalDebtWithCurrent (netPast + curDebt = 29889 + 31130 = 61019)
     const candidateImmediate = curDebt > 0 ? curDebt : 0
     const candidateCrossRound = hasPast ? (netPast > 0 ? netPast : 0) : (curDebt > 0 ? curDebt : 0)
-    const candidateCrossRoundAll = (totDebt > 0 && totDebt !== candidateCrossRound && totDebt !== candidateImmediate) ? totDebt : 0
+    const candidateGrossAll = (curDebt > 0 && pastTot > 0) ? Math.round(curDebt + pastTot) : 0
+    const candidateNetAll = (totDebt > 0 && totDebt !== candidateCrossRound && totDebt !== candidateImmediate && totDebt !== candidateGrossAll) ? totDebt : 0
+    const candidateCrossRoundAll = candidateGrossAll > 0 ? candidateGrossAll : (candidateNetAll > 0 ? candidateNetAll : (totDebt > 0 ? totDebt : 0))
 
     const candidates: Array<{
         mode: 'immediate' | 'cross_round' | 'cross_round_all'
@@ -1231,13 +1289,23 @@ export function evaluateAutoSettlementCandidate(params: {
         })
     }
 
-    // Check candidate 3 (cross_round_all)
-    if (candidateCrossRoundAll > 0 && Math.abs(slipAmt - candidateCrossRoundAll) <= tolAmt) {
+    // Check candidate 3 (cross_round_all - gross: curDebt + pastTot)
+    if (candidateGrossAll > 0 && candidateGrossAll !== candidateCrossRound && candidateGrossAll !== candidateImmediate && Math.abs(slipAmt - candidateGrossAll) <= tolAmt) {
         candidates.push({
             mode: 'cross_round_all',
-            amount: candidateCrossRoundAll,
+            amount: candidateGrossAll,
             label: 'เคลียร์หนี้ทั้งหมด (รวมงวดปัจจุบัน)',
-            diff: Math.abs(slipAmt - candidateCrossRoundAll)
+            diff: Math.abs(slipAmt - candidateGrossAll)
+        })
+    }
+
+    // Check candidate 3 (cross_round_all - net: netPast + curDebt)
+    if (candidateNetAll > 0 && Math.abs(slipAmt - candidateNetAll) <= tolAmt) {
+        candidates.push({
+            mode: 'cross_round_all',
+            amount: candidateNetAll,
+            label: 'เคลียร์หนี้ทั้งหมด (รวมงวดปัจจุบัน)',
+            diff: Math.abs(slipAmt - candidateNetAll)
         })
     }
 
@@ -1246,7 +1314,7 @@ export function evaluateAutoSettlementCandidate(params: {
             matched: false,
             candidateImmediate,
             candidateCrossRound,
-            candidateCrossRoundAll: totDebt > 0 ? totDebt : 0
+            candidateCrossRoundAll
         }
     }
 
@@ -1261,7 +1329,7 @@ export function evaluateAutoSettlementCandidate(params: {
         label: best.label,
         candidateImmediate,
         candidateCrossRound,
-        candidateCrossRoundAll: totDebt > 0 ? totDebt : 0
+        candidateCrossRoundAll
     }
 }
 
