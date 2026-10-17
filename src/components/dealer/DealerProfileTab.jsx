@@ -21,6 +21,7 @@ import {
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
 import CopyButton from '../CopyButton'
+import { THAI_BANKS } from '../../constants/bankConstants'
 
 // Dealer Profile Tab Component
 export default function DealerProfileTab({ user, profile, subscription, formatDate }) {
@@ -62,22 +63,7 @@ export default function DealerProfileTab({ user, profile, subscription, formatDa
         is_default: false
     })
 
-    const bankOptions = [
-        'ธนาคารกรุงเทพ',
-        'ธนาคารกสิกรไทย',
-        'ธนาคารกรุงไทย',
-        'ธนาคารไทยพาณิชย์',
-        'ธนาคารกรุงศรีอยุธยา',
-        'ธนาคารทหารไทยธนชาต',
-        'ธนาคารออมสิน',
-        'ธนาคารเพื่อการเกษตรฯ (ธกส.)',
-        'ธนาคารอาคารสงเคราะห์',
-        'ธนาคารซีไอเอ็มบี',
-        'ธนาคารยูโอบี',
-        'ธนาคารแลนด์ แอนด์ เฮ้าส์',
-        'ธนาคารเกียรตินาคินภัทร',
-        'อื่นๆ'
-    ]
+    const bankOptions = THAI_BANKS
 
     // Update local state when profile prop changes
     useEffect(() => {

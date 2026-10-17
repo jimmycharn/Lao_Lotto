@@ -294,6 +294,60 @@ describe('slipSettlementHelper', () => {
             expect(p.notes).toBe('ชำระหนี้งวดนี้ (กสิกรไทย โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว) เวลา 20:33 #016287203327BOR03490)')
         })
 
+        it('includes sender bank and PromptPay details in prize payout note when offsetting debt (Case: พี่เป๊ก)', () => {
+            const pastDebts = [
+                { roundId: 'past-round-1', roundDate: '2026-10-15', lotteryType: 'lao', debt: 30374 }
+            ]
+            const slipData = {
+                transRef: '2026101720290723000077408',
+                transDate: '20261017',
+                transTime: '20:29:07',
+                sendingBank: '002', // Bangkok Bank
+                receiver: {
+                    proxy: { type: 'MSISDN', value: '099-xxx-9307' },
+                    account: { name: 'นาย ธีระเดช บรรจงแก้ว' },
+                    displayName: 'นาย ธีระเดช บ'
+                }
+            }
+            const dealerAccounts = [
+                { bank_name: 'ธนาคารออมสิน', bank_account: '020432578092', account_name: 'นายธีระเดช บรรจงแก้ว', is_default: true }
+            ]
+
+            const result = allocateCrossRoundOffset({
+                pastDebts,
+                currentRoundPrize: 11850,
+                slipAmount: 18524,
+                dealerId: 'dealer-1',
+                memberUserId: 'member-peck',
+                currentRound: { id: 'current-round-thai', round_date: '2026-10-16', lottery_type: 'thai' },
+                paidAt: '2026-10-17',
+                transRef: '2026101720290723000077408',
+                slipData,
+                dealerAccounts
+            })
+
+            // 1 prize payout for 11850 + 1 past debt settlement for 30374
+            expect(result.payments).toHaveLength(2)
+
+            const prizePayout = result.payments.find(p => p.payment_type === 'prize_payout')
+            expect(prizePayout).toBeDefined()
+            expect(prizePayout?.amount).toBe(11850)
+            expect(prizePayout?.direction).toBe('dealer_to_member')
+            expect(prizePayout?.round_id).toBe('current-round-thai')
+            expect(prizePayout?.notes).toBe(
+                'หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ] (กรุงเทพ โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว) เวลา 20:29 #2026101720290723000077408)'
+            )
+
+            const debtSettlement = result.payments.find(p => p.payment_type === 'net_settlement')
+            expect(debtSettlement).toBeDefined()
+            expect(debtSettlement?.amount).toBe(30374)
+            expect(debtSettlement?.direction).toBe('member_to_dealer')
+            expect(debtSettlement?.round_id).toBe('past-round-1')
+            expect(debtSettlement?.notes).toBe(
+                'ชำระหนี้งวดนี้ (กรุงเทพ โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว) เวลา 20:29 #2026101720290723000077408)'
+            )
+        })
+
         it('allocates to current round debt when member has no past debts (Case: พี่น้ำ)', () => {
             const slipData = {
                 transRef: 'Ab6b8ffb82f894deb',
@@ -408,6 +462,86 @@ describe('slipSettlementHelper', () => {
             expect(details.destinationNote).toBe('โอนไป กรุงเทพ 1234567890')
             expect(details.referenceDoc).toBe('REF_ISO_123')
             expect(details.fullNotes).toBe('ชำระหนี้งวดนี้ (ไทยพาณิชย์ โอนไป กรุงเทพ 1234567890 เวลา 20:33 #REF_ISO_123)')
+        })
+
+        it('correctly identifies PromptPay when receiver transferred via PromptPay mobile number even if dealer only has GSB bank account', () => {
+            const slipData = {
+                transRef: '686062',
+                transDate: '20261017',
+                transTime: '20:29:00',
+                sendingBank: '002', // Bangkok Bank
+                receivingBank: '030', // SlipOK interbank resolved to GSB (030)
+                receiver: {
+                    displayName: 'นาย ธีระเดช บรรจงแก้ว',
+                    proxy: {
+                        type: 'MSISDN',
+                        value: '099-xxx-9307'
+                    },
+                    account: {
+                        value: null
+                    }
+                }
+            }
+            const dealerAccounts = [
+                { bank_name: 'ธนาคารออมสิน', bank_account: '020432578092', account_name: 'นายธีรเดช บรรจงแก้ว', is_default: true }
+            ]
+
+            const note = getSlipDestinationAccountNote(slipData.receiver, dealerAccounts)
+            expect(note).toBe('โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว)')
+            expect(note).not.toContain('ออมสิน')
+            expect(note).not.toContain('020432578092')
+
+            const details = extractSlipTransferDetails({
+                slipData,
+                dealerBankAccounts: dealerAccounts
+            })
+            expect(details.destinationNote).toBe('โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว)')
+            expect(details.fullNotes).toBe('ชำระหนี้งวดนี้ (กรุงเทพ โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว) เวลา 20:29 #686062)')
+        })
+
+        it('matches PromptPay when dealer registered PromptPay in dealerBankAccounts', () => {
+            const slipData = {
+                transRef: '686062',
+                transDate: '20261017',
+                transTime: '20:29:00',
+                sendingBank: '002',
+                receiver: {
+                    displayName: 'นาย ธีระเดช บรรจงแก้ว',
+                    proxy: {
+                        type: 'MSISDN',
+                        value: '099-xxx-9307'
+                    }
+                }
+            }
+            const dealerAccounts = [
+                { bank_name: 'ธนาคารออมสิน', bank_account: '020432578092', account_name: 'นายธีรเดช บรรจงแก้ว', is_default: false },
+                { bank_name: 'พร้อมเพย์', bank_account: '0990009307', account_name: 'นายธีระเดช บรรจงแก้ว', is_default: true }
+            ]
+
+            const note = getSlipDestinationAccountNote(slipData.receiver, dealerAccounts)
+            expect(note).toBe('โอนไป พร้อมเพย์ 0990009307 (นายธีระเดช บรรจงแก้ว)')
+        })
+
+        it('does not overwrite slip bank with dealer bank if banks do not match and digits do not match', () => {
+            const slipData = {
+                transRef: 'REF_SCB_1',
+                transDate: '20261017',
+                transTime: '10:00:00',
+                sendingBank: '004',
+                receivingBank: '014',
+                receiver: {
+                    displayName: 'นาย สมชาย',
+                    account: { value: '987-6-54321-0' },
+                    bank: { name: 'ธนาคารไทยพาณิชย์' }
+                }
+            }
+            const dealerAccounts = [
+                { bank_name: 'ธนาคารออมสิน', bank_account: '020432578092', account_name: 'นายธีรเดช บรรจงแก้ว', is_default: true }
+            ]
+
+            const note = getSlipDestinationAccountNote(slipData.receiver, dealerAccounts)
+            expect(note).toBe('โอนไป ไทยพาณิชย์ 987-6-54321-0 (นาย สมชาย)')
+            expect(note).not.toContain('ออมสิน')
         })
     })
 

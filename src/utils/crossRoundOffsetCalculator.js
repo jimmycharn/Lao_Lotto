@@ -6,6 +6,17 @@ import {
 } from './memberSettlementCalculator'
 import { THAI_BANKS } from '../constants/bankConstants'
 
+export {
+    THAI_BANKS,
+    matchBankOption,
+    BOT_BANK_CODE_MAP,
+    getSenderBankShortName,
+    getSlipTransferTime,
+    isPromptPayReceiver,
+    isDealerBankMatchingSlip,
+    getSlipDestinationAccountNote
+} from '../constants/bankConstants'
+
 /**
  * Extracts and formats the true round date (YYYY-MM-DD) which ALWAYS corresponds
  * to the draw/closing date (close_time / close_date), NOT open_time / open_date.
@@ -1219,6 +1230,12 @@ export function parsePaymentNotes(notes) {
         customNotes = raw
         prefix = ''
     } else {
+        // Handle unparenthesized bot slip notes: e.g. "หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ] #20261017..."
+        if (!matchSuffix && customNotes.includes('[สลิปอัตโนมัติ]')) {
+            prefix = customNotes
+            customNotes = ''
+        }
+
         // Fallback for legacy bot format: "[สลิปอัตโนมัติ] นาย ธีระเดช บ (Ref: ...)"
         if (!customNotes && prefix && prefix.startsWith('[สลิปอัตโนมัติ]')) {
             const destPart = prefix.replace(/^\[สลิปอัตโนมัติ\]\s*/, '').trim()

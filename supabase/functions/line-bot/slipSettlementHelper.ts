@@ -393,11 +393,11 @@ export function getSenderBankShortName(slipData: any): string {
     if (!rawName) return ''
 
     const lower = rawName.toLowerCase()
-    if (lower.includes('กสิกร') || lower.includes('kbank')) return 'กสิกรไทย'
-    if (lower.includes('ไทยพาณิชย์') || lower.includes('scb')) return 'ไทยพาณิชย์'
-    if (lower.includes('กรุงเทพ') || lower.includes('bbl')) return 'กรุงเทพ'
-    if (lower.includes('กรุงไทย') || lower.includes('ktb')) return 'กรุงไทย'
-    if (lower.includes('กรุงศรี') || lower.includes('bay')) return 'กรุงศรีอยุธยา'
+    if (lower.includes('กสิกร') || lower.includes('kbank') || lower.includes('kasikorn')) return 'กสิกรไทย'
+    if (lower.includes('ไทยพาณิชย์') || lower.includes('scb') || lower.includes('siam commercial')) return 'ไทยพาณิชย์'
+    if (lower.includes('กรุงเทพ') || lower.includes('bbl') || lower.includes('bangkok')) return 'กรุงเทพ'
+    if (lower.includes('กรุงไทย') || lower.includes('ktb') || lower.includes('krungthai')) return 'กรุงไทย'
+    if (lower.includes('กรุงศรี') || lower.includes('bay') || lower.includes('krungsri')) return 'กรุงศรีอยุธยา'
     if (lower.includes('ทหารไทย') || lower.includes('ttb') || lower.includes('tmb')) return 'ทหารไทยธนชาต (ttb)'
     if (lower.includes('ออมสิน') || lower.includes('gsb')) return 'ออมสิน'
     if (lower.includes('ธ.ก.ส.') || lower.includes('baac') || lower.includes('เกษตร')) return 'ธ.ก.ส.'
@@ -456,14 +456,70 @@ export function getSlipTransferTime(slipData: any): string {
     return ''
 }
 
+export function isPromptPayReceiver(receiverData: any): boolean {
+    if (!receiverData) return false
+    if (receiverData.proxy?.value && String(receiverData.proxy.value).trim()) return true
+    if (receiverData.proxy?.type && String(receiverData.proxy.type).trim() !== 'BANKAC') return true
+
+    const rawBank = String(receiverData.bank?.name || receiverData.bank?.shortName || '').toLowerCase()
+    if (rawBank.includes('พร้อมเพย์') || rawBank.includes('promptpay')) return true
+
+    const rawVal = String(receiverData.account?.value || receiverData.proxy?.value || '').trim()
+    const cleanDigits = rawVal.replace(/\D/g, '')
+    // Thai mobile phone: starts with 06, 08, 09 and total 10 chars/masked
+    if (/^0[689]/.test(rawVal) && (cleanDigits.length === 10 || (rawVal.includes('x') && rawVal.length >= 10))) {
+        return true
+    }
+    // Thai national ID: 13 digits
+    if (cleanDigits.length === 13 || (/^\d/.test(rawVal) && rawVal.includes('x') && rawVal.replace(/[^0-9xX*]/g, '').length === 13)) {
+        return true
+    }
+
+    return false
+}
+
+function isDealerBankMatchingSlip(dealerBankName: string, receiverData: any): boolean {
+    if (!dealerBankName || !receiverData) return false
+    const dLower = dealerBankName.toLowerCase().replace(/^ธนาคาร\s*/, '').trim()
+
+    if (receiverData.receivingBank && BOT_BANK_CODE_MAP[receiverData.receivingBank]) {
+        const botShort = BOT_BANK_CODE_MAP[receiverData.receivingBank].shortName.toLowerCase()
+        const botFull = BOT_BANK_CODE_MAP[receiverData.receivingBank].fullName.toLowerCase()
+        if (dLower.includes(botShort) || botShort.includes(dLower) || dLower.includes(botFull) || botFull.includes(dLower)) {
+            return true
+        }
+    }
+
+    const rBank = String(receiverData.bank?.name || receiverData.bank?.shortName || '').toLowerCase().replace(/^ธนาคาร\s*/, '').trim()
+    if (rBank) {
+        if (dLower.includes(rBank) || rBank.includes(dLower)) {
+            return true
+        }
+    }
+
+    return false
+}
+
 export function getSlipDestinationAccountNote(receiverData: any, dealerBankAccounts: any[] = []): string {
     let matchedAccount: any = null
+    const isPromptPay = isPromptPayReceiver(receiverData)
 
     if (dealerBankAccounts && dealerBankAccounts.length > 0 && receiverData) {
-        const rawSlipVal = String(receiverData.account?.value || receiverData.proxy?.value || '').trim()
+        const rawSlipVal = String(
+            (isPromptPay ? (receiverData.proxy?.value || receiverData.account?.value) : (receiverData.account?.value || receiverData.proxy?.value))
+            || ''
+        ).trim()
         const slipDigitsOnly = rawSlipVal.replace(/\D/g, '')
 
         for (const dAcc of dealerBankAccounts) {
+            const dealerBankLower = String(dAcc.bank_name || '').toLowerCase()
+            const isDealerPromptPay = dealerBankLower.includes('พร้อมเพย์') || dealerBankLower.includes('promptpay')
+
+            // If slip is PromptPay, do not match against non-PromptPay bank accounts unless digits explicitly match
+            if (isPromptPay && !isDealerPromptPay && (!slipDigitsOnly || slipDigitsOnly.length < 4)) {
+                continue
+            }
+
             const dealerDigits = String(dAcc.bank_account || '').replace(/\D/g, '')
             if (dealerDigits && slipDigitsOnly && dealerDigits === slipDigitsOnly) {
                 matchedAccount = dAcc
@@ -499,11 +555,11 @@ export function getSlipDestinationAccountNote(receiverData: any, dealerBankAccou
             }
         }
 
-        if (!matchedAccount) {
-            if (dealerBankAccounts.length === 1) {
-                matchedAccount = dealerBankAccounts[0]
-            } else {
-                matchedAccount = dealerBankAccounts.find(a => a.is_default) || dealerBankAccounts[0]
+        // Only fall back to dealer account if NOT PromptPay AND the bank actually matches
+        if (!matchedAccount && !isPromptPay) {
+            const sameBankAcc = dealerBankAccounts.find(d => isDealerBankMatchingSlip(d.bank_name, receiverData))
+            if (sameBankAcc) {
+                matchedAccount = sameBankAcc
             }
         }
     }
@@ -517,12 +573,21 @@ export function getSlipDestinationAccountNote(receiverData: any, dealerBankAccou
     }
 
     if (receiverData) {
-        let bankName = receiverData.bank?.name || ''
-        if (!bankName && receiverData.receivingBank && BOT_BANK_CODE_MAP[receiverData.receivingBank]) {
-            bankName = BOT_BANK_CODE_MAP[receiverData.receivingBank].shortName
+        let bankName = ''
+        if (isPromptPay) {
+            bankName = 'พร้อมเพย์'
+        } else {
+            bankName = receiverData.bank?.name || ''
+            if (!bankName && receiverData.receivingBank && BOT_BANK_CODE_MAP[receiverData.receivingBank]) {
+                bankName = BOT_BANK_CODE_MAP[receiverData.receivingBank].shortName
+            }
         }
+
         const cleanBank = String(bankName || '').replace(/^ธนาคาร\s*/, '').trim()
-        const accNum = String(receiverData.account?.value || receiverData.proxy?.value || '').trim()
+        const accNum = String(
+            (isPromptPay ? (receiverData.proxy?.value || receiverData.account?.value) : (receiverData.account?.value || receiverData.proxy?.value))
+            || ''
+        ).trim()
         const accName = String(
             (typeof receiverData.account?.name === 'object' ? receiverData.account?.name?.th : receiverData.account?.name)
             || receiverData.displayName
@@ -657,6 +722,18 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
 
     // 1. Current round prize payout record (if prize > 0)
     if (prize > 0) {
+        let prizeNotes = `หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ]${transRef ? ` #${transRef}` : ''}`
+        if (slipData) {
+            const prizeDetails = extractSlipTransferDetails({
+                slipData,
+                dealerBankAccounts: dealerAccounts,
+                prefix: 'หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ]',
+                adjustmentNote,
+                fallbackPaidAt: paidAt
+            })
+            prizeNotes = prizeDetails.fullNotes
+        }
+
         payments.push({
             dealer_id: dealerId,
             user_id: memberUserId,
@@ -667,7 +744,7 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
             direction: 'dealer_to_member',
             amount: prize,
             paid_at: effectivePaidAt,
-            notes: `หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ]${transRef ? ` #${transRef}` : ''}`,
+            notes: prizeNotes,
             created_by: dealerId
         })
     }
@@ -1059,6 +1136,19 @@ export function allocateImmediateSettlement(params: {
     for (const credit of pastCredits) {
         const creditAmt = Math.abs(credit.debt)
         totalCreditsUsed += creditAmt
+
+        let prizeNotes = `นำรางวัลไปหักล้างยอด [สลิปอัตโนมัติ] (สลิปโอน ฿${slipAmount.toLocaleString()})`
+        if (slipData) {
+            const creditDetails = extractSlipTransferDetails({
+                slipData,
+                dealerBankAccounts: dealerAccounts,
+                prefix: 'นำรางวัลไปหักล้างยอด [สลิปอัตโนมัติ]',
+                adjustmentNote,
+                fallbackPaidAt: paidAt
+            })
+            prizeNotes = creditDetails.fullNotes
+        }
+
         payments.push({
             dealer_id: dealerId,
             user_id: memberUserId,
@@ -1069,7 +1159,7 @@ export function allocateImmediateSettlement(params: {
             direction: 'dealer_to_member',
             amount: creditAmt,
             paid_at: effectivePaidAt,
-            notes: `นำรางวัลไปหักล้างยอด (สลิปโอน ฿${slipAmount.toLocaleString()})`,
+            notes: prizeNotes,
             created_by: dealerId
         })
     }

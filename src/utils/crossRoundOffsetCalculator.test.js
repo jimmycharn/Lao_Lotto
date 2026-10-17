@@ -13,7 +13,11 @@ import {
     formatThaiDateDDMMYYYY,
     normalizeThaiName,
     isMatchingUpstreamDealer,
-    isAutoSlipPayment
+    isAutoSlipPayment,
+    getSenderBankShortName,
+    getSlipTransferTime,
+    isPromptPayReceiver,
+    getSlipDestinationAccountNote
 } from './crossRoundOffsetCalculator'
 
 describe('crossRoundOffsetCalculator', () => {
@@ -1011,9 +1015,58 @@ describe('crossRoundOffsetCalculator', () => {
         it('returns true when explicit automated slip tags exist', () => {
             // Bot prize offset
             expect(isAutoSlipPayment('หักล้างเงินรางวัล [สลิปอัตโนมัติ]')).toBe(true)
+            expect(isAutoSlipPayment('หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ] #2026101720290723000077408')).toBe(true)
             expect(isAutoSlipPayment('[สลิปอัตโนมัติ] นาย ธีระเดช บ (Ref: 016287203327BOR03490)')).toBe(true)
             expect(isAutoSlipPayment('ตรวจสลิปอัตโนมัติ เรียบร้อย')).toBe(true)
             expect(isAutoSlipPayment('SlipOK Topup')).toBe(true)
+        })
+    })
+
+    describe('parsePaymentNotes with bot auto slip formats', () => {
+        it('parses unparenthesized auto slip note from existing DB records', () => {
+            const rawNote = 'หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ] #2026101720290723000077408'
+            const parsed = parsePaymentNotes(rawNote)
+            expect(parsed.prefix).toBe('หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ]')
+            expect(parsed.referenceDoc).toBe('2026101720290723000077408')
+            expect(parsed.customNotes).toBe('')
+            expect(parsed.paidTime).toBe('')
+            expect(parsed.senderBank).toBe('')
+        })
+
+        it('parses full auto slip note with Bangkok Bank to PromptPay', () => {
+            const fullNote = 'หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ] (กรุงเทพ โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว) เวลา 20:29 #2026101720290723000077408)'
+            const parsed = parsePaymentNotes(fullNote)
+            expect(parsed.prefix).toBe('หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ]')
+            expect(parsed.senderBank).toBe('กรุงเทพ')
+            expect(parsed.customNotes).toBe('โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว)')
+            expect(parsed.paidTime).toBe('20:29')
+            expect(parsed.referenceDoc).toBe('2026101720290723000077408')
+        })
+    })
+
+    describe('bankConstants slip helpers', () => {
+        it('extracts Bangkok Bank (002 / bbl) sender correctly', () => {
+            expect(getSenderBankShortName({ sendingBank: '002' })).toBe('กรุงเทพ')
+            expect(getSenderBankShortName({ sender: { bank: { id: '002' } } })).toBe('กรุงเทพ')
+            expect(getSenderBankShortName({ sender: { bank: { name: 'ธนาคารกรุงเทพ' } } })).toBe('กรุงเทพ')
+            expect(getSenderBankShortName({ sender: { bank: { name: 'BANGKOK BANK' } } })).toBe('กรุงเทพ')
+        })
+
+        it('extracts slip transfer time correctly', () => {
+            expect(getSlipTransferTime({ transTime: '20:29:07' })).toBe('20:29')
+            expect(getSlipTransferTime({ transTime: '08:05' })).toBe('08:05')
+        })
+
+        it('detects PromptPay receiver and generates destination note correctly', () => {
+            const receiverData = {
+                proxy: { type: 'MSISDN', value: '099-xxx-9307' },
+                account: { name: 'นาย ธีระเดช บรรจงแก้ว' }
+            }
+            expect(isPromptPayReceiver(receiverData)).toBe(true)
+            const destNote = getSlipDestinationAccountNote(receiverData, [
+                { bank_name: 'ธนาคารออมสิน', bank_account: '020432578092', account_name: 'นายธีระเดช บรรจงแก้ว' }
+            ])
+            expect(destNote).toBe('โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว)')
         })
     })
 })

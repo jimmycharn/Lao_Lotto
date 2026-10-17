@@ -22,7 +22,7 @@ import {
     getPaymentPresetAmount,
     calculateMemberPrizePaid
 } from '../../utils/memberSettlementCalculator'
-import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes, formatThaiDate, isAutoSlipPayment } from '../../utils/crossRoundOffsetCalculator'
+import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes, formatThaiDate, isAutoSlipPayment, getSenderBankShortName, getSlipTransferTime, getSlipDestinationAccountNote } from '../../utils/crossRoundOffsetCalculator'
 import { supabase } from '../../lib/supabase'
 import { THAI_BANKS, matchBankOption, resolvePaymentNoticeBankAccount } from '../../utils/paymentNoticeHelper'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
@@ -130,6 +130,10 @@ export default function MemberSettlementInline({
     // If edit modal is open and sender bank is empty, auto-fill from sender's bank
     useEffect(() => {
         if (editingPayment && !editSenderBank) {
+            // Never auto-fill dealer bank for auto-slip payments!
+            if (isAutoSlipPayment(editingPayment?.notes)) {
+                return
+            }
             if (editDirection === 'member_to_dealer' && resolvedMemberBank?.bank_name) {
                 setEditSenderBank(matchBankOption(resolvedMemberBank.bank_name, THAI_BANKS))
             } else if (editDirection === 'dealer_to_member' && resolvedDealerBank?.bank_name) {
@@ -328,7 +332,7 @@ export default function MemberSettlementInline({
     }
 
     // Handlers for Edit Modal
-    const handleOpenEditModal = (p) => {
+    const handleOpenEditModal = async (p) => {
         setEditingPayment(p)
         setEditPaymentType(p.payment_type || 'net_settlement')
         setEditDirection(p.direction || 'member_to_dealer')
@@ -344,11 +348,46 @@ export default function MemberSettlementInline({
         let initialSenderBank = ''
         if (parsed.senderBank) {
             initialSenderBank = matchBankOption(parsed.senderBank, THAI_BANKS)
-        } else if ((p.direction || 'member_to_dealer') === 'member_to_dealer') {
+        } else if ((p.direction || 'member_to_dealer') === 'member_to_dealer' && !isAutoSlipPayment(p.notes)) {
             const memberBankName = resolvedMemberBank?.bank_name || member?.bank_name || member?.profiles?.bank_name || ''
             initialSenderBank = matchBankOption(memberBankName, THAI_BANKS)
         }
         setEditSenderBank(initialSenderBank)
+
+        // If it's an auto-slip payment and we're missing senderBank, paidTime, or customNotes, fetch from used_slips!
+        if (parsed.referenceDoc && (!initialSenderBank || !parsed.paidTime || !parsed.customNotes) && (isAutoSlipPayment(p.notes) || p.notes?.includes('#'))) {
+            try {
+                const { data: slipRecord } = await supabase
+                    .from('used_slips')
+                    .select('slip_data')
+                    .eq('trans_ref', parsed.referenceDoc)
+                    .maybeSingle()
+
+                if (slipRecord?.slip_data) {
+                    if (!initialSenderBank) {
+                        const sBank = getSenderBankShortName(slipRecord.slip_data)
+                        if (sBank) {
+                            const matched = matchBankOption(sBank, THAI_BANKS)
+                            setEditSenderBank(matched)
+                        }
+                    }
+                    if (!parsed.paidTime) {
+                        const sTime = getSlipTransferTime(slipRecord.slip_data)
+                        if (sTime) {
+                            setEditPaidTime(sTime)
+                        }
+                    }
+                    if (!parsed.customNotes) {
+                        const destNote = getSlipDestinationAccountNote(slipRecord.slip_data?.receiver, dealerBankAccounts)
+                        if (destNote) {
+                            setEditCustomNotes(destNote)
+                        }
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to load slip data for edit modal:', err)
+            }
+        }
     }
 
     const handleConfirmEditPayment = async (e) => {
