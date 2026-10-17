@@ -409,6 +409,7 @@ export default function DealerLineBotTab({ user, profile }) {
                     line_group_id: 'pending-' + code,
                     dealer_id: user.id,
                     lottery_type: 'thai', // default
+                    settlement_mode: 'auto', // default
                     binding_code: code,
                     is_active: false
                 })
@@ -1311,12 +1312,13 @@ export default function DealerLineBotTab({ user, profile }) {
                                                         <td style={{ padding: '0.75rem', textAlign: 'center' }}>
                                                             <select
                                                                 className="form-input"
-                                                                value={group.settlement_mode || 'immediate'}
+                                                                value={group.settlement_mode || 'auto'}
                                                                 disabled={!isOwnerOrSuper}
                                                                 onChange={e => handleUpdateGroupSettlementMode(group.id, e.target.value)}
                                                                 style={{ padding: '0.25rem 0.5rem', width: '100%', fontSize: '0.85rem' }}
                                                                 title="รูปแบบการเคลียร์เงินเมื่อสมาชิกส่งสลิป"
                                                             >
+                                                                <option value="auto">ตรวจสอบอัตโนมัติ (แนะนำ)</option>
                                                                 <option value="immediate">งวดต่องวด (ชำระทันที)</option>
                                                                 <option value="cross_round">งวดชนงวด (หักรางวัล/ยกยอด)</option>
                                                             </select>
@@ -1493,11 +1495,12 @@ export default function DealerLineBotTab({ user, profile }) {
                                                 <label>รูปแบบเคลียร์เงิน</label>
                                                 <select
                                                     className="form-input"
-                                                    value={group.settlement_mode || 'immediate'}
+                                                    value={group.settlement_mode || 'auto'}
                                                     disabled={!isOwnerOrSuper}
                                                     onChange={e => handleUpdateGroupSettlementMode(group.id, e.target.value)}
                                                     style={{ padding: '0.3rem 0.5rem', fontSize: '0.85rem', flex: '1 1 auto', maxWidth: '200px' }}
                                                 >
+                                                    <option value="auto">ตรวจสอบอัตโนมัติ (แนะนำ)</option>
                                                     <option value="immediate">งวดต่องวด (ชำระทันที)</option>
                                                     <option value="cross_round">งวดชนงวด (หักรางวัล/ยกยอด)</option>
                                                 </select>
