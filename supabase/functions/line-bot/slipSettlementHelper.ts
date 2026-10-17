@@ -17,7 +17,7 @@ export interface SlipResultMessageParams {
     memberName?: string
     memberCode?: string
     lotteryTypeName?: string
-    settlementMode?: 'immediate' | 'cross_round'
+    settlementMode?: 'immediate' | 'cross_round' | 'cross_round_all' | 'auto'
     roundDateText?: string
     expectedAmount?: number
     slipAmount?: number
@@ -31,6 +31,7 @@ export interface SlipResultMessageParams {
     transRef?: string
     transferDateText?: string
     senderLineUserId?: string
+    autoCandidatesSummary?: string
 }
 
 /**
@@ -132,6 +133,13 @@ export function formatThaiDate(dateStr?: string): string {
 /**
  * Formats user-friendly LINE reply message.
  */
+function formatSettlementModeLabel(mode?: string): string {
+    if (mode === 'cross_round') return 'เคลียร์งวดชนงวด (หักรางวัล/ยกยอด)'
+    if (mode === 'cross_round_all') return 'เคลียร์หนี้ทั้งหมด (รวมงวดปัจจุบัน)'
+    if (mode === 'auto') return 'ตรวจสอบอัตโนมัติ'
+    return 'เคลียร์งวดต่องวด'
+}
+
 export function formatSlipSettlementLineMessage(params: SlipResultMessageParams): string {
     const lines: string[] = []
     const memberLabel = params.memberName
@@ -143,10 +151,10 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
         lines.push(`👤 สมาชิก: ${memberLabel}`)
         if (params.lotteryTypeName) lines.push(`🎯 ประเภทหวย: ${params.lotteryTypeName}`)
         if (params.roundDateText) lines.push(`📅 งวดวันที่: ${formatThaiDate(params.roundDateText)}`)
-        lines.push(`📌 รูปแบบ: ${params.settlementMode === 'cross_round' ? 'เคลียร์งวดชนงวด (หักรางวัล/ยกยอด)' : 'เคลียร์งวดต่องวด'}`)
+        lines.push(`📌 รูปแบบ: ${formatSettlementModeLabel(params.settlementMode)}`)
         lines.push('----------------------------')
 
-        if (params.settlementMode === 'cross_round') {
+        if (params.settlementMode === 'cross_round' || params.settlementMode === 'cross_round_all') {
             if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
                 lines.push(`- รวมหนี้งวดก่อนหน้า: ฿${params.pastDebtTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             }
@@ -182,26 +190,29 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
         lines.push(`👤 สมาชิก: ${memberLabel}`)
         if (params.lotteryTypeName) lines.push(`🎯 ประเภทหวย: ${params.lotteryTypeName}`)
         if (params.roundDateText) lines.push(`📅 งวดวันที่: ${formatThaiDate(params.roundDateText)}`)
-        lines.push(`📌 รูปแบบ: ${params.settlementMode === 'cross_round' ? 'เคลียร์งวดชนงวด (หักรางวัล/ยกยอด)' : 'เคลียร์งวดต่องวด'}`)
+        lines.push(`📌 รูปแบบ: ${formatSettlementModeLabel(params.settlementMode)}`)
         lines.push('----------------------------')
 
-        if (params.settlementMode === 'cross_round') {
-            if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
-                lines.push(`- รวมหนี้งวดก่อนหน้า: ฿${params.pastDebtTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+        if (params.autoCandidatesSummary) {
+            lines.push(params.autoCandidatesSummary)
+        } else {
+            if (params.settlementMode === 'cross_round' || params.settlementMode === 'cross_round_all') {
+                if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
+                    lines.push(`- รวมหนี้งวดก่อนหน้า: ฿${params.pastDebtTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+                }
+                if (params.currentRoundPrize !== undefined && params.currentRoundPrize > 0) {
+                    lines.push(`- หักลบรางวัลงวดล่าสุด: -฿${params.currentRoundPrize.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+                }
+            } else if (params.settlementMode === 'immediate') {
+                if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
+                    lines.push(`- รวมยอดค้างงวดก่อนๆ: +฿${params.pastDebtTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+                }
+                if (params.pastCreditsTotal !== undefined && params.pastCreditsTotal > 0) {
+                    lines.push(`- หักลบรางวัลค้างงวดก่อนๆ: -฿${params.pastCreditsTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+                }
             }
-            if (params.currentRoundPrize !== undefined && params.currentRoundPrize > 0) {
-                lines.push(`- หักลบรางวัลงวดล่าสุด: -฿${params.currentRoundPrize.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
-            }
-        } else if (params.settlementMode === 'immediate') {
-            if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
-                lines.push(`- รวมยอดค้างงวดก่อนๆ: +฿${params.pastDebtTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
-            }
-            if (params.pastCreditsTotal !== undefined && params.pastCreditsTotal > 0) {
-                lines.push(`- หักลบรางวัลค้างงวดก่อนๆ: -฿${params.pastCreditsTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
-            }
+            lines.push(`- ยอดที่ต้องชำระ: ฿${(params.expectedAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
         }
-
-        lines.push(`- ยอดที่ต้องชำระ: ฿${(params.expectedAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
         lines.push(`- ยอดเงินในสลิป: ฿${(params.slipAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
         const diff = Math.abs((params.slipAmount || 0) - (params.expectedAmount || 0))
         lines.push(`- ส่วนต่าง: ฿${diff.toLocaleString('th-TH', { minimumFractionDigits: 2 })} (ยอมรับได้ไม่เกิน ฿${(params.toleranceAmount || 0).toFixed(2)})`)
@@ -1153,4 +1164,105 @@ export function calculateCrossRoundModeDebt({
         totalDebtWithCurrent
     }
 }
+
+export interface AutoSettlementCandidateResult {
+    matched: boolean
+    mode?: 'immediate' | 'cross_round' | 'cross_round_all'
+    expectedAmount?: number
+    label?: string
+    candidateImmediate?: number
+    candidateCrossRound?: number
+    candidateCrossRoundAll?: number
+}
+
+/**
+ * Evaluates a slip against the 3 settlement candidates in auto mode:
+ * 1. immediate: currentRoundDebt
+ * 2. cross_round: netPastDebt (pastDebtsTotal - availableWinnings)
+ * 3. cross_round_all: totalDebtWithCurrent (netPastDebt + currentRoundDebt)
+ */
+export function evaluateAutoSettlementCandidate(params: {
+    slipAmount: number
+    toleranceAmount: number
+    currentRoundDebt: number
+    netPastDebt: number
+    totalDebtWithCurrent: number
+    pastDebtsTotal?: number
+}): AutoSettlementCandidateResult {
+    const slipAmt = params.slipAmount || 0
+    const tolAmt = params.toleranceAmount || 0
+    const curDebt = Math.max(0, Math.round(params.currentRoundDebt || 0))
+    const netPast = Math.max(0, Math.round(params.netPastDebt || 0))
+    const totDebt = Math.max(0, Math.round(params.totalDebtWithCurrent || 0))
+    const hasPast = (params.pastDebtsTotal || 0) > 0
+
+    // Candidates:
+    // 1. Immediate: currentRoundDebt
+    // 2. Cross Round: netPastDebt (or curDebt if no past debt)
+    // 3. Cross Round All: totalDebtWithCurrent
+    const candidateImmediate = curDebt > 0 ? curDebt : 0
+    const candidateCrossRound = hasPast ? (netPast > 0 ? netPast : 0) : (curDebt > 0 ? curDebt : 0)
+    const candidateCrossRoundAll = (totDebt > 0 && totDebt !== candidateCrossRound && totDebt !== candidateImmediate) ? totDebt : 0
+
+    const candidates: Array<{
+        mode: 'immediate' | 'cross_round' | 'cross_round_all'
+        amount: number
+        label: string
+        diff: number
+    }> = []
+
+    // Check candidate 2 (cross_round)
+    if (candidateCrossRound > 0 && Math.abs(slipAmt - candidateCrossRound) <= tolAmt) {
+        candidates.push({
+            mode: 'cross_round',
+            amount: candidateCrossRound,
+            label: 'เคลียร์งวดชนงวด (หักรางวัล/ยกยอด)',
+            diff: Math.abs(slipAmt - candidateCrossRound)
+        })
+    }
+
+    // Check candidate 1 (immediate)
+    if (candidateImmediate > 0 && Math.abs(slipAmt - candidateImmediate) <= tolAmt) {
+        candidates.push({
+            mode: 'immediate',
+            amount: candidateImmediate,
+            label: 'เคลียร์งวดต่องวด',
+            diff: Math.abs(slipAmt - candidateImmediate)
+        })
+    }
+
+    // Check candidate 3 (cross_round_all)
+    if (candidateCrossRoundAll > 0 && Math.abs(slipAmt - candidateCrossRoundAll) <= tolAmt) {
+        candidates.push({
+            mode: 'cross_round_all',
+            amount: candidateCrossRoundAll,
+            label: 'เคลียร์หนี้ทั้งหมด (รวมงวดปัจจุบัน)',
+            diff: Math.abs(slipAmt - candidateCrossRoundAll)
+        })
+    }
+
+    if (candidates.length === 0) {
+        return {
+            matched: false,
+            candidateImmediate,
+            candidateCrossRound,
+            candidateCrossRoundAll: totDebt > 0 ? totDebt : 0
+        }
+    }
+
+    // Sort by smallest difference
+    candidates.sort((a, b) => a.diff - b.diff)
+    const best = candidates[0]
+
+    return {
+        matched: true,
+        mode: best.mode,
+        expectedAmount: best.amount,
+        label: best.label,
+        candidateImmediate,
+        candidateCrossRound,
+        candidateCrossRoundAll: totDebt > 0 ? totDebt : 0
+    }
+}
+
 

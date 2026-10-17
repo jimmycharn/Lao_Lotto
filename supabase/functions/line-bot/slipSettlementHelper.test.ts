@@ -13,7 +13,8 @@ import {
     calculateMemberPastDebts,
     calculateImmediateModeDebt,
     allocateImmediateSettlement,
-    calculateCrossRoundModeDebt
+    calculateCrossRoundModeDebt,
+    evaluateAutoSettlementCandidate
 } from './slipSettlementHelper'
 
 describe('slipSettlementHelper', () => {
@@ -1072,6 +1073,97 @@ describe('slipSettlementHelper', () => {
             expect(msg).toContain('ยอดเงินตามสลิป: ฿4,596.00')
         })
     })
+
+    describe('evaluateAutoSettlementCandidate', () => {
+        it('matches Candidate 1 (immediate) when slip matches currentRoundDebt', () => {
+            const res = evaluateAutoSettlementCandidate({
+                slipAmount: 2712,
+                toleranceAmount: 5,
+                currentRoundDebt: 2712,
+                netPastDebt: 4596,
+                totalDebtWithCurrent: 7308,
+                pastDebtsTotal: 6696
+            })
+            expect(res.matched).toBe(true)
+            expect(res.mode).toBe('immediate')
+            expect(res.expectedAmount).toBe(2712)
+            expect(res.label).toBe('เคลียร์งวดต่องวด')
+        })
+
+        it('matches Candidate 2 (cross_round) when slip matches netPastDebt', () => {
+            const res = evaluateAutoSettlementCandidate({
+                slipAmount: 4596,
+                toleranceAmount: 5,
+                currentRoundDebt: 2712,
+                netPastDebt: 4596,
+                totalDebtWithCurrent: 7308,
+                pastDebtsTotal: 6696
+            })
+            expect(res.matched).toBe(true)
+            expect(res.mode).toBe('cross_round')
+            expect(res.expectedAmount).toBe(4596)
+            expect(res.label).toBe('เคลียร์งวดชนงวด (หักรางวัล/ยกยอด)')
+        })
+
+        it('matches Candidate 3 (cross_round_all) when slip matches totalDebtWithCurrent', () => {
+            const res = evaluateAutoSettlementCandidate({
+                slipAmount: 7308,
+                toleranceAmount: 5,
+                currentRoundDebt: 2712,
+                netPastDebt: 4596,
+                totalDebtWithCurrent: 7308,
+                pastDebtsTotal: 6696
+            })
+            expect(res.matched).toBe(true)
+            expect(res.mode).toBe('cross_round_all')
+            expect(res.expectedAmount).toBe(7308)
+            expect(res.label).toBe('เคลียร์หนี้ทั้งหมด (รวมงวดปัจจุบัน)')
+        })
+
+        it('matches within tolerance amount', () => {
+            const res = evaluateAutoSettlementCandidate({
+                slipAmount: 4598, // +2 diff
+                toleranceAmount: 5,
+                currentRoundDebt: 2712,
+                netPastDebt: 4596,
+                totalDebtWithCurrent: 7308,
+                pastDebtsTotal: 6696
+            })
+            expect(res.matched).toBe(true)
+            expect(res.mode).toBe('cross_round')
+            expect(res.expectedAmount).toBe(4596)
+        })
+
+        it('returns matched: false with all candidates when no candidate matches', () => {
+            const res = evaluateAutoSettlementCandidate({
+                slipAmount: 1000,
+                toleranceAmount: 5,
+                currentRoundDebt: 2712,
+                netPastDebt: 4596,
+                totalDebtWithCurrent: 7308,
+                pastDebtsTotal: 6696
+            })
+            expect(res.matched).toBe(false)
+            expect(res.candidateImmediate).toBe(2712)
+            expect(res.candidateCrossRound).toBe(4596)
+            expect(res.candidateCrossRoundAll).toBe(7308)
+        })
+
+        it('handles member with no past debts correctly', () => {
+            const res = evaluateAutoSettlementCandidate({
+                slipAmount: 500,
+                toleranceAmount: 0,
+                currentRoundDebt: 500,
+                netPastDebt: 0,
+                totalDebtWithCurrent: 500,
+                pastDebtsTotal: 0
+            })
+            expect(res.matched).toBe(true)
+            expect(res.mode).toBe('cross_round') // curDebt is cross_round candidate when no past debt
+            expect(res.expectedAmount).toBe(500)
+        })
+    })
 })
+
 
 
