@@ -22,7 +22,7 @@ import {
     getPaymentPresetAmount,
     calculateMemberPrizePaid
 } from '../../utils/memberSettlementCalculator'
-import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes, formatThaiDate } from '../../utils/crossRoundOffsetCalculator'
+import { findMemberPastUnpaidRounds, getRoundCloseDate, parsePaymentNotes, buildPaymentNotes, formatThaiDate, isAutoSlipPayment } from '../../utils/crossRoundOffsetCalculator'
 import { supabase } from '../../lib/supabase'
 import { THAI_BANKS, matchBankOption, resolvePaymentNoticeBankAccount } from '../../utils/paymentNoticeHelper'
 import CrossRoundOffsetModal from './CrossRoundOffsetModal'
@@ -686,7 +686,7 @@ export default function MemberSettlementInline({
                                                     className="settlement-log-notes-cell"
                                                     title={p.notes || ''}
                                                 >
-                                                    {p.notes && (p.notes.includes('สลิป') || p.notes.includes('SlipOK')) && (
+                                                    {isAutoSlipPayment(p.notes) && (
                                                         <span style={{
                                                             display: 'inline-flex',
                                                             alignItems: 'center',
@@ -703,7 +703,11 @@ export default function MemberSettlementInline({
                                                             🤖 สลิปอัตโนมัติ
                                                         </span>
                                                     )}
-                                                    {p.notes || '-'}
+                                                    {(() => {
+                                                        const isAuto = isAutoSlipPayment(p.notes)
+                                                        const clean = (p.notes || '').replace(/\[?สลิปอัตโนมัติ\]?\s*/g, '').trim()
+                                                        return clean || (isAuto ? 'สลิปโอนเงิน' : '-')
+                                                    })()}
                                                 </div>
                                             </td>
                                             <td className="col-log-actions" style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>

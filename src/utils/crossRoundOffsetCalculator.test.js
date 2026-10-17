@@ -12,7 +12,8 @@ import {
     formatThaiDate,
     formatThaiDateDDMMYYYY,
     normalizeThaiName,
-    isMatchingUpstreamDealer
+    isMatchingUpstreamDealer,
+    isAutoSlipPayment
 } from './crossRoundOffsetCalculator'
 
 describe('crossRoundOffsetCalculator', () => {
@@ -976,5 +977,45 @@ describe('crossRoundOffsetCalculator', () => {
             expect(formatThaiDate(undefined)).toBe('-')
         })
     })
+
+    describe('isAutoSlipPayment', () => {
+        it('returns false for manual offset entries from CrossRoundOffsetModal (Khun Tang case)', () => {
+            const khunTangNote = 'หักล้างหนี้งวดเก่า (2026-10-01) ฿62,450 [สลิปโอน ฿50,290] (ออมสิน)'
+            expect(isAutoSlipPayment(khunTangNote)).toBe(false)
+        })
+
+        it('returns false for dealer manual slip notes', () => {
+            expect(isAutoSlipPayment('สลิปโอน ฿500')).toBe(false)
+            expect(isAutoSlipPayment('ชำระตามสลิปโอน 1,200 บาท')).toBe(false)
+            expect(isAutoSlipPayment('เงินสด')).toBe(false)
+            expect(isAutoSlipPayment('โอนเงิน')).toBe(false)
+            expect(isAutoSlipPayment('')).toBe(false)
+            expect(isAutoSlipPayment(null)).toBe(false)
+            expect(isAutoSlipPayment(undefined)).toBe(false)
+        })
+
+        it('returns true for genuine bot automated slips with transaction reference', () => {
+            // Free Dom Man note (immediate slip payment)
+            const botNote1 = 'ชำระหนี้งวดนี้ (กรุงศรีอยุธยา โอนไป ออมสิน นาย ธีระเดช... เวลา 17:44 #KSA0000000100065358947980)'
+            expect(isAutoSlipPayment(botNote1)).toBe(true)
+
+            // TonTe note (cross-round net settlement slip)
+            const botNote2 = 'ชำระหนี้งวดนี้ (กสิกรไทย โอนไป ออมสิน... เวลา 18:00 #MTI0037367115628917179584)'
+            expect(isAutoSlipPayment(botNote2)).toBe(true)
+
+            // Cross round debt offset by bot slip
+            const botNote3 = 'หักล้างหนี้งวดเก่า (ไทยพาณิชย์ โอนไป กสิกรไทย... #2026101612345678)'
+            expect(isAutoSlipPayment(botNote3)).toBe(true)
+        })
+
+        it('returns true when explicit automated slip tags exist', () => {
+            // Bot prize offset
+            expect(isAutoSlipPayment('หักล้างเงินรางวัล [สลิปอัตโนมัติ]')).toBe(true)
+            expect(isAutoSlipPayment('[สลิปอัตโนมัติ] นาย ธีระเดช บ (Ref: 016287203327BOR03490)')).toBe(true)
+            expect(isAutoSlipPayment('ตรวจสลิปอัตโนมัติ เรียบร้อย')).toBe(true)
+            expect(isAutoSlipPayment('SlipOK Topup')).toBe(true)
+        })
+    })
 })
+
 

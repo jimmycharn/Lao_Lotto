@@ -860,12 +860,12 @@ export function calculateUserRoundSummary(round, submissions = [], userSettings 
             return Math.floor((s.amount || 0) / defaultSetPrice) * 25
         }
 
-        if (settings?.commission !== undefined) {
-            return settings.isFixed ? settings.commission : (s.amount || 0) * (settings.commission / 100)
-        }
-
         if (s.commission_amount != null && !isNaN(Number(s.commission_amount)) && Number(s.commission_amount) > 0) {
             return Number(s.commission_amount)
+        }
+
+        if (settings?.commission !== undefined) {
+            return settings.isFixed ? settings.commission : (s.amount || 0) * (settings.commission / 100)
         }
 
         let defaultRate = DEFAULT_COMMISSIONS?.[normalized] || DEFAULT_COMMISSIONS?.[s.bet_type] || 15

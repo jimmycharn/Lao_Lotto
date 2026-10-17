@@ -1806,7 +1806,7 @@ export default function UserDashboard() {
         const baseTimestamp = originalCreatedAt ? new Date(originalCreatedAt) : new Date()
         const submissionsToInsert = entries.map((entry, index) => {
             const commInfo = getCommissionForBetType(entry.betType, userSettings)
-            const commissionAmount = Math.round(entry.amount * commInfo.rate / 100)
+            const commissionAmount = calculateCommissionAmount(entry.amount, entry.betType, selectedRound, userSettings)
 
             // Add milliseconds offset to preserve order (each entry gets +1ms)
             const entryTimestamp = new Date(baseTimestamp.getTime() + index).toISOString()

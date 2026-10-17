@@ -1132,6 +1132,37 @@ export function shouldPrependSenderBank(notes, senderBank) {
 }
 
 /**
+ * Determines whether a payment was automatically recorded by LINE Bot / SlipOK
+ * vs manually entered by the dealer.
+ *
+ * @param {string} notes - Full payment notes string
+ * @returns {boolean}
+ */
+export function isAutoSlipPayment(notes) {
+    if (!notes || typeof notes !== 'string') return false
+    const n = notes.trim()
+
+    // 1. Explicit bot auto slip indicators
+    if (n.includes('สลิปอัตโนมัติ') || n.includes('SlipOK') || n.includes('slipok')) {
+        return true
+    }
+
+    // 2. Exclude manual offset notes that just have "สลิปโอน" (entered by dealer in CrossRoundOffsetModal)
+    // e.g. "[สลิปโอน ฿50,290]", "สลิปโอน ฿...", "ชำระตามสลิปโอน"
+    if (n.includes('[สลิปโอน') || n.includes('สลิปโอน ฿') || n.includes('ชำระตามสลิปโอน')) {
+        return false
+    }
+
+    // 3. Bot slip pattern: bot generates "(... โอนไป ... เวลา HH:mm #[Ref])"
+    // e.g. "#KSA0000000100065358947980" or "#MTI0037367115628917179584"
+    if (/#([A-Za-z0-9_-]{8,})/.test(n) && (n.includes('โอนไป') || n.includes('ชำระหนี้งวดนี้') || n.includes('หักล้างหนี้งวดเก่า'))) {
+        return true
+    }
+
+    return false
+}
+
+/**
  * Parses a payment record note string into its constituent parts:
  * customNotes, paidTime (HH:mm), referenceDoc (without '#'), prefix, and senderBank.
  *
