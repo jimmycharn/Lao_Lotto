@@ -114,7 +114,8 @@ describe('slipSettlementHelper', () => {
             expect(msg).toContain('คุณสมชาย (M-008)')
             expect(msg).toContain('หวยฮานอยพิเศษ')
             expect(msg).toContain('฿500.00')
-            expect(msg).toContain('✅ บันทึกตัดชำระในระบบเรียบร้อยแล้ว')
+            expect(msg).toContain('✅ บันทึกตัดชำระเรียบร้อยแล้ว✅')
+            expect(msg).toContain('🙏 ขอบคุณมากค่ะ 🙏')
         })
 
         it('formats error message for amount mismatch', () => {
@@ -1004,6 +1005,71 @@ describe('slipSettlementHelper', () => {
             expect(res.currentRoundDebt).toBe(0)
             expect(res.expectedAmount).toBe(0)
             expect(res.totalDebtWithCurrent).toBe(0)
+        })
+
+        it('calculates cross round debt correctly for Phi Ning (net past debt 4596 = 6696 debt - 2100 prize)', () => {
+            const latestRoundThai = {
+                id: 'round-thai-oct-16',
+                round_date: '2026-10-16',
+                close_time: '2026-10-16T15:30:00+07:00',
+                lottery_type: 'thai',
+                status: 'announced'
+            }
+            const userHistories = [
+                {
+                    round_id: 'round-thai-oct-01',
+                    user_id: 'u-ning',
+                    lottery_type: 'thai',
+                    round_date: '2026-10-01',
+                    total_amount: 8370,
+                    total_commission: 1674,
+                    total_winnings: 0
+                },
+                {
+                    round_id: 'round-thai-oct-16',
+                    user_id: 'u-ning',
+                    lottery_type: 'thai',
+                    round_date: '2026-10-16',
+                    total_amount: 5890,
+                    total_commission: 1078,
+                    total_winnings: 2100
+                }
+            ]
+
+            const res = calculateCrossRoundModeDebt({
+                userId: 'u-ning',
+                latestAnnouncedRound: latestRoundThai,
+                userHistories,
+                payments: [],
+                targetLotteryType: 'thai'
+            })
+
+            expect(res.latestRoundPrize).toBe(2100)
+            expect(res.pastDebtsTotal).toBe(6696)
+            expect(res.expectedAmount).toBe(4596)
+            expect(res.currentRoundDebt).toBe(2712)
+            expect(res.totalDebtWithCurrent).toBe(7308)
+
+            const msg = formatSlipSettlementLineMessage({
+                status: 'success',
+                memberName: 'พี่หนิง',
+                memberCode: '10043',
+                lotteryTypeName: 'หวยไทย',
+                settlementMode: 'cross_round',
+                roundDateText: '2026-10-16',
+                expectedAmount: res.expectedAmount,
+                slipAmount: 4596,
+                pastDebtTotal: res.pastDebtsTotal,
+                currentRoundPrize: res.latestRoundPrize,
+                currentRoundDebt: res.currentRoundDebt
+            })
+
+            expect(msg).toContain('พี่หนิง (10043)')
+            expect(msg).toContain('รวมหนี้งวดก่อนหน้า: ฿6,696.00')
+            expect(msg).toContain('หักลบรางวัลงวดล่าสุด: -฿2,100.00')
+            expect(msg).not.toContain('ยอดสุทธิงวดนี้')
+            expect(msg).toContain('ยอดที่ต้องโอนสุทธิ: ฿4,596.00')
+            expect(msg).toContain('ยอดเงินตามสลิป: ฿4,596.00')
         })
     })
 })

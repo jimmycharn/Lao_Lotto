@@ -153,13 +153,7 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
             if (params.currentRoundPrize !== undefined && params.currentRoundPrize > 0) {
                 lines.push(`- หักลบรางวัลงวดล่าสุด: -฿${params.currentRoundPrize.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             }
-            if (params.currentRoundDebt !== undefined && params.currentRoundDebt > 0 && ((params.pastDebtTotal || 0) === 0 || (params.expectedAmount || 0) >= params.currentRoundDebt)) {
-                lines.push(`- ยอดสุทธิงวดนี้: ฿${params.currentRoundDebt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
-            }
         } else if (params.settlementMode === 'immediate') {
-            if (params.currentRoundDebt !== undefined) {
-                lines.push(`- ยอดสุทธิงวดนี้: ฿${params.currentRoundDebt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
-            }
             if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
                 lines.push(`- รวมยอดค้างงวดก่อนๆ: +฿${params.pastDebtTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             }
@@ -181,7 +175,8 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
             lines.push(`💳 โอนเข้าบัญชี: ${params.bankAccountText}`)
         }
         lines.push('----------------------------')
-        lines.push('✅ บันทึกตัดชำระในระบบเรียบร้อยแล้ว')
+        lines.push('✅ บันทึกตัดชำระเรียบร้อยแล้ว✅')
+        lines.push('🙏 ขอบคุณมากค่ะ 🙏')
     } else if (params.status === 'amount_mismatch') {
         lines.push('⚠️ แจ้งเตือนยอดเงินไม่ตรง')
         lines.push(`👤 สมาชิก: ${memberLabel}`)
@@ -197,13 +192,7 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
             if (params.currentRoundPrize !== undefined && params.currentRoundPrize > 0) {
                 lines.push(`- หักลบรางวัลงวดล่าสุด: -฿${params.currentRoundPrize.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             }
-            if (params.currentRoundDebt !== undefined && params.currentRoundDebt > 0 && ((params.pastDebtTotal || 0) === 0 || (params.expectedAmount || 0) >= params.currentRoundDebt)) {
-                lines.push(`- ยอดสุทธิงวดนี้: ฿${params.currentRoundDebt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
-            }
         } else if (params.settlementMode === 'immediate') {
-            if (params.currentRoundDebt !== undefined) {
-                lines.push(`- ยอดสุทธิงวดนี้: ฿${params.currentRoundDebt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
-            }
             if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
                 lines.push(`- รวมยอดค้างงวดก่อนๆ: +฿${params.pastDebtTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             }
