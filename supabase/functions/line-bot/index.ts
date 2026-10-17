@@ -20,7 +20,8 @@ import {
   calculateMemberPastDebts,
   calculateImmediateModeDebt,
   allocateImmediateSettlement,
-  calculateCrossRoundModeDebt
+  calculateCrossRoundModeDebt,
+  evaluateAutoSettlementCandidate
 } from "./slipSettlementHelper.ts"
 import {
   fetchLineMessageImage,
@@ -1888,11 +1889,11 @@ async function sendLineReply(
   });
   if (!response.ok) {
     const errText = await response.text();
-    console.error(`Failed to send LINE reply: ${response.status} - ${errText}`);
+    console.error(`[LINE REPLY FAILED] Status ${response.status}: ${errText}`);
 
     // If reply failed and pushDestination is available, fall back to pushMessage!
     if (pushDestination) {
-      console.warn(`LINE reply failed, attempting push fallback to destination: ${pushDestination}`);
+      console.warn(`[LINE REPLY FALLBACK] Attempting push fallback to destination: ${pushDestination}`);
       try {
         await sendLinePush(pushDestination, textOrPayload);
         return;
@@ -1900,6 +1901,8 @@ async function sendLineReply(
         console.error("sendLineReply push fallback failed:", pushFallbackErr);
       }
     }
+  } else {
+    console.log(`[LINE REPLY SUCCESS] Sent reply successfully via replyToken`);
   }
 }
 
@@ -3726,8 +3729,13 @@ async function generateRoundSummaryFlex(
   (submissions || []).forEach((sub: any) => {
     const amt = Number(sub.amount || 0);
     const uSetting = memberSettingsMap[sub.user_id];
-    const commInfo = calculateSubmissionCommission(sub, activeRound.lottery_type, uSetting, activeRound);
-    const comm = commInfo.commission;
+    let comm = 0;
+    if (sub.commission_amount != null && !isNaN(Number(sub.commission_amount))) {
+      comm = Number(sub.commission_amount);
+    } else {
+      const commInfo = calculateSubmissionCommission(sub, activeRound.lottery_type, uSetting, activeRound);
+      comm = commInfo.commission;
+    }
 
     let win = 0;
     if (isAnnounced && sub.is_winner) {
@@ -5162,137 +5170,55 @@ async function handleLineSlipMessage({
       return `[SLIP] Ignored: not a group or room (${groupId})`;
     }
 
-    // 1. Fetch group link
-    const { data: groupLink } = await supabase
-      .from('line_groups')
-      .select('id, dealer_id, group_name, lottery_type, settlement_mode, is_active')
-      .eq('line_group_id', groupId)
-      .eq('is_active', true)
-      .maybeSingle();
+    // 1. Concurrently fetch group link AND download image content from LINE Messaging API
+    const [groupLinkRes, imageBytes] = await Promise.all([
+      supabase
+        .from('line_groups')
+        .select('id, dealer_id, group_name, lottery_type, settlement_mode, is_active')
+        .eq('line_group_id', groupId)
+        .eq('is_active', true)
+        .maybeSingle(),
+      fetchLineMessageImage(LINE_CHANNEL_ACCESS_TOKEN, messageId)
+    ]);
 
+    const groupLink = groupLinkRes.data;
     if (!groupLink || !groupLink.dealer_id) {
       return `[SLIP] Group ${groupId} is not bound or is inactive in line_groups`;
     }
 
-    const dealerId = groupLink.dealer_id;
-    const settlementMode = groupLink.settlement_mode || 'immediate';
-
-    // 2. Fetch dealer slip settings
-    const { data: dealerProfile } = await supabase
-      .from('profiles')
-      .select('auto_slip_verification_enabled, slip_provider, slipok_api_key, slipok_branch_id, slip_tolerance_amount, slip_tolerance_mode')
-      .eq('id', dealerId)
-      .maybeSingle();
-
-    if (!dealerProfile || !dealerProfile.auto_slip_verification_enabled || !dealerProfile.slipok_api_key) {
-      return `[SLIP] Dealer ${dealerId} slip verification disabled (enabled=${dealerProfile?.auto_slip_verification_enabled}, hasKey=${!!dealerProfile?.slipok_api_key})`;
-    }
-
-    // 3. Download image content from LINE Messaging API
-    const imageBytes = await fetchLineMessageImage(LINE_CHANNEL_ACCESS_TOKEN, messageId);
     if (!imageBytes) {
       const err = `[SLIP] Failed to download image ${messageId} from LINE API (tokenLen=${LINE_CHANNEL_ACCESS_TOKEN?.length || 0})`;
       console.warn(err);
       return err;
     }
 
-    // 4. Verify with SlipOK
-    const slipRes = await verifySlipWithSlipOk(
-      imageBytes,
-      dealerProfile.slipok_api_key,
-      dealerProfile.slipok_branch_id
-    );
+    const dealerId = groupLink.dealer_id;
+    const settlementMode = groupLink.settlement_mode || 'auto';
 
-    // 4.1 Handle duplicate slip detected by SlipOK (Code 1012 or message contains สลิปซ้ำ)
-    if (slipRes.code === 1012 || (slipRes.message && slipRes.message.includes('สลิปซ้ำ'))) {
-      const transRef = slipRes.data?.transRef || '';
-      if (transRef) {
-        const { data: existingSlip } = await supabase
-          .from('used_slips')
-          .select('id, trans_ref, used_at')
-          .eq('dealer_id', dealerId)
-          .eq('trans_ref', transRef)
-          .maybeSingle();
+    // 2. Concurrently fetch dealer slip settings, dealer bank accounts, and member profile
+    const [dealerProfileRes, dealerAccountsRes, memberProfileRes] = await Promise.all([
+      supabase
+        .from('profiles')
+        .select('auto_slip_verification_enabled, slip_provider, slipok_api_key, slipok_branch_id, slip_tolerance_amount, slip_tolerance_mode')
+        .eq('id', dealerId)
+        .maybeSingle(),
+      supabase
+        .from('dealer_bank_accounts')
+        .select('bank_name, bank_account, account_name, is_default')
+        .eq('dealer_id', dealerId),
+      supabase
+        .from('profiles')
+        .select('id, full_name, member_code')
+        .eq('line_user_id', userId)
+        .maybeSingle()
+    ]);
 
-        if (existingSlip) {
-          const dupMsg = formatSlipSettlementLineMessage({
-            status: 'duplicate_slip',
-            transRef,
-            transferDateText: existingSlip.used_at ? new Date(existingSlip.used_at).toLocaleDateString('th-TH') : ''
-          });
-          await sendLineReply(replyToken, dupMsg, groupId);
-          return `[SLIP] SlipOK detected duplicate slip (code 1012), already recorded in used_slips`;
-        }
-      }
+    const dealerProfile = dealerProfileRes.data;
+    const dealerAccounts = dealerAccountsRes.data || [];
+    let memberProfile = memberProfileRes.data;
 
-      if (!slipRes.data || !transRef) {
-        const dupMsg = formatSlipSettlementLineMessage({
-          status: 'duplicate_slip',
-          transRef,
-          transferDateText: slipRes.message ? slipRes.message.replace(/^สลิปซ้ำ\s*/, '') : ''
-        });
-        await sendLineReply(replyToken, dupMsg, groupId);
-        return `[SLIP] SlipOK detected duplicate slip (code 1012) without valid data`;
-      }
-      console.log(`[SLIP] SlipOK returned duplicate (1012) for ${transRef}, but slip was not yet recorded in used_slips. Continuing settlement.`);
-    }
-
-    // 4.2 If SlipOK says unsuccessful
-    if (!slipRes.success || !slipRes.data) {
-      // If code is 1007 ("รูปภาพไม่มี QR Code") -> pure non-QR photo, stay silent so we don't spam random chat pictures
-      if (slipRes.code === 1007 || (slipRes.message && slipRes.message.includes('ไม่มี QR Code'))) {
-        return `[SLIP] No QR Code in image (pure non-QR photo), silent ignore`;
-      }
-
-      // If SlipOK indicates receiver account does not match branch/shop accounts (code 1014 or message)
-      // Stay silent without replying because dealer/banker might be transferring prize money to member
-      if (isSlipReceiverMismatch(slipRes)) {
-        return `[SLIP] Slip receiver account does not match shop accounts in SlipOK (${slipRes.code || ''}: ${slipRes.message}), silent ignore (likely dealer payout to member)`;
-      }
-
-      // If it has an unreadable/invalid/expired QR code:
-      const invalidMsg = formatSlipSettlementLineMessage({
-        status: 'invalid_slip',
-        adjustmentNote: slipRes.message || 'ไม่พบข้อมูลสลิปในระบบธนาคาร'
-      });
-      await sendLineReply(replyToken, invalidMsg, groupId);
-      return `[SLIP] SlipOK error (${slipRes.code}): ${slipRes.message}, replied invalid_slip`;
-    }
-
-    const slipData = slipRes.data;
-    const transRef = slipData.transRef;
-    const slipAmount = Number(slipData.amount) || 0;
-
-    if (!transRef || slipAmount <= 0) {
-      const msg = `[SLIP] Slip missing transRef or amount: transRef=${transRef}, amount=${slipAmount}`;
-      console.warn(msg);
-      return msg;
-    }
-
-    // 5. Verify receiver bank account against dealer's configured bank accounts FIRST
-    const { data: dealerAccounts } = await supabase
-      .from('dealer_bank_accounts')
-      .select('bank_name, bank_account, account_name, is_default')
-      .eq('dealer_id', dealerId);
-
-    const isBankMatch = isReceiverMatchingDealer(slipData.receiver, dealerAccounts || []);
-    if (!isBankMatch) {
-      const recAcc = slipData.receiver?.account?.value || '';
-      const recName = slipData.receiver?.displayName || slipData.receiver?.name || '';
-      // User request: If receiver account does not match dealer accounts, stay completely silent without replying
-      // (as it might be the dealer transferring prize money to a member)
-      return `[SLIP] Receiver ${recName} ${recAcc} does not match any dealer bank accounts, silent ignore (likely dealer payout to member)`;
-    }
-
-    // 6. Look up member profile by line_user_id
-    let { data: memberProfile, error: profileErr } = await supabase
-      .from('profiles')
-      .select('id, full_name, member_code')
-      .eq('line_user_id', userId)
-      .maybeSingle();
-
-    if (profileErr) {
-      console.error('[SLIP] Error querying member profile for line_user_id', userId, profileErr);
+    if (!dealerProfile || !dealerProfile.auto_slip_verification_enabled || !dealerProfile.slipok_api_key) {
+      return `[SLIP] Dealer ${dealerId} slip verification disabled (enabled=${dealerProfile?.auto_slip_verification_enabled}, hasKey=${!!dealerProfile?.slipok_api_key})`;
     }
 
     // Fallback: check line_group_members in this group if direct lookup was not found
@@ -5309,8 +5235,112 @@ async function handleLineSlipMessage({
       }
     }
 
+    // 3. OVERLAPPING OPTIMIZATION:
+    // Call SlipOK API AND concurrently pre-fetch member payment history, user round history, and recent rounds!
+    // Since SlipOK takes 3-8 seconds, pre-fetching during this window means 100% of DB data is ready the instant SlipOK returns!
+    const slipOkPromise = verifySlipWithSlipOk(
+      imageBytes,
+      dealerProfile.slipok_api_key,
+      dealerProfile.slipok_branch_id
+    );
+
+    const historyPreloadPromise = memberProfile ? Promise.all([
+      fetchAllRows(
+        (from, to) => supabase
+          .from('member_round_payments')
+          .select('round_id, round_date, lottery_type, amount, direction, payment_type, created_at')
+          .eq('dealer_id', dealerId)
+          .eq('user_id', memberProfile.id)
+          .order('created_at', { ascending: false })
+          .range(from, to)
+      ),
+      fetchAllRows(
+        (from, to) => supabase
+          .from('user_round_history')
+          .select('round_id, round_date, lottery_type, total_amount, total_commission, total_winnings, created_at')
+          .eq('dealer_id', dealerId)
+          .eq('user_id', memberProfile.id)
+          .eq('lottery_type', groupLink.lottery_type)
+          .order('created_at', { ascending: false })
+          .range(from, to)
+      ),
+      supabase
+        .from('lottery_rounds')
+        .select('id, lottery_type, lottery_name, round_date, close_time, status')
+        .eq('dealer_id', dealerId)
+        .eq('lottery_type', groupLink.lottery_type)
+        .in('status', ['announced', 'closed'])
+        .order('close_time', { ascending: false })
+        .limit(15)
+    ]) : Promise.resolve([ { data: [] }, { data: [] }, { data: [] } ] as any);
+
+    const [slipRes, historyResults] = await Promise.all([
+      slipOkPromise,
+      historyPreloadPromise
+    ]);
+
+    const [paymentsRes, historiesRes, recentRoundsRes] = historyResults;
+
+    // 4. Handle SlipOK responses
+    // 4.1 Handle duplicate slip detected by SlipOK (Code 1012 or message contains สลิปซ้ำ)
+    if (slipRes.code === 1012 || (slipRes.message && slipRes.message.includes('สลิปซ้ำ'))) {
+      const transRef = slipRes.data?.transRef || '';
+      if (transRef) {
+        const { data: existingSlip } = await supabase
+          .from('used_slips')
+          .select('id, trans_ref, used_at')
+          .eq('dealer_id', dealerId)
+          .eq('trans_ref', transRef)
+          .maybeSingle();
+
+        if (existingSlip) {
+          const isBankMatch = slipRes.data?.receiver ? isReceiverMatchingDealer(slipRes.data.receiver, dealerAccounts) : true;
+          if (!isBankMatch) {
+            return `[SLIP] Duplicate slip ${transRef} receiver does not match dealer accounts, silent ignore`;
+          }
+          const dupMsg = formatSlipSettlementLineMessage({
+            status: 'duplicate_slip',
+            transRef,
+            transferDateText: existingSlip.used_at ? new Date(existingSlip.used_at).toLocaleDateString('th-TH') : ''
+          });
+          await sendLineReply(replyToken, dupMsg, groupId);
+          return `[SLIP] SlipOK detected duplicate slip (code 1012), already recorded in used_slips`;
+        }
+      }
+
+      if (!slipRes.data || !transRef) {
+        return `[SLIP] SlipOK detected duplicate slip (code 1012) without valid data, silent ignore`;
+      }
+      console.log(`[SLIP] SlipOK returned duplicate (1012) for ${transRef}, but slip was not yet recorded in used_slips. Continuing settlement.`);
+      slipRes.success = true;
+    }
+
+    // 4.2 If SlipOK says unsuccessful (no QR, delay, receiver mismatch, invalid bank data, unreadable, etc.)
+    // Strict domain rule: ALWAYS stay completely silent unless it is a confirmed transfer to the dealer in SlipOK!
+    if (!slipRes.success || !slipRes.data) {
+      return `[SLIP] SlipOK unsuccessful (${slipRes.code || 'unknown'}): ${slipRes.message || 'no data'}, silent ignore`;
+    }
+
+    const slipData = slipRes.data;
+    const transRef = slipData.transRef;
+    const slipAmount = Number(slipData.amount) || 0;
+
+    if (!transRef || slipAmount <= 0) {
+      const msg = `[SLIP] Slip missing transRef or amount: transRef=${transRef}, amount=${slipAmount}`;
+      console.warn(msg);
+      return msg;
+    }
+
+    // 5. Verify receiver bank account against dealer's configured bank accounts FIRST
+    const isBankMatch = isReceiverMatchingDealer(slipData.receiver, dealerAccounts);
+    if (!isBankMatch) {
+      const recAcc = slipData.receiver?.account?.value || '';
+      const recName = slipData.receiver?.displayName || slipData.receiver?.name || '';
+      return `[SLIP] Receiver ${recName} ${recAcc} does not match any dealer bank accounts, silent ignore (likely dealer payout to member)`;
+    }
+
+    // 6. Check if member profile is linked
     if (!memberProfile) {
-      // Valid slip, but sender LINE account is not linked to any member profile in system
       const unlinkedMsg = formatSlipSettlementLineMessage({
         status: 'unlinked_member',
         slipAmount,
@@ -5344,88 +5374,138 @@ async function handleLineSlipMessage({
     const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
 
     // 8. Process settlement based on settlementMode
-    // 8.1 Fetch past member payments
-    const { data: allPayments } = await fetchAllRows(
-      (from, to) => supabase
-        .from('member_round_payments')
-        .select('round_id, round_date, lottery_type, amount, direction, payment_type, created_at')
-        .eq('dealer_id', dealerId)
-        .eq('user_id', memberProfile.id)
-        .order('created_at', { ascending: false })
-        .range(from, to)
-    );
+    const allPayments = paymentsRes?.data || [];
+    const pastHistories = historiesRes?.data || [];
+    const recentLotteryRounds = recentRoundsRes?.data || [];
 
-    // 8.2 Fetch past user_round_history strictly for this lottery type
-    const { data: pastHistories } = await fetchAllRows(
-      (from, to) => supabase
-        .from('user_round_history')
-        .select('round_id, round_date, lottery_type, total_amount, total_commission, total_winnings, created_at')
-        .eq('dealer_id', dealerId)
-        .eq('user_id', memberProfile.id)
-        .eq('lottery_type', groupLink.lottery_type)
-        .order('created_at', { ascending: false })
-        .range(from, to)
-    );
-
-    const allHistoriesCombined = [...(pastHistories || [])];
+    const allHistoriesCombined = [...pastHistories];
     const existingHistoryRoundIds = new Set(allHistoriesCombined.map(h => String(h.round_id)).filter(Boolean));
 
-    // 8.3 Fetch recent announced/closed rounds from lottery_rounds to supplement any rounds not yet summarized
-    const { data: recentLotteryRounds } = await supabase
-      .from('lottery_rounds')
-      .select('id, lottery_type, lottery_name, round_date, close_time, status')
-      .eq('dealer_id', dealerId)
-      .eq('lottery_type', groupLink.lottery_type)
-      .in('status', ['announced', 'closed'])
-      .order('close_time', { ascending: false })
-      .limit(15);
-
-    if (recentLotteryRounds) {
-      for (const ar of recentLotteryRounds) {
-        const rId = String(ar.id);
-        if (existingHistoryRoundIds.has(rId)) continue;
-
-        const { data: subData } = await fetchAllRows(
+    // 8.3 Supplement any unsummarized rounds with 1 SINGLE batch query instead of 15 queries!
+    if (recentLotteryRounds.length > 0) {
+      const missingRounds = recentLotteryRounds.filter(ar => !existingHistoryRoundIds.has(String(ar.id)));
+      if (missingRounds.length > 0) {
+        const missingRoundIds = missingRounds.map(r => r.id);
+        const { data: missingSubs } = await fetchAllRows(
           (from, to) => supabase
             .from('submissions')
-            .select('amount, commission_amount, prize_amount, is_winner')
-            .eq('round_id', ar.id)
+            .select('round_id, amount, commission_amount, prize_amount, is_winner')
+            .in('round_id', missingRoundIds)
             .eq('user_id', memberProfile.id)
             .eq('is_deleted', false)
             .order('created_at', { ascending: false })
             .range(from, to)
         );
 
-        if (subData && subData.length > 0) {
-          let totAmt = 0;
-          let totComm = 0;
-          let totWin = 0;
-          for (const s of subData) {
-            totAmt += Number(s.amount) || 0;
-            totComm += Number(s.commission_amount) || 0;
-            if (s.is_winner) totWin += Number(s.prize_amount) || 0;
+        if (missingSubs && missingSubs.length > 0) {
+          const subsByRound: Record<string, { totAmt: number; totComm: number; totWin: number }> = {};
+          for (const s of missingSubs) {
+            const rId = String(s.round_id);
+            if (!subsByRound[rId]) subsByRound[rId] = { totAmt: 0, totComm: 0, totWin: 0 };
+            subsByRound[rId].totAmt += Number(s.amount) || 0;
+            subsByRound[rId].totComm += Number(s.commission_amount) || 0;
+            if (s.is_winner) subsByRound[rId].totWin += Number(s.prize_amount) || 0;
           }
-          allHistoriesCombined.push({
-            round_id: rId,
-            user_id: memberProfile.id,
-            round_date: getRoundCloseDate(ar),
-            lottery_type: ar.lottery_type,
-            total_amount: totAmt,
-            total_commission: totComm,
-            total_winnings: totWin
-          });
-          existingHistoryRoundIds.add(rId);
+
+          for (const ar of missingRounds) {
+            const rId = String(ar.id);
+            const aggregated = subsByRound[rId];
+            if (aggregated && (aggregated.totAmt > 0 || aggregated.totWin > 0)) {
+              allHistoriesCombined.push({
+                round_id: rId,
+                user_id: memberProfile.id,
+                round_date: getRoundCloseDate(ar),
+                lottery_type: ar.lottery_type,
+                total_amount: aggregated.totAmt,
+                total_commission: aggregated.totComm,
+                total_winnings: aggregated.totWin
+              });
+              existingHistoryRoundIds.add(rId);
+            }
+          }
         }
       }
     }
 
-    if (settlementMode === 'immediate') {
-      // --- MODE 1: IMMEDIATE SETTLEMENT (งวดต่องวด) ---
-      // User Rule 1:
-      // "แบบงวดต่องวด หมายถึงถ้าไม่มียอดค้างในงวดก่อนๆ ก็ให้หักลบกันเลยระหว่าง ยอดสุทธิคือ(ยอดส่ง-ค่าคอม) - เงิน ถูกรางวัล
-      //  ถ้าเป็น+ ก็คือเงินที่สมาชิกต้องโอนให้กับเจ้ามือ แต่ถ้ามียอดค้างงวดอื่นๆอยู่ด้วยในประเภทหวยนั้นก็ให้เอามาคิดรวมไปด้วย
-      //  ไม่ว่าจะเป็นส่วนที่สมาชิกค้างเจ้ามือ หรือ เจ้ามือค้างเงินรางวัลสมาชิกก็ตาม ในประเภทหวยนั้น"
+    const tolAmt = Number(dealerProfile.slip_tolerance_amount) || 0;
+    const tolMode = dealerProfile.slip_tolerance_mode || 'forgive_difference';
 
+    let activeMode = settlementMode;
+    let autoMatchedMode: 'immediate' | 'cross_round' | 'cross_round_all' | null = null;
+
+    if (settlementMode === 'auto') {
+      const latestAnnouncedRound = recentLotteryRounds?.find(r => r.status === 'announced' || r.status === 'closed') || recentLotteryRounds?.[0];
+      const crossDebtRes = latestAnnouncedRound ? calculateCrossRoundModeDebt({
+        userId: memberProfile.id,
+        latestAnnouncedRound,
+        userHistories: allHistoriesCombined,
+        payments: allPayments || [],
+        targetLotteryType: groupLink.lottery_type
+      }) : null;
+
+      const autoRes = evaluateAutoSettlementCandidate({
+        slipAmount,
+        toleranceAmount: tolAmt,
+        currentRoundDebt: crossDebtRes?.currentRoundDebt || 0,
+        netPastDebt: crossDebtRes?.expectedAmount || 0,
+        totalDebtWithCurrent: crossDebtRes?.totalDebtWithCurrent || 0,
+        pastDebtsTotal: crossDebtRes?.pastDebtsTotal || 0
+      });
+
+      if (autoRes.matched && autoRes.mode) {
+        autoMatchedMode = autoRes.mode;
+        activeMode = (autoRes.mode === 'immediate') ? 'immediate' : 'cross_round';
+      } else {
+        const maxDebt = Math.max(
+          autoRes.candidateImmediate || 0,
+          autoRes.candidateCrossRound || 0,
+          autoRes.candidateCrossRoundAll || 0
+        );
+        if (maxDebt <= 0) {
+          if (memberProfile.id === dealerId) {
+            return `[SLIP] Dealer posted slip with no debt, silent ignore`;
+          }
+          await sendLineReply(replyToken, formatSlipSettlementLineMessage({
+            status: 'no_debt',
+            memberName,
+            memberCode,
+            lotteryTypeName,
+            roundDateText: getRoundCloseDate(latestAnnouncedRound) || todayStr,
+            settlementMode: 'auto'
+          }), groupId);
+          return;
+        }
+
+        const candLines: string[] = ['- ยอดที่ต้องชำระในระบบ:'];
+        if ((autoRes.candidateCrossRound || 0) > 0) {
+          candLines.push(`  • งวดชนงวด: ฿${autoRes.candidateCrossRound!.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`);
+        }
+        if ((autoRes.candidateImmediate || 0) > 0 && autoRes.candidateImmediate !== autoRes.candidateCrossRound) {
+          candLines.push(`  • งวดต่องวด: ฿${autoRes.candidateImmediate!.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`);
+        }
+        if ((autoRes.candidateCrossRoundAll || 0) > 0 && autoRes.candidateCrossRoundAll !== autoRes.candidateCrossRound && autoRes.candidateCrossRoundAll !== autoRes.candidateImmediate) {
+          candLines.push(`  • รวมทุกงวด: ฿${autoRes.candidateCrossRoundAll!.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`);
+        }
+
+        const mismatchMsg = formatSlipSettlementLineMessage({
+          status: 'amount_mismatch',
+          memberName,
+          memberCode,
+          lotteryTypeName,
+          settlementMode: 'auto',
+          roundDateText: getRoundCloseDate(latestAnnouncedRound) || todayStr,
+          expectedAmount: autoRes.candidateCrossRound || autoRes.candidateImmediate || autoRes.candidateCrossRoundAll,
+          slipAmount,
+          toleranceAmount: tolAmt,
+          autoCandidatesSummary: candLines.join('\n')
+        });
+        await sendLineReply(replyToken, mismatchMsg, groupId);
+        return;
+      }
+    }
+
+    if (activeMode === 'immediate') {
+      // --- MODE 1: IMMEDIATE SETTLEMENT (งวดต่องวด) ---
       let latestRound = recentLotteryRounds?.[0];
       if (!latestRound) {
         const { data: anyRounds } = await supabase
@@ -5504,6 +5584,9 @@ async function handleLineSlipMessage({
       const currentRoundDate = getRoundCloseDate(latestRound) || todayStr;
 
       if (totalExpectedAmount <= 0) {
+        if (memberProfile.id === dealerId) {
+          return `[SLIP] Dealer posted slip with no debt, silent ignore`;
+        }
         await sendLineReply(replyToken, formatSlipSettlementLineMessage({
           status: 'no_debt',
           memberName,
@@ -5552,37 +5635,10 @@ async function handleLineSlipMessage({
         transRef,
         adjustmentNote: tolRes.adjustmentNote,
         slipData,
-        dealerAccounts: dealerAccounts || []
+        dealerAccounts
       });
 
-      let firstPaymentId: string | null = null;
-      for (const p of allocResult.payments) {
-        const { data: insP, error: insErr } = await supabase
-          .from('member_round_payments')
-          .insert(p)
-          .select('id')
-          .single();
-        if (!firstPaymentId && insP?.id) {
-          firstPaymentId = insP.id;
-        }
-        if (insErr) {
-          console.error('[SLIP BOT] Error inserting immediate settlement payment:', insErr);
-        }
-      }
-
-      await supabase
-        .from('used_slips')
-        .insert({
-          dealer_id: dealerId,
-          member_id: memberProfile.id,
-          payment_id: firstPaymentId,
-          trans_ref: transRef,
-          amount: slipAmount,
-          used_at: new Date().toISOString(),
-          slip_data: slipData
-        });
-
-      const immDestNote = getSlipDestinationAccountNote(slipData?.receiver, dealerAccounts || []);
+      const immDestNote = getSlipDestinationAccountNote(slipData?.receiver, dealerAccounts);
       const receiverText = immDestNote
         ? immDestNote.replace(/^โอนไป\s*/, '')
         : (slipData.receiver?.displayName || '');
@@ -5603,16 +5659,38 @@ async function handleLineSlipMessage({
         bankAccountText: receiverText,
         adjustmentNote: tolRes.adjustmentNote
       });
-      await sendLineReply(replyToken, successMsg, groupId);
+
+      // FAST CONCURRENT REPLY & DB WRITE
+      const replyPromise = sendLineReply(replyToken, successMsg, groupId);
+      const dbPromise = (async () => {
+        let firstPaymentId: string | null = null;
+        if (allocResult.payments.length > 0) {
+          const { data: insP, error: insErr } = await supabase
+            .from('member_round_payments')
+            .insert(allocResult.payments)
+            .select('id');
+          if (insP && insP.length > 0) firstPaymentId = insP[0].id;
+          if (insErr) console.error('[SLIP BOT] Error inserting immediate payments:', insErr);
+        }
+
+        await supabase
+          .from('used_slips')
+          .insert({
+            dealer_id: dealerId,
+            member_id: memberProfile.id,
+            payment_id: firstPaymentId,
+            trans_ref: transRef,
+            amount: slipAmount,
+            used_at: new Date().toISOString(),
+            slip_data: slipData
+          });
+      })();
+
+      await Promise.all([replyPromise, dbPromise]);
+      return `[SLIP SUCCESS] Immediate settlement recorded for ${memberName} (฿${slipAmount})`;
 
     } else {
       // --- MODE 2: CROSS ROUND SETTLEMENT (งวดชนงวด) ---
-      // User Rule 2:
-      // "แบบงวดชนงวด ก็ให้หมายถึง คำว่างวดล่าสุด ให้หมายถึงงวดล่าสุดที่ประกาศผลรางวัลแล้ว
-      //  ให้ยึดงวดล่าสุดถ้าไม่มีการถูกรางวัล เงินที่สมาชิกต้องโอน ก็คือเงินงวดก่อนหน้าที่ยังค้างอยู่ ไม่ว่ากี่งวดก็ตามที่มีในระบบ
-      //  และถ้างวดล่าสุดสมาชิกมีการถูกรางวัล ก็ให้เอาเงินรางวัลนั้นมาหักกับเงินค้างงวดอื่นๆ โดยยังไม่ต้องโอน เงินจ่ายสุทธิ ซึ่งก็คือ(ยอดส่ง-ค่าคอม)"
-
-      // Latest announced round strictly has status in ('announced', 'closed')
       const latestAnnouncedRound = recentLotteryRounds?.find(r => r.status === 'announced' || r.status === 'closed');
 
       if (!latestAnnouncedRound) {
@@ -5645,15 +5723,11 @@ async function handleLineSlipMessage({
 
       const currentRoundDate = getRoundCloseDate(latestAnnouncedRound) || todayStr;
 
-      // Determine which expected amount the slip matches (within tolerance):
-      // 1. Combined debt (all past debts + current round debt)
-      // 2. Primary expectedAmount (past debts after deducting current winnings, or currentRoundDebt if no past debts)
-      // 3. Current round debt alone (if past debts exist but member paid current round)
       let effectiveExpectedAmount = expectedAmount;
-      const tolAmt = Number(dealerProfile.slip_tolerance_amount) || 0;
-      const tolMode = dealerProfile.slip_tolerance_mode || 'forgive_difference';
 
-      if (totalDebtWithCurrent > 0 && Math.abs(slipAmount - totalDebtWithCurrent) <= tolAmt) {
+      if (autoMatchedMode === 'cross_round_all') {
+        effectiveExpectedAmount = totalDebtWithCurrent;
+      } else if (totalDebtWithCurrent > 0 && Math.abs(slipAmount - totalDebtWithCurrent) <= tolAmt) {
         effectiveExpectedAmount = totalDebtWithCurrent;
       } else if (expectedAmount > 0 && Math.abs(slipAmount - expectedAmount) <= tolAmt) {
         effectiveExpectedAmount = expectedAmount;
@@ -5662,13 +5736,16 @@ async function handleLineSlipMessage({
       }
 
       if (effectiveExpectedAmount <= 0) {
+        if (memberProfile.id === dealerId) {
+          return `[SLIP] Dealer posted slip with no debt, silent ignore`;
+        }
         await sendLineReply(replyToken, formatSlipSettlementLineMessage({
           status: 'no_debt',
           memberName,
           memberCode,
           lotteryTypeName,
           roundDateText: currentRoundDate,
-          settlementMode: 'cross_round'
+          settlementMode: autoMatchedMode || 'cross_round'
         }), groupId);
         return;
       }
@@ -5686,12 +5763,12 @@ async function handleLineSlipMessage({
           memberName,
           memberCode,
           lotteryTypeName,
-          settlementMode: 'cross_round',
+          settlementMode: autoMatchedMode || 'cross_round',
           roundDateText: currentRoundDate,
           expectedAmount: effectiveExpectedAmount,
           slipAmount,
           toleranceAmount: tolAmt,
-          pastDebtTotal,
+          pastDebtTotal: pastDebtsTotal,
           currentRoundPrize: latestRoundPrize,
           currentRoundDebt
         });
@@ -5710,38 +5787,11 @@ async function handleLineSlipMessage({
         transRef,
         adjustmentNote: tolRes.adjustmentNote,
         slipData,
-        dealerAccounts: dealerAccounts || [],
+        dealerAccounts,
         currentRoundDebt
       });
 
-      let firstPaymentId: string | null = null;
-      for (const p of allocResult.payments) {
-        const { data: insP, error: insErr } = await supabase
-          .from('member_round_payments')
-          .insert(p)
-          .select('id')
-          .single();
-        if (!firstPaymentId && insP?.id) {
-          firstPaymentId = insP.id;
-        }
-        if (insErr) {
-          console.error('[SLIP BOT] Error inserting cross-round payment:', insErr);
-        }
-      }
-
-      await supabase
-        .from('used_slips')
-        .insert({
-          dealer_id: dealerId,
-          member_id: memberProfile.id,
-          payment_id: firstPaymentId,
-          trans_ref: transRef,
-          amount: slipAmount,
-          used_at: new Date().toISOString(),
-          slip_data: slipData
-        });
-
-      const crossDestNote = getSlipDestinationAccountNote(slipData?.receiver, dealerAccounts || []);
+      const crossDestNote = getSlipDestinationAccountNote(slipData?.receiver, dealerAccounts);
       const receiverText = crossDestNote
         ? crossDestNote.replace(/^โอนไป\s*/, '')
         : (slipData.receiver?.displayName || '');
@@ -5751,21 +5801,50 @@ async function handleLineSlipMessage({
         memberName,
         memberCode,
         lotteryTypeName,
-        settlementMode: 'cross_round',
+        settlementMode: autoMatchedMode || 'cross_round',
         roundDateText: currentRoundDate,
         expectedAmount: effectiveExpectedAmount,
         slipAmount,
         toleranceAmount: tolAmt,
         bankAccountText: receiverText,
-        pastDebtTotal,
+        pastDebtTotal: pastDebtsTotal,
         currentRoundPrize: latestRoundPrize,
         currentRoundDebt,
         adjustmentNote: tolRes.adjustmentNote
       });
-      await sendLineReply(replyToken, successMsg, groupId);
+
+      // FAST CONCURRENT REPLY & DB WRITE
+      const replyPromise = sendLineReply(replyToken, successMsg, groupId);
+      const dbPromise = (async () => {
+        let firstPaymentId: string | null = null;
+        if (allocResult.payments.length > 0) {
+          const { data: insP, error: insErr } = await supabase
+            .from('member_round_payments')
+            .insert(allocResult.payments)
+            .select('id');
+          if (insP && insP.length > 0) firstPaymentId = insP[0].id;
+          if (insErr) console.error('[SLIP BOT] Error inserting cross-round payments:', insErr);
+        }
+
+        await supabase
+          .from('used_slips')
+          .insert({
+            dealer_id: dealerId,
+            member_id: memberProfile.id,
+            payment_id: firstPaymentId,
+            trans_ref: transRef,
+            amount: slipAmount,
+            used_at: new Date().toISOString(),
+            slip_data: slipData
+          });
+      })();
+
+      await Promise.all([replyPromise, dbPromise]);
+      return `[SLIP SUCCESS] Cross-round settlement recorded for ${memberName} (฿${slipAmount}, ref: ${transRef})`;
     }
-  } catch (err) {
+  } catch (err: any) {
     console.error('[SLIP BOT] Error in handleLineSlipMessage:', err);
+    return `[SLIP ERROR] ${err?.message || String(err)}`;
   }
 }
 
@@ -8159,27 +8238,63 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         console.warn("LINE_CHANNEL_SECRET not set, signature verification skipped.");
       }
 
-      // --- ENQUEUE WEBHOOOK IN BACKGROUND QUEUE ---
-      const { data: qItem, error: qErr } = await supabase
-        .from('line_webhook_queue')
-        .insert({
-          payload: JSON.parse(bodyText),
-          status: 'pending'
-        })
-        .select('id')
-        .maybeSingle();
+      let parsedBody: any = null;
+      try {
+        parsedBody = JSON.parse(bodyText);
+      } catch (_) {}
 
-      if (qErr) {
-        console.error("Failed to enqueue webhook payload, falling back to synchronous execution:", qErr);
-        // Fallback: continue processing synchronously
-        payload = JSON.parse(bodyText);
-        events = payload.events || [];
+      const incomingEvents = parsedBody?.events || [];
+      const hasImageEvent = incomingEvents.some((ev: any) => ev.type === 'message' && ev.message?.type === 'image');
+
+      if (hasImageEvent) {
+        // --- FAST-PATH FOR IMAGE MESSAGES (BANK SLIPS) ---
+        // Image verification needs to download the image, call SlipOK API, compute debts, and reply to LINE.
+        // If put in the pg_net queue, the 6+ second async queue delay causes LINE's replyToken to expire!
+        // Processing directly preserves the replyToken fresh so reply succeeds without consuming Push quota.
+        console.log(`[SLIP FAST-PATH] Detected image message event, processing synchronously to preserve replyToken`);
+        payload = parsedBody;
+        events = incomingEvents;
+
+        // Still record in line_webhook_queue for tracking/audit
+        try {
+          const { data: qItem } = await supabase
+            .from('line_webhook_queue')
+            .insert({
+              payload: parsedBody,
+              status: 'processing'
+            })
+            .select('id')
+            .maybeSingle();
+
+          if (qItem?.id) {
+            currentQueueId = qItem.id;
+          }
+        } catch (queueErr) {
+          console.error("Failed to log fast-path slip to line_webhook_queue:", queueErr);
+        }
       } else {
-        // Enqueue succeeded. Return HTTP 200 OK immediately to LINE!
-        return new Response(JSON.stringify({ success: true, queued: true, id: qItem?.id }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200
-        });
+        // --- ENQUEUE WEBHOOK IN BACKGROUND QUEUE FOR REGULAR/TEXT EVENTS ---
+        const { data: qItem, error: qErr } = await supabase
+          .from('line_webhook_queue')
+          .insert({
+            payload: parsedBody || JSON.parse(bodyText),
+            status: 'pending'
+          })
+          .select('id')
+          .maybeSingle();
+
+        if (qErr) {
+          console.error("Failed to enqueue webhook payload, falling back to synchronous execution:", qErr);
+          // Fallback: continue processing synchronously
+          payload = parsedBody || JSON.parse(bodyText);
+          events = payload?.events || [];
+        } else {
+          // Enqueue succeeded. Return HTTP 200 OK immediately to LINE!
+          return new Response(JSON.stringify({ success: true, queued: true, id: qItem?.id }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200
+          });
+        }
       }
     }
 
@@ -11358,7 +11473,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const amt = Number(s.amount || 0);
                 const uSetting = userSettingsMap[s.user_id];
                 const commInfo = calculateSubmissionCommission(s, targetLotteryType, uSetting, activeRound);
-                const comm = commInfo.commission;
+                const comm = (s.commission_amount != null && !isNaN(Number(s.commission_amount)))
+                  ? Number(s.commission_amount)
+                  : commInfo.commission;
 
                 let win = 0;
                 let isWin = false;
@@ -12197,8 +12314,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const amt = Number(s.amount || 0);
                 if (amt <= 0) return;
                 const uSetting = userSettingsMap[s.user_id];
-                const commInfo = calculateSubmissionCommission(s, targetLotteryType, uSetting, activeRound);
-                const comm = commInfo.commission;
+                const comm = (s.commission_amount != null && !isNaN(Number(s.commission_amount)))
+                  ? Number(s.commission_amount)
+                  : calculateSubmissionCommission(s, targetLotteryType, uSetting, activeRound).commission;
 
                 let win = 0;
                 let isWin = false;
@@ -12797,12 +12915,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 const amt = Number(s.amount || 0);
                 if (amt <= 0) return;
                 const uSetting = userSettingsMap[s.user_id];
-                const commInfo = calculateSubmissionCommission(s, targetLotteryType, uSetting, activeRound);
+                const comm = (s.commission_amount != null && !isNaN(Number(s.commission_amount)))
+                  ? Number(s.commission_amount)
+                  : calculateSubmissionCommission(s, targetLotteryType, uSetting, activeRound).commission;
                 if (!betTypeCommTotals[s.bet_type]) {
                   betTypeCommTotals[s.bet_type] = { totalAmt: 0, totalComm: 0 };
                 }
                 betTypeCommTotals[s.bet_type].totalAmt += amt;
-                betTypeCommTotals[s.bet_type].totalComm += commInfo.commission;
+                betTypeCommTotals[s.bet_type].totalComm += comm;
               });
 
               const setPrice = activeRound?.set_prices?.['4_top'] || 120;
@@ -20003,7 +20123,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         }
       }
     }
-    if (isProcessingQueue) {
+    if (isProcessingQueue || currentQueueId) {
       await supabase
         .from('line_webhook_queue')
         .update({ 
@@ -20021,7 +20141,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
   } catch (error: any) {
     console.error('Error handling webhook event:', error);
 
-    if (isProcessingQueue) {
+    if (isProcessingQueue || currentQueueId) {
       try {
         await supabase
           .from('line_webhook_queue')
