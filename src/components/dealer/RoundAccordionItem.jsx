@@ -3067,29 +3067,6 @@ export default function RoundAccordionItem({
         return sub.amount * (defaultRate / 100)
     }
 
-    const getExpectedPayout = (sub) => {
-        if (!sub.is_winner) return 0
-        
-        // For 4_set, DB stores prize_amount as the SINGLE-SET prize (e.g. 3000 for
-        // 3_tod_set). Actual payout must be multiplied by the number of sets the
-        // user bought (sub.amount / setPrice).
-        if (sub.bet_type === '4_set') {
-            const setPrice = round?.set_prices?.['4_top'] || 120
-            const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
-            return (sub.prize_amount || 0) * numSets
-        }
-        if (sub.prize_amount !== undefined && sub.prize_amount !== null && Number(sub.prize_amount) > 0) {
-            return Number(sub.prize_amount)
-        }
-        
-        const lotteryKey = getLotteryTypeKey(round.lottery_type)
-        const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
-        const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
-        const payoutPct = (sub.actual_payout_percent != null ? Number(sub.actual_payout_percent) : 100) / 100
-        if (settings?.payout !== undefined) return sub.amount * settings.payout * payoutPct
-        return sub.amount * getFallbackPayout(sub.bet_type, round.lottery_type) * payoutPct
-    }
-
     // Check if a submission item is a winner and calculate payout
     const getWinInfo = (sub) => {
         if (!round.is_result_announced || !round.winning_numbers) return null
@@ -3120,6 +3097,37 @@ export default function RoundAccordionItem({
             return { amount: sub.amount, payout: Math.round(result.payout) }
         }
         return null
+    }
+
+    const getExpectedPayout = (sub) => {
+        if (sub.is_winner) {
+            // For 4_set, DB stores prize_amount as the SINGLE-SET prize (e.g. 3000 for
+            // 3_tod_set). Actual payout must be multiplied by the number of sets the
+            // user bought (sub.amount / setPrice).
+            if (sub.bet_type === '4_set') {
+                const setPrice = round?.set_prices?.['4_top'] || 120
+                const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
+                return (sub.prize_amount || 0) * numSets
+            }
+            if (sub.prize_amount !== undefined && sub.prize_amount !== null && Number(sub.prize_amount) > 0) {
+                return Number(sub.prize_amount)
+            }
+            
+            const lotteryKey = getLotteryTypeKey(round.lottery_type)
+            const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
+            const settings = summaryData.userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
+            const payoutPct = (sub.actual_payout_percent != null ? Number(sub.actual_payout_percent) : 100) / 100
+            if (settings?.payout !== undefined) return sub.amount * settings.payout * payoutPct
+            return sub.amount * getFallbackPayout(sub.bet_type, round.lottery_type) * payoutPct
+        }
+
+        // Fallback: If round result is announced and winning numbers exist, evaluate dynamically!
+        if (round.is_result_announced && round.winning_numbers) {
+            const wi = getWinInfo(sub)
+            if (wi && wi.payout > 0) return wi.payout
+        }
+
+        return 0
     }
 
     // Check if a transfer item is a winner (uses round's own winning numbers + DEFAULT_PAYOUTS)
@@ -3158,11 +3166,12 @@ export default function RoundAccordionItem({
                     email: sub.profiles?.email || '', totalBet: 0, totalWin: 0, totalCommission: 0, winCount: 0, ticketCount: 0
                 }
             }
+            const expectedPayout = getExpectedPayout(sub)
             acc[userId].totalBet += sub.amount || 0
-            acc[userId].totalWin += getExpectedPayout(sub)
+            acc[userId].totalWin += expectedPayout
             acc[userId].totalCommission += getCommission(sub)
             acc[userId].ticketCount++
-            if (sub.is_winner) acc[userId].winCount++
+            if (sub.is_winner || expectedPayout > 0) acc[userId].winCount++
             return acc
         }, {})
     ).sort((a, b) => (b.totalWin + b.totalCommission - b.totalBet) - (a.totalWin + a.totalCommission - a.totalBet)) : []

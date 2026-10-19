@@ -1196,12 +1196,13 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string, 
       const comm = Number(sub.commission_amount || 0);
 
       let win = 0;
-      if (isAnnounced && sub.is_winner) {
-        if (sub.bet_type === '4_set') {
-          const numSets = Math.max(1, Math.floor(amt / setPrice));
-          win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
-        } else {
-          win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+      if (isAnnounced) {
+        if (sub.is_winner) {
+          if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+            win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+          } else {
+            win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+          }
         }
         if (win === 0) {
           const winResult = checkTransferWin(
@@ -1231,7 +1232,7 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string, 
       userSummaries[userId].totalBet += amt;
       userSummaries[userId].totalCommission += comm;
       userSummaries[userId].totalWin += win;
-      if (sub.is_winner) {
+      if (sub.is_winner || win > 0) {
         userSummaries[userId].winCount++;
       }
     });
@@ -1539,7 +1540,7 @@ const DEFAULT_PAYOUTS: Record<string, number> = {
   'front_top_1': 8, 'middle_top_1': 8, 'back_top_1': 8,
   'front_bottom_1': 6, 'back_bottom_1': 6,
   '2_top': 65, '2_front': 65, '2_center': 65, '2_run': 10, '2_bottom': 65,
-  '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
+  '3_top': 550, '3_straight': 550, '3_tod': 100, '3_tod_single': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
   '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
 };
 
@@ -1773,7 +1774,7 @@ function checkTransferWin(
     isWinner = floatCheck(w3top, num);
   } else if (bt === '5_float' && w3top && w3top.length === 3 && num.length === 5) {
     isWinner = floatCheck(w3top, num);
-  } else if (bt === '4_set' && w4set && num.length === 4) {
+  } else if ((bt === '4_set' || bt === '4_top') && w4set && num.length === 4) {
     const { totalPrize } = calculate4SetPrizesDeno(num, w4set, prizeSettings);
     if (totalPrize > 0) {
       isWinner = true;
@@ -1782,7 +1783,7 @@ function checkTransferWin(
   }
   
   if (isWinner) {
-    if (bt === '4_set') {
+    if (bt === '4_set' || bt === '4_top') {
       const numSets = Math.max(1, Math.floor(amount / setPrice));
       return { wins: true, payout: prize * numSets };
     } else {
@@ -3738,14 +3739,20 @@ async function generateRoundSummaryFlex(
     }
 
     let win = 0;
-    if (isAnnounced && sub.is_winner) {
-      if (sub.bet_type === '4_set') {
-        const numSets = Math.max(1, Math.floor(amt / setPrice));
-        win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
-      } else {
-        win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+    if (isAnnounced) {
+      if (sub.is_winner) {
+        if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+          win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+        } else {
+          win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+        }
       }
       if (win === 0) {
+        let memberPrizeSettings = DEFAULT_4_SET_SETTINGS.prizes;
+        const betKey = (activeRound.lottery_type === 'lao' || activeRound.lottery_type === 'hanoi') ? 'lao' : activeRound.lottery_type;
+        if (uSetting?.lottery_settings?.[betKey]?.['4_set']?.prizes) {
+          memberPrizeSettings = uSetting.lottery_settings[betKey]['4_set'].prizes;
+        }
         const winResult = checkTransferWin(
           sub.bet_type,
           sub.numbers,
@@ -3753,10 +3760,16 @@ async function generateRoundSummaryFlex(
           activeRound.lottery_type,
           amt,
           setPrice,
-          DEFAULT_4_SET_SETTINGS.prizes
+          memberPrizeSettings
         );
         if (winResult.wins) {
-          win = winResult.payout;
+          const settingsKey = getBetSettingsKey(sub.bet_type, betKey);
+          const customPayout = uSetting?.lottery_settings?.[betKey]?.[settingsKey]?.payout;
+          if (customPayout && sub.bet_type !== '4_set' && sub.bet_type !== '4_top') {
+            win = amt * Number(customPayout);
+          } else {
+            win = winResult.payout;
+          }
         }
       }
     }
@@ -3783,7 +3796,7 @@ async function generateRoundSummaryFlex(
     userSummaries[userId].totalCommission += comm;
     userSummaries[userId].totalWin += win;
     userSummaries[userId].ticketCount++;
-    if (isAnnounced && sub.is_winner) {
+    if (isAnnounced && (sub.is_winner || win > 0)) {
       userSummaries[userId].winCount++;
     }
   });
@@ -9945,12 +9958,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                   // Calculate win same as admin view
                   let win = 0;
-                  if (isAnnounced && sub.is_winner) {
-                    if (sub.bet_type === '4_set') {
-                      const numSets = Math.max(1, Math.floor(amt / setPrice));
-                      win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
-                    } else {
-                      win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                  if (isAnnounced) {
+                    if (sub.is_winner) {
+                      if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+                        win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                      } else {
+                        win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                      }
                     }
                     // Fallback when DB prize_amount is missing or zero
                     if (win === 0) {
@@ -10401,12 +10415,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     const comm = Number(sub.commission_amount || 0);
 
                     let win = 0;
-                    if (isAnnounced && sub.is_winner) {
-                      if (sub.bet_type === '4_set') {
-                        const numSets = Math.max(1, Math.floor(amt / setPrice));
-                        win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
-                      } else {
-                        win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                    if (isAnnounced) {
+                      if (sub.is_winner) {
+                        if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+                          win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                        } else {
+                          win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
+                        }
                       }
                       if (win === 0) {
                         const winResult = checkTransferWin(
@@ -11485,12 +11500,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 let win = 0;
                 let isWin = false;
 
-                if (isAnnounced && s.is_winner) {
-                  if (s.bet_type === '4_set') {
-                    const numSets = Math.max(1, Math.floor(amt / setPrice));
-                    win = (s.prize_amount != null ? Number(s.prize_amount) : 0) * numSets;
-                  } else {
-                    win = s.prize_amount != null ? Number(s.prize_amount) : 0;
+                if (isAnnounced) {
+                  if (s.is_winner) {
+                    if (s.bet_type === '4_set' || s.bet_type === '4_top') {
+                      win = s.prize_amount != null ? Number(s.prize_amount) : 0;
+                    } else {
+                      win = s.prize_amount != null ? Number(s.prize_amount) : 0;
+                    }
                   }
                   if (win === 0 && roundWinningNumbers) {
                     const winResult = checkTransferWin(
@@ -11506,7 +11522,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       win = winResult.payout;
                     }
                   }
-                  if (win > 0) {
+                  if (win > 0 || s.is_winner) {
                     isWin = true;
                   }
                 }
@@ -12325,12 +12341,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                 let win = 0;
                 let isWin = false;
-                if (isAnnounced && s.is_winner) {
-                  if (s.bet_type === '4_set') {
-                    const numSets = Math.max(1, Math.floor(amt / setPrice));
-                    win = (s.prize_amount != null ? Number(s.prize_amount) : 0) * numSets;
-                  } else {
-                    win = s.prize_amount != null ? Number(s.prize_amount) : 0;
+                if (isAnnounced) {
+                  if (s.is_winner) {
+                    if (s.bet_type === '4_set' || s.bet_type === '4_top') {
+                      win = s.prize_amount != null ? Number(s.prize_amount) : 0;
+                    } else {
+                      win = s.prize_amount != null ? Number(s.prize_amount) : 0;
+                    }
                   }
                   if (win === 0 && roundWinningNumbers) {
                     const winResult = checkTransferWin(
@@ -12346,7 +12363,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       win = winResult.payout;
                     }
                   }
-                  if (win > 0) isWin = true;
+                  if (win > 0 || s.is_winner) isWin = true;
                 }
 
                 const normNum = normalizeNumber(s.numbers, s.bet_type);
@@ -18340,9 +18357,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               const calculatePayout = (sub: any) => {
                 const amt = Number(sub.amount || 0);
                 let win = 0;
-                if (sub.bet_type === '4_set') {
-                  const numSets = Math.max(1, Math.floor(amt / setPrice));
-                  win = (sub.prize_amount != null ? Number(sub.prize_amount) : 0) * numSets;
+                if (sub.bet_type === '4_set' || sub.bet_type === '4_top') {
+                  win = (sub.prize_amount != null && Number(sub.prize_amount) > 0) ? Number(sub.prize_amount) : 0;
                 } else {
                   win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
                 }
@@ -18362,6 +18378,23 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 }
                 return win;
               };
+
+              // Dynamic fallback for /โพยถูก if DB is_winner has not been populated
+              if (winningSubs.length === 0 && activeRound.winning_numbers) {
+                let candidateQuery = supabase
+                  .from('submissions')
+                  .select('id, amount, user_id, prize_amount, is_winner, bet_type, numbers, bill_id, bill_note, entry_id, display_numbers, display_amount, display_bet_type')
+                  .eq('round_id', activeRound.id)
+                  .eq('is_deleted', false)
+                  .order('created_at', { ascending: true });
+                if (!isAuthorized) {
+                  candidateQuery = candidateQuery.eq('user_id', senderProfile.id);
+                }
+                const { data: candidates } = await candidateQuery;
+                if (candidates && candidates.length > 0) {
+                  winningSubs = candidates.filter((sub: any) => calculatePayout(sub) > 0);
+                }
+              }
 
               const isLaoOrHanoi = activeRound.lottery_type === 'lao' || activeRound.lottery_type === 'hanoi';
               const LABELS: Record<string, string> = {

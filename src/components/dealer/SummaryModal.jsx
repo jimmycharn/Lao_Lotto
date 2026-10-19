@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase, fetchAllRows } from '../../lib/supabase'
 import { FiDollarSign, FiX } from 'react-icons/fi'
 import { DEFAULT_COMMISSIONS, DEFAULT_PAYOUTS, DEFAULT_4_SET_SETTINGS, getLotteryTypeKey, normalizeBetType } from '../../constants/lotteryTypes'
+import { deriveWinningNumbers, checkBetWin } from '../../utils/scenarioCalculator'
 
 export default function SummaryModal({ round, onClose }) {
     const [submissions, setSubmissions] = useState([])
@@ -96,32 +97,75 @@ export default function SummaryModal({ round, onClose }) {
         return sub.amount * (defaultComm / 100)
     }
 
-    const getExpectedPayout = (sub) => {
-        if (!sub.is_winner) return 0
-        
-        // For 4_set, DB stores single-set prize — multiply by numSets
-        if (sub.bet_type === '4_set') {
-            const setPrice = round?.set_prices?.['4_top'] || 120
-            const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
-            return (sub.prize_amount || 0) * numSets
+    const getWinInfo = (sub) => {
+        if (!round?.is_result_announced || !round?.winning_numbers) return null
+        const wn = round.winning_numbers
+        const lt = round.lottery_type
+        let primaryNumber = ''
+        let bottomNumber = ''
+        if (lt === 'thai') {
+            primaryNumber = wn['6_top'] || wn['3_top'] || ''
+            bottomNumber = wn['2_bottom'] || ''
+        } else if (lt === 'lao' || lt === 'hanoi') {
+            primaryNumber = wn['4_set'] || ''
+        } else if (lt === 'stock') {
+            primaryNumber = wn['2_top'] || ''
         }
-        if (sub.prize_amount !== undefined && sub.prize_amount !== null && Number(sub.prize_amount) > 0) {
-            return Number(sub.prize_amount)
-        }
-        
-        const lotteryKey = getLotteryTypeKey(round.lottery_type)
+        if (!primaryNumber) return null
+        const winNums = deriveWinningNumbers(primaryNumber, lt, bottomNumber)
+        const lotteryKey = getLotteryTypeKey(lt)
         const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
         const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
-
-        if (settings?.payout !== undefined) return sub.amount * settings.payout
-        
         let defaultPayout = DEFAULT_PAYOUTS[normalizeBetType(sub.bet_type)] || DEFAULT_PAYOUTS[sub.bet_type] || 1
         if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
             if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalizeBetType(sub.bet_type))) {
                 defaultPayout = 70
             }
         }
-        return sub.amount * defaultPayout
+        const payoutRate = settings?.payout !== undefined ? settings.payout : defaultPayout
+        const currentSetPrice = round?.set_prices?.['4_top'] || 120
+        const setPrizes = settings?.prizes || DEFAULT_4_SET_SETTINGS.prizes
+        const result = checkBetWin(sub.bet_type, sub.numbers, winNums, payoutRate, sub.amount, currentSetPrice, setPrizes)
+        if (result.wins) {
+            return { amount: sub.amount, payout: Math.round(result.payout) }
+        }
+        return null
+    }
+
+    const getExpectedPayout = (sub) => {
+        if (sub.is_winner) {
+            // For 4_set, DB stores single-set prize — multiply by numSets
+            if (sub.bet_type === '4_set') {
+                const setPrice = round?.set_prices?.['4_top'] || 120
+                const numSets = Math.max(1, Math.floor((sub.amount || 0) / setPrice))
+                return (sub.prize_amount || 0) * numSets
+            }
+            if (sub.prize_amount !== undefined && sub.prize_amount !== null && Number(sub.prize_amount) > 0) {
+                return Number(sub.prize_amount)
+            }
+            
+            const lotteryKey = getLotteryTypeKey(round.lottery_type)
+            const settingsKey = getSettingsKey(sub.bet_type, lotteryKey)
+            const settings = userSettings[sub.user_id]?.lottery_settings?.[lotteryKey]?.[settingsKey]
+
+            if (settings?.payout !== undefined) return sub.amount * settings.payout
+            
+            let defaultPayout = DEFAULT_PAYOUTS[normalizeBetType(sub.bet_type)] || DEFAULT_PAYOUTS[sub.bet_type] || 1
+            if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+                if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(normalizeBetType(sub.bet_type))) {
+                    defaultPayout = 70
+                }
+            }
+            return sub.amount * defaultPayout
+        }
+
+        // Fallback: If round result is announced and winning numbers exist
+        if (round?.is_result_announced && round?.winning_numbers) {
+            const wi = getWinInfo(sub)
+            if (wi && wi.payout > 0) return wi.payout
+        }
+
+        return 0
     }
 
     const userSummaries = submissions.reduce((acc, sub) => {
@@ -134,11 +178,12 @@ export default function SummaryModal({ round, onClose }) {
                 totalBet: 0, totalWin: 0, totalCommission: 0, winCount: 0, ticketCount: 0
             }
         }
+        const expectedPayout = getExpectedPayout(sub)
         acc[userId].totalBet += sub.amount || 0
-        acc[userId].totalWin += getExpectedPayout(sub)
+        acc[userId].totalWin += expectedPayout
         acc[userId].totalCommission += getCommission(sub)
         acc[userId].ticketCount++
-        if (sub.is_winner) acc[userId].winCount++
+        if (sub.is_winner || expectedPayout > 0) acc[userId].winCount++
         return acc
     }, {})
 

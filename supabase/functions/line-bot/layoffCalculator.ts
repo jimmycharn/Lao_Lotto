@@ -54,7 +54,7 @@ export const DEFAULT_PAYOUTS: Record<string, number> = {
   'front_top_1': 8, 'middle_top_1': 8, 'back_top_1': 8,
   'front_bottom_1': 6, 'back_bottom_1': 6,
   '2_top': 65, '2_front': 65, '2_center': 65, '2_run': 10, '2_bottom': 65,
-  '3_top': 550, '3_tod': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
+  '3_top': 550, '3_straight': 550, '3_tod': 100, '3_tod_single': 100, '3_bottom': 135, '3_front': 100, '3_back': 135,
   '4_float': 20, '4_tod': 100, '5_float': 10, '6_top': 1000000
 };
 
@@ -64,7 +64,7 @@ export const DEFAULT_COMMISSIONS: Record<string, number> = {
   'front_top_1': 15, 'middle_top_1': 15, 'back_top_1': 15,
   'front_bottom_1': 15, 'back_bottom_1': 15,
   '2_top': 15, '2_front': 15, '2_center': 15, '2_spread': 15, '2_run': 15, '2_bottom': 15,
-  '3_top': 30, '3_tod': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
+  '3_top': 30, '3_straight': 30, '3_tod': 15, '3_tod_single': 15, '3_bottom': 15, '3_front': 15, '3_back': 15,
   '4_tod': 15, '4_set': 15, '4_float': 15, '5_float': 15, '6_top': 15
 };
 
