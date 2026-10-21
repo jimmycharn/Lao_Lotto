@@ -930,18 +930,22 @@ export function allocateSettlementPaymentsByMode({
     const noteSuffix = noteDetails ? ` (${noteDetails})` : ''
 
     if (mode === 'current_debt') {
+        const curDirection = isUpstream
+            ? (curBal >= 0 ? 'dealer_to_upstream' : 'upstream_to_dealer')
+            : (curBal >= 0 ? 'member_to_dealer' : 'dealer_to_member')
+        const isDebtPayment = isUpstream ? (curBal >= 0) : (curBal >= 0)
+        const basePrefix = isDebtPayment ? 'ชำระหนี้งวดนี้' : 'เคลียร์ยอดคงค้าง'
+
         const curPayment = {
             dealer_id: dealerId,
             round_id: curRoundId,
             lottery_type: currentRound.lottery_type || null,
             round_date: curRoundDateIso,
             payment_type: 'net_settlement',
-            direction: isUpstream
-                ? (curBal >= 0 ? 'dealer_to_upstream' : 'upstream_to_dealer')
-                : (curBal >= 0 ? 'member_to_dealer' : 'dealer_to_member'),
+            direction: curDirection,
             amount: slip,
             paid_at: paidAt,
-            notes: `ชำระหนี้งวดนี้${noteSuffix}`,
+            notes: `${basePrefix}${noteSuffix}`,
             created_by: dealerId
         }
         if (isUpstream) {
@@ -1147,9 +1151,10 @@ export function shouldPrependSenderBank(notes, senderBank) {
  * vs manually entered by the dealer.
  *
  * @param {string} notes - Full payment notes string
+ * @param {string} [direction=null] - Optional payment direction ('member_to_dealer', 'dealer_to_member', etc.)
  * @returns {boolean}
  */
-export function isAutoSlipPayment(notes) {
+export function isAutoSlipPayment(notes, direction = null) {
     if (!notes || typeof notes !== 'string') return false
     const n = notes.trim()
 
@@ -1164,9 +1169,15 @@ export function isAutoSlipPayment(notes) {
         return false
     }
 
-    // 3. Bot slip pattern: bot generates "(... โอนไป ... เวลา HH:mm #[Ref])"
+    // 3. Payments where dealer pays member/upstream are NEVER auto-slips unless explicitly tagged with "สลิปอัตโนมัติ"
+    if (direction === 'dealer_to_member' || direction === 'dealer_to_upstream') {
+        return false
+    }
+
+    // 4. Bot slip pattern: bot generates "(... โอนไป ... เวลา HH:mm #[Ref])"
     // e.g. "#KSA0000000100065358947980" or "#MTI0037367115628917179584"
-    if (/#([A-Za-z0-9_-]{8,})/.test(n) && (n.includes('โอนไป') || n.includes('ชำระหนี้งวดนี้') || n.includes('หักล้างหนี้งวดเก่า'))) {
+    // Genuine bot auto slips MUST contain "โอนไป" AND a transaction reference "#..."
+    if (/#([A-Za-z0-9_-]{8,})/.test(n) && n.includes('โอนไป') && (n.includes('ชำระหนี้งวดนี้') || n.includes('หักล้างหนี้งวดเก่า'))) {
         return true
     }
 

@@ -409,6 +409,49 @@ describe('slipSettlementHelper', () => {
             expect(result.payments[1].amount).toBe(2599)
             expect(result.remainingFunds).toBe(0)
         })
+
+        it('allocates ONLY single net_settlement payment and NO prize_payout when member has no past debts (Case: คุณมุก id 10071)', () => {
+            const slipData = {
+                transRef: 'A9424b131614a475e',
+                transDate: '20261020',
+                transTime: '08:49:00',
+                sendingBank: '006',
+                receiver: {
+                    account: { value: 'xxx-x-xxxx8-092', name: 'นาย ธีระเดช บรรจงแก้ว' },
+                    displayName: 'นาย ธีระเดช บรรจงแก้ว'
+                }
+            }
+            const dealerAccounts = [
+                { bank_name: 'ธนาคารออมสิน', bank_account: '020432578092', account_name: 'นายธีรเดช บรรจงแก้ว', is_default: true }
+            ]
+
+            const result = allocateCrossRoundOffset({
+                pastDebts: [],
+                currentRoundPrize: 1000,
+                slipAmount: 1758,
+                currentRoundDebt: 1758,
+                dealerId: 'dealer-1',
+                memberUserId: 'member-10071',
+                currentRound: { id: 'round-lao-oct-19', round_date: '2026-10-19', lottery_type: 'lao' },
+                paidAt: '2026-10-20',
+                transRef: 'A9424b131614a475e',
+                slipData,
+                dealerAccounts
+            })
+
+            // MUST have only 1 payment: net_settlement 1758 member_to_dealer
+            // MUST NOT create any prize_payout record!
+            expect(result.payments).toHaveLength(1)
+            const p = result.payments[0]
+            expect(p.round_id).toBe('round-lao-oct-19')
+            expect(p.payment_type).toBe('net_settlement')
+            expect(p.direction).toBe('member_to_dealer')
+            expect(p.amount).toBe(1758)
+            expect(result.remainingFunds).toBe(0)
+
+            const prizePayout = result.payments.find(pay => pay.payment_type === 'prize_payout')
+            expect(prizePayout).toBeUndefined()
+        })
     })
 
     describe('extractSlipTransferDetails', () => {
@@ -1206,6 +1249,118 @@ describe('slipSettlementHelper', () => {
             expect(msg).toContain('ยอดที่ต้องโอนสุทธิ: ฿4,596.00')
             expect(msg).toContain('ยอดเงินตามสลิป: ฿4,596.00')
         })
+
+        it('Rule 2.7: If dealer already transferred prize to member, availableWinnings becomes 0 and current round debt is the full net bet (Case: คุณน้ำ)', () => {
+            const latestRoundLao = {
+                id: 'round-lao-oct-19',
+                round_date: '2026-10-19',
+                close_time: '2026-10-19T20:30:00+07:00',
+                lottery_type: 'lao',
+                status: 'announced'
+            }
+            const userHistories = [
+                {
+                    round_id: 'round-lao-oct-19',
+                    user_id: 'u-nam',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-19',
+                    total_amount: 3493,
+                    total_commission: 705,
+                    total_winnings: 1000
+                }
+            ]
+            const payments = [
+                {
+                    round_id: 'round-lao-oct-19',
+                    user_id: 'u-nam',
+                    payment_type: 'prize_payout',
+                    direction: 'dealer_to_member',
+                    amount: 1000
+                }
+            ]
+
+            const res = calculateCrossRoundModeDebt({
+                userId: 'u-nam',
+                latestAnnouncedRound: latestRoundLao,
+                userHistories,
+                payments,
+                targetLotteryType: 'lao'
+            })
+
+            // Prize was already paid in cash, so available prize to offset is 0
+            expect(res.latestRoundPrize).toBe(0)
+            expect(res.pastDebtsTotal).toBe(0)
+            // Net bet is 3493 - 705 = 2788. Since prize was already paid out, member owes 2788!
+            expect(res.currentRoundDebt).toBe(2788)
+            expect(res.expectedAmount).toBe(2788)
+            expect(res.totalDebtWithCurrent).toBe(2788)
+
+            // Auto candidate evaluation with slip of 2788
+            const autoRes = evaluateAutoSettlementCandidate({
+                slipAmount: 2788,
+                toleranceAmount: 0,
+                currentRoundDebt: res.currentRoundDebt,
+                netPastDebt: res.expectedAmount,
+                totalDebtWithCurrent: res.totalDebtWithCurrent,
+                pastDebtsTotal: res.pastDebtsTotal
+            })
+
+            expect(autoRes.matched).toBe(true)
+            expect(autoRes.expectedAmount).toBe(2788)
+        })
+
+        it('Rule 2.8: Member has past debt AND dealer already transferred current round prize', () => {
+            const latestRoundLao = {
+                id: 'round-lao-oct-19',
+                round_date: '2026-10-19',
+                close_time: '2026-10-19T20:30:00+07:00',
+                lottery_type: 'lao',
+                status: 'announced'
+            }
+            const userHistories = [
+                {
+                    round_id: 'round-lao-oct-12',
+                    user_id: 'u-nam',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-12',
+                    total_amount: 1000,
+                    total_commission: 200,
+                    total_winnings: 0
+                },
+                {
+                    round_id: 'round-lao-oct-19',
+                    user_id: 'u-nam',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-19',
+                    total_amount: 3493,
+                    total_commission: 705,
+                    total_winnings: 1000
+                }
+            ]
+            const payments = [
+                {
+                    round_id: 'round-lao-oct-19',
+                    user_id: 'u-nam',
+                    payment_type: 'prize_payout',
+                    direction: 'dealer_to_member',
+                    amount: 1000
+                }
+            ]
+
+            const res = calculateCrossRoundModeDebt({
+                userId: 'u-nam',
+                latestAnnouncedRound: latestRoundLao,
+                userHistories,
+                payments,
+                targetLotteryType: 'lao'
+            })
+
+            expect(res.latestRoundPrize).toBe(0)
+            expect(res.pastDebtsTotal).toBe(800)
+            expect(res.expectedAmount).toBe(800)
+            expect(res.currentRoundDebt).toBe(2788)
+            expect(res.totalDebtWithCurrent).toBe(3588)
+        })
     })
 
     describe('evaluateAutoSettlementCandidate', () => {
@@ -1293,7 +1448,8 @@ describe('slipSettlementHelper', () => {
                 pastDebtsTotal: 0
             })
             expect(res.matched).toBe(true)
-            expect(res.mode).toBe('cross_round') // curDebt is cross_round candidate when no past debt
+            expect(res.mode).toBe('immediate') // member with no past debt is immediate settlement
+            expect(res.label).toBe('เคลียร์งวดต่องวด')
             expect(res.expectedAmount).toBe(500)
         })
 

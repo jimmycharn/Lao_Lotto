@@ -842,6 +842,22 @@ describe('crossRoundOffsetCalculator', () => {
             })
             expect(alloc.currentRoundPayment.notes).toBe('ชำระหนี้งวดนี้ (กสิกรไทย โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว) เวลา 18:09 #Aa7bf7ec966354829)')
         })
+
+        it('uses เคลียร์ยอดคงค้าง when currentBalance < 0 (dealer pays member)', () => {
+            const alloc = allocateSettlementPaymentsByMode({
+                mode: 'current_debt',
+                currentBalance: -6314,
+                actualSlipAmount: 6314,
+                paidAt: '2026-10-21',
+                senderBank: 'ธนาคารออมสิน',
+                customNotes: 'น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxx...',
+                currentRound: curRound,
+                memberUserId: 'm-1',
+                dealerId: 'd-1'
+            })
+            expect(alloc.currentRoundPayment.direction).toBe('dealer_to_member')
+            expect(alloc.currentRoundPayment.notes).toBe('เคลียร์ยอดคงค้าง (ออมสิน น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxx...)')
+        })
     })
 
     describe('parsePaymentNotes & buildPaymentNotes', () => {
@@ -1019,6 +1035,17 @@ describe('crossRoundOffsetCalculator', () => {
             expect(isAutoSlipPayment('[สลิปอัตโนมัติ] นาย ธีระเดช บ (Ref: 016287203327BOR03490)')).toBe(true)
             expect(isAutoSlipPayment('ตรวจสลิปอัตโนมัติ เรียบร้อย')).toBe(true)
             expect(isAutoSlipPayment('SlipOK Topup')).toBe(true)
+        })
+
+        it('returns false for manual dealer-to-member payment with slip reference (Khun Mook case)', () => {
+            const mookNote = 'ชำระหนี้งวดนี้ (ออมสิน น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxx... #016287203327BOR03490)'
+            expect(isAutoSlipPayment(mookNote)).toBe(false)
+            expect(isAutoSlipPayment(mookNote, 'dealer_to_member')).toBe(false)
+        })
+
+        it('returns false for manual dealer-to-member payments even if they contain references or account info', () => {
+            expect(isAutoSlipPayment('เคลียร์ยอดคงค้าง (ออมสิน น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxx... #1234567890)', 'dealer_to_member')).toBe(false)
+            expect(isAutoSlipPayment('เคลียร์ยอดคงค้าง (โอนเงินให้สมาชิก เวลา 12:00 #REF12345678)', 'dealer_to_member')).toBe(false)
         })
     })
 

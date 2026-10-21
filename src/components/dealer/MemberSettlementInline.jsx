@@ -131,7 +131,7 @@ export default function MemberSettlementInline({
     useEffect(() => {
         if (editingPayment && !editSenderBank) {
             // Never auto-fill dealer bank for auto-slip payments!
-            if (isAutoSlipPayment(editingPayment?.notes)) {
+            if (isAutoSlipPayment(editingPayment?.notes, editingPayment?.direction)) {
                 return
             }
             if (editDirection === 'member_to_dealer' && resolvedMemberBank?.bank_name) {
@@ -348,14 +348,14 @@ export default function MemberSettlementInline({
         let initialSenderBank = ''
         if (parsed.senderBank) {
             initialSenderBank = matchBankOption(parsed.senderBank, THAI_BANKS)
-        } else if ((p.direction || 'member_to_dealer') === 'member_to_dealer' && !isAutoSlipPayment(p.notes)) {
+        } else if ((p.direction || 'member_to_dealer') === 'member_to_dealer' && !isAutoSlipPayment(p.notes, p.direction)) {
             const memberBankName = resolvedMemberBank?.bank_name || member?.bank_name || member?.profiles?.bank_name || ''
             initialSenderBank = matchBankOption(memberBankName, THAI_BANKS)
         }
         setEditSenderBank(initialSenderBank)
 
         // If it's an auto-slip payment and we're missing senderBank, paidTime, or customNotes, fetch from used_slips!
-        if (parsed.referenceDoc && (!initialSenderBank || !parsed.paidTime || !parsed.customNotes) && (isAutoSlipPayment(p.notes) || p.notes?.includes('#'))) {
+        if (parsed.referenceDoc && (!initialSenderBank || !parsed.paidTime || !parsed.customNotes) && (isAutoSlipPayment(p.notes, p.direction) || p.notes?.includes('#'))) {
             try {
                 const { data: slipRecord } = await supabase
                     .from('used_slips')
@@ -725,7 +725,7 @@ export default function MemberSettlementInline({
                                                     className="settlement-log-notes-cell"
                                                     title={p.notes || ''}
                                                 >
-                                                    {isAutoSlipPayment(p.notes) && (
+                                                    {isAutoSlipPayment(p.notes, p.direction) && (
                                                         <span style={{
                                                             display: 'inline-flex',
                                                             alignItems: 'center',
@@ -743,7 +743,7 @@ export default function MemberSettlementInline({
                                                         </span>
                                                     )}
                                                     {(() => {
-                                                        const isAuto = isAutoSlipPayment(p.notes)
+                                                        const isAuto = isAutoSlipPayment(p.notes, p.direction)
                                                         const clean = (p.notes || '').replace(/\[?สลิปอัตโนมัติ\]?\s*/g, '').trim()
                                                         return clean || (isAuto ? 'สลิปโอนเงิน' : '-')
                                                     })()}

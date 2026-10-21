@@ -720,8 +720,12 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
         }
     }
 
-    // 1. Current round prize payout record (if prize > 0)
-    if (prize > 0) {
+    // 1. Calculate how much current round prize is actually needed to offset past debts
+    const totalPastDebts = pastDebts.reduce((sum, d) => sum + Math.max(0, Number(d.debt) || 0), 0)
+    const prizeUsedForPast = Math.min(prize, totalPastDebts)
+
+    // Current round prize payout record is ONLY created for the portion of prize actually used to clear past debts
+    if (prizeUsedForPast > 0) {
         let prizeNotes = `หักล้างหนี้งวดเก่า [สลิปอัตโนมัติ]${transRef ? ` #${transRef}` : ''}`
         if (slipData) {
             const prizeDetails = extractSlipTransferDetails({
@@ -742,23 +746,23 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
             round_date: curRoundDate,
             payment_type: 'prize_payout',
             direction: 'dealer_to_member',
-            amount: prize,
+            amount: prizeUsedForPast,
             paid_at: effectivePaidAt,
             notes: prizeNotes,
             created_by: dealerId
         })
     }
 
-    // 2. Allocate clearing funds (prize + slip) to past debts
-    let remaining = Math.round((prize + slip) * 100) / 100
+    // 2. Allocate clearing funds (prizeUsedForPast + slip) to past debts
+    let remainingToPast = Math.round((prizeUsedForPast + slip) * 100) / 100
 
     for (const past of pastDebts) {
-        if (remaining <= 0) break
+        if (remainingToPast <= 0) break
         const debtAmt = Math.max(0, Number(past.debt) || 0)
         if (debtAmt <= 0) continue
 
-        const alloc = Math.min(debtAmt, remaining)
-        remaining = Math.round((remaining - alloc) * 100) / 100
+        const alloc = Math.min(debtAmt, remainingToPast)
+        remainingToPast = Math.round((remainingToPast - alloc) * 100) / 100
 
         if (alloc > 0) {
             payments.push({
@@ -777,10 +781,13 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
         }
     }
 
-    // 3. Allocate remaining funds to current round debt (if any)
-    if (remaining > 0 && currentRoundDebt > 0) {
-        const curAlloc = Math.min(currentRoundDebt, remaining)
-        remaining = Math.round((remaining - curAlloc) * 100) / 100
+    // 3. Allocate remaining slip funds to current round debt (if any)
+    const slipUsedForPast = Math.max(0, Math.round((totalPastDebts - prizeUsedForPast) * 100) / 100)
+    let remainingSlipForCurrent = Math.max(0, Math.round((slip - slipUsedForPast) * 100) / 100)
+
+    if (remainingSlipForCurrent > 0 && currentRoundDebt > 0) {
+        const curAlloc = Math.min(currentRoundDebt, remainingSlipForCurrent)
+        remainingSlipForCurrent = Math.round((remainingSlipForCurrent - curAlloc) * 100) / 100
 
         if (curAlloc > 0) {
             payments.push({
@@ -801,7 +808,7 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
 
     return {
         payments,
-        remainingFunds: remaining
+        remainingFunds: remainingSlipForCurrent
     }
 }
 
@@ -1270,7 +1277,7 @@ export function calculateCrossRoundModeDebt({
         }
         if (p.direction === 'member_to_dealer') {
             curPaidByMember += amt
-        } else if (p.direction === 'dealer_to_member' && p.payment_type !== 'prize_payout') {
+        } else if (p.direction === 'dealer_to_member') {
             curPaidByDealer += amt
         }
     }
@@ -1347,7 +1354,7 @@ export function evaluateAutoSettlementCandidate(params: {
     //    - Gross All: currentRoundDebt + pastDebtsTotal (e.g. 31130 + 62839 = 93969)
     //    - Net All: totalDebtWithCurrent (netPast + curDebt = 29889 + 31130 = 61019)
     const candidateImmediate = curDebt > 0 ? curDebt : 0
-    const candidateCrossRound = hasPast ? (netPast > 0 ? netPast : 0) : (curDebt > 0 ? curDebt : 0)
+    const candidateCrossRound = hasPast ? (netPast > 0 ? netPast : 0) : 0
     const candidateGrossAll = (curDebt > 0 && pastTot > 0) ? Math.round(curDebt + pastTot) : 0
     const candidateNetAll = (totDebt > 0 && totDebt !== candidateCrossRound && totDebt !== candidateImmediate && totDebt !== candidateGrossAll) ? totDebt : 0
     const candidateCrossRoundAll = candidateGrossAll > 0 ? candidateGrossAll : (candidateNetAll > 0 ? candidateNetAll : (totDebt > 0 ? totDebt : 0))
