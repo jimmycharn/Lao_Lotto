@@ -9,6 +9,7 @@ import {
     allocateSettlementPaymentsByMode,
     parsePaymentNotes,
     buildPaymentNotes,
+    extractLeadingSenderBank,
     formatThaiDate,
     formatThaiDateDDMMYYYY,
     normalizeThaiName,
@@ -966,6 +967,76 @@ describe('crossRoundOffsetCalculator', () => {
             expect(parsed.customNotes).toBe('โอนไป ออมสิน 020432578092 (นายธีรเดช บรรจงแก้ว)')
             expect(parsed.paidTime).toBe('20:33')
             expect(parsed.referenceDoc).toBe('016287203327BOR03490')
+        })
+
+        it('parses note starting with bank name without "โอนไป" (e.g. พี่มุก screenshot)', () => {
+            const note = 'ชำระหนี้งวดนี้ (ออมสิน น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxxx3306 เวลา 09:24 #6294092096541000002B9790)'
+            const parsed = parsePaymentNotes(note)
+            expect(parsed.prefix).toBe('ชำระหนี้งวดนี้')
+            expect(parsed.senderBank).toBe('ธนาคารออมสิน')
+            expect(parsed.customNotes).toBe('ออมสิน น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxxx3306')
+            expect(parsed.paidTime).toBe('09:24')
+            expect(parsed.referenceDoc).toBe('6294092096541000002B9790')
+
+            // Rebuilding with same senderBank should not duplicate the bank
+            const rebuilt = buildPaymentNotes({
+                originalPrefix: parsed.prefix,
+                senderBank: parsed.senderBank,
+                customNotes: parsed.customNotes,
+                paidTime: parsed.paidTime,
+                referenceDoc: parsed.referenceDoc
+            })
+            expect(rebuilt).toBe(note)
+        })
+
+        it('replaces leading bank cleanly when sender bank is changed in dropdown', () => {
+            const originalNote = 'ชำระหนี้งวดนี้ (ออมสิน น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxxx3306 เวลา 09:24 #6294092096541000002B9790)'
+            const parsed = parsePaymentNotes(originalNote)
+
+            // User changes dropdown to ธนาคารกสิกรไทย
+            const updated = buildPaymentNotes({
+                originalPrefix: parsed.prefix,
+                senderBank: 'ธนาคารกสิกรไทย',
+                customNotes: parsed.customNotes,
+                paidTime: parsed.paidTime,
+                referenceDoc: parsed.referenceDoc
+            })
+            expect(updated).toBe('ชำระหนี้งวดนี้ (กสิกรไทย น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxxx3306 เวลา 09:24 #6294092096541000002B9790)')
+
+            // Parsing the updated note extracts the new senderBank
+            const reparsed = parsePaymentNotes(updated)
+            expect(reparsed.senderBank).toBe('ธนาคารกสิกรไทย')
+            expect(reparsed.customNotes).toBe('กสิกรไทย น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxxx3306')
+        })
+
+        it('extractLeadingSenderBank correctly detects bank aliases and prefixes', () => {
+            expect(extractLeadingSenderBank('ออมสิน 12345')).toEqual({
+                matchedBank: 'ธนาคารออมสิน',
+                matchedToken: 'ออมสิน',
+                rest: '12345'
+            })
+            expect(extractLeadingSenderBank('ธนาคารกสิกรไทย 555')).toEqual({
+                matchedBank: 'ธนาคารกสิกรไทย',
+                matchedToken: 'ธนาคารกสิกรไทย',
+                rest: '555'
+            })
+            expect(extractLeadingSenderBank('จากไทยพาณิชย์ โอนเข้าบัญชี')).toEqual({
+                matchedBank: 'ธนาคารไทยพาณิชย์',
+                matchedToken: 'ไทยพาณิชย์',
+                rest: 'โอนเข้าบัญชี'
+            })
+            expect(extractLeadingSenderBank('กสิกร จ่ายแล้ว')).toEqual({
+                matchedBank: 'ธนาคารกสิกรไทย',
+                matchedToken: 'กสิกร',
+                rest: 'จ่ายแล้ว'
+            })
+            expect(extractLeadingSenderBank('พร้อมเพย์ 0812345678')).toEqual({
+                matchedBank: 'พร้อมเพย์',
+                matchedToken: 'พร้อมเพย์',
+                rest: '0812345678'
+            })
+            expect(extractLeadingSenderBank('ไม่ระบุธนาคาร')).toBeNull()
+            expect(extractLeadingSenderBank(null)).toBeNull()
         })
     })
 

@@ -351,6 +351,9 @@ export default function MemberSettlementInline({
         } else if ((p.direction || 'member_to_dealer') === 'member_to_dealer' && !isAutoSlipPayment(p.notes, p.direction)) {
             const memberBankName = resolvedMemberBank?.bank_name || member?.bank_name || member?.profiles?.bank_name || ''
             initialSenderBank = matchBankOption(memberBankName, THAI_BANKS)
+        } else if ((p.direction || 'member_to_dealer') === 'dealer_to_member' && !isAutoSlipPayment(p.notes, p.direction)) {
+            const dealerBankName = resolvedDealerBank?.bank_name || ''
+            initialSenderBank = matchBankOption(dealerBankName, THAI_BANKS)
         }
         setEditSenderBank(initialSenderBank)
 
@@ -1094,13 +1097,23 @@ export default function MemberSettlementInline({
                                             </div>
                                             <div
                                                 className={`cross-round-mode-card ${editDirection === 'dealer_to_member' ? 'active' : ''}`}
-                                                onClick={() => setEditDirection('dealer_to_member')}
+                                                onClick={() => {
+                                                    setEditDirection('dealer_to_member')
+                                                    if (!editSenderBank && resolvedDealerBank?.bank_name) {
+                                                        setEditSenderBank(matchBankOption(resolvedDealerBank.bank_name, THAI_BANKS))
+                                                    }
+                                                }}
                                             >
                                                 <input
                                                     type="checkbox"
                                                     className="cross-round-mode-checkbox"
                                                     checked={editDirection === 'dealer_to_member'}
-                                                    onChange={() => setEditDirection('dealer_to_member')}
+                                                    onChange={() => {
+                                                        setEditDirection('dealer_to_member')
+                                                        if (!editSenderBank && resolvedDealerBank?.bank_name) {
+                                                            setEditSenderBank(matchBankOption(resolvedDealerBank.bank_name, THAI_BANKS))
+                                                        }
+                                                    }}
                                                 />
                                                 <span>🔴 เจ้ามือจ่ายคนส่ง</span>
                                             </div>

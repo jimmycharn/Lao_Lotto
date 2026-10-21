@@ -917,8 +917,16 @@ export function allocateSettlementPaymentsByMode({
     
     const cleanSender = senderBank ? String(senderBank).replace(/^ธนาคาร\s*/, '').trim() : ''
     let fullCustomNote = customNotes && customNotes.trim() ? customNotes.trim() : ''
-    if (cleanSender && shouldPrependSenderBank(fullCustomNote, cleanSender)) {
-        fullCustomNote = `${cleanSender} ${fullCustomNote}`.trim()
+    if (cleanSender) {
+        const existingBankMatch = extractLeadingSenderBank(fullCustomNote)
+        if (existingBankMatch) {
+            const existingClean = existingBankMatch.matchedBank.replace(/^ธนาคาร\s*/, '').trim()
+            if (existingClean.toLowerCase() !== cleanSender.toLowerCase()) {
+                fullCustomNote = existingBankMatch.rest ? `${cleanSender} ${existingBankMatch.rest}`.trim() : cleanSender
+            }
+        } else if (shouldPrependSenderBank(fullCustomNote, cleanSender)) {
+            fullCustomNote = `${cleanSender} ${fullCustomNote}`.trim()
+        }
     }
 
     const noteDetails = [
@@ -1132,6 +1140,69 @@ export function allocateSettlementPaymentsByMode({
     }
 }
 
+export const KNOWN_BANK_PREFIXES = [
+    { token: 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)', bank: 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)' },
+    { token: 'เพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)', bank: 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)' },
+    { token: 'ธนาคารทหารไทยธนชาต (ttb)', bank: 'ธนาคารทหารไทยธนชาต (ttb)' },
+    { token: 'ทหารไทยธนชาต (ttb)', bank: 'ธนาคารทหารไทยธนชาต (ttb)' },
+    { token: 'ทหารไทยธนชาต', bank: 'ธนาคารทหารไทยธนชาต (ttb)' },
+    { token: 'ธนาคารกรุงศรีอยุธยา', bank: 'ธนาคารกรุงศรีอยุธยา' },
+    { token: 'กรุงศรีอยุธยา', bank: 'ธนาคารกรุงศรีอยุธยา' },
+    { token: 'ธนาคารเกียรตินาคินภัทร', bank: 'ธนาคารเกียรตินาคินภัทร' },
+    { token: 'เกียรตินาคินภัทร', bank: 'ธนาคารเกียรตินาคินภัทร' },
+    { token: 'ธนาคารแลนด์ แอนด์ เฮ้าส์', bank: 'ธนาคารแลนด์ แอนด์ เฮ้าส์' },
+    { token: 'แลนด์ แอนด์ เฮ้าส์', bank: 'ธนาคารแลนด์ แอนด์ เฮ้าส์' },
+    { token: 'ธนาคารอาคารสงเคราะห์', bank: 'ธนาคารอาคารสงเคราะห์' },
+    { token: 'อาคารสงเคราะห์', bank: 'ธนาคารอาคารสงเคราะห์' },
+    { token: 'ธนาคารไทยพาณิชย์', bank: 'ธนาคารไทยพาณิชย์' },
+    { token: 'ไทยพาณิชย์', bank: 'ธนาคารไทยพาณิชย์' },
+    { token: 'ธนาคารกสิกรไทย', bank: 'ธนาคารกสิกรไทย' },
+    { token: 'กสิกรไทย', bank: 'ธนาคารกสิกรไทย' },
+    { token: 'ธนาคารกรุงไทย', bank: 'ธนาคารกรุงไทย' },
+    { token: 'กรุงไทย', bank: 'ธนาคารกรุงไทย' },
+    { token: 'ธนาคารกรุงเทพ', bank: 'ธนาคารกรุงเทพ' },
+    { token: 'กรุงเทพ', bank: 'ธนาคารกรุงเทพ' },
+    { token: 'ธนาคารซีไอเอ็มบี', bank: 'ธนาคารซีไอเอ็มบี' },
+    { token: 'ซีไอเอ็มบี', bank: 'ธนาคารซีไอเอ็มบี' },
+    { token: 'ธนาคารออมสิน', bank: 'ธนาคารออมสิน' },
+    { token: 'ออมสิน', bank: 'ธนาคารออมสิน' },
+    { token: 'ธนาคารยูโอบี', bank: 'ธนาคารยูโอบี' },
+    { token: 'ยูโอบี', bank: 'ธนาคารยูโอบี' },
+    { token: 'พร้อมเพย์', bank: 'พร้อมเพย์' },
+    { token: 'ธ.ก.ส.', bank: 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)' },
+    { token: 'ธกส', bank: 'ธนาคารเพื่อการเกษตรและสหกรณ์การเกษตร (ธ.ก.ส.)' },
+    { token: 'ธอส.', bank: 'ธนาคารอาคารสงเคราะห์' },
+    { token: 'กสิกร', bank: 'ธนาคารกสิกรไทย' },
+    { token: 'กรุงศรี', bank: 'ธนาคารกรุงศรีอยุธยา' },
+    { token: 'ttb', bank: 'ธนาคารทหารไทยธนชาต (ttb)' }
+]
+
+/**
+ * Extracts leading sender bank from notes string if it starts with any known bank.
+ *
+ * @param {string} notes
+ * @returns {{ matchedBank: string, matchedToken: string, rest: string } | null}
+ */
+export function extractLeadingSenderBank(notes) {
+    if (!notes || typeof notes !== 'string') return null
+    const trimmed = notes.trim()
+    if (!trimmed) return null
+
+    for (const item of KNOWN_BANK_PREFIXES) {
+        const escaped = item.token.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')
+        const pattern = new RegExp(`^(?:จาก\\s*)?(?:ธนาคาร\\s*)?${escaped}(?:\\s+|$)(.*)$`, 'i')
+        const match = trimmed.match(pattern)
+        if (match) {
+            return {
+                matchedBank: item.bank,
+                matchedToken: item.token,
+                rest: (match[1] || '').trim()
+            }
+        }
+    }
+    return null
+}
+
 /**
  * Determines if senderBank should be prepended to customNotes.
  * Returns false if customNotes already starts with senderBank (with or without 'จาก' or 'ธนาคาร').
@@ -1262,14 +1333,19 @@ export function parsePaymentNotes(notes) {
             senderBank = transferMatch[1].replace(/^จาก\s*/, '').trim()
             customNotes = transferMatch[2].trim()
         } else {
-            // If the entire customNotes is a bank name (e.g. "ออมสิน" or "ธนาคารออมสิน")
-            const matchedExactBank = THAI_BANKS.find(b => {
-                const clean = b.replace(/^ธนาคาร\s*/, '').trim().toLowerCase()
-                const cleanNote = customNotes.replace(/^ธนาคาร\s*/, '').trim().toLowerCase()
-                return clean === cleanNote
-            })
-            if (matchedExactBank) {
-                senderBank = matchedExactBank
+            // 2. Check if customNotes starts with a known bank (e.g. "ออมสิน น.ส.มุกจริญา...") or is a bank name
+            const leadingBankMatch = extractLeadingSenderBank(customNotes)
+            if (leadingBankMatch) {
+                senderBank = leadingBankMatch.matchedBank
+            } else {
+                const matchedExactBank = THAI_BANKS.find(b => {
+                    const clean = b.replace(/^ธนาคาร\s*/, '').trim().toLowerCase()
+                    const cleanNote = customNotes.replace(/^ธนาคาร\s*/, '').trim().toLowerCase()
+                    return clean === cleanNote
+                })
+                if (matchedExactBank) {
+                    senderBank = matchedExactBank
+                }
             }
         }
     }
@@ -1317,8 +1393,16 @@ export function buildPaymentNotes({
 
     const cleanSender = senderBank ? String(senderBank).replace(/^ธนาคาร\s*/, '').trim() : ''
     let fullCustomNote = customNotes && customNotes.trim() ? customNotes.trim() : ''
-    if (cleanSender && shouldPrependSenderBank(fullCustomNote, cleanSender)) {
-        fullCustomNote = `${cleanSender} ${fullCustomNote}`.trim()
+    if (cleanSender) {
+        const existingBankMatch = extractLeadingSenderBank(fullCustomNote)
+        if (existingBankMatch) {
+            const existingClean = existingBankMatch.matchedBank.replace(/^ธนาคาร\s*/, '').trim()
+            if (existingClean.toLowerCase() !== cleanSender.toLowerCase()) {
+                fullCustomNote = existingBankMatch.rest ? `${cleanSender} ${existingBankMatch.rest}`.trim() : cleanSender
+            }
+        } else if (shouldPrependSenderBank(fullCustomNote, cleanSender)) {
+            fullCustomNote = `${cleanSender} ${fullCustomNote}`.trim()
+        }
     }
 
     const noteDetails = [
