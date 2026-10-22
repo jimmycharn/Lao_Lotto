@@ -629,6 +629,356 @@ describe('Dealer history rounds filtered by combined sender search and settlemen
     })
 })
 
+describe('History tab sender search filters BOTH members and upstream dealers with correct totals and card stats', () => {
+    const isUpstreamMatch = (t, query) => {
+        if (!query) return true
+        const q = (query || '').trim().toLowerCase()
+        if (!q) return true
+        const dName = (t.dealerName || t.target_dealer_name || t.upstream_dealer?.full_name || t.upstream_dealer_name || '').toLowerCase()
+        return dName.includes(q)
+    }
+
+    const isMemberMatch = (uh, query) => {
+        if (!query) return true
+        const q = (query || '').trim().toLowerCase()
+        if (!q) return true
+        const name = (uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || '').toLowerCase()
+        return name.includes(q)
+    }
+
+    const isUhSettled = (uh, allPayments) => {
+        const mPayments = (allPayments || []).filter(p => p.user_id === uh.user_id)
+        const comm = uh.total_commission !== undefined ? Number(uh.total_commission) : Math.round(Number(uh.total_amount || 0) * 0.20)
+        const initBal = calculateMemberInitialBalance({ ...uh, total_commission: comm })
+        const currBal = calculateMemberCurrentBalance(initBal, mPayments)
+        return Math.abs(currBal) <= 0.01
+    }
+
+    const isTransferSettled = (t, allUpstreamPayments) => {
+        const upstreamName = t.dealerName || "เจ้ามือ"
+        const upPayments = (allUpstreamPayments || []).filter(p => p.upstream_dealer_name === upstreamName)
+        const initBal = calculateUpstreamInitialBalance(t)
+        const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)
+        return Math.abs(currBal) <= 0.01
+    }
+
+    const calculateHistoryTotals = ({
+        rounds,
+        roundUserHistories,
+        roundPayments,
+        roundTransfers,
+        roundUpstreamPayments,
+        senderSearch = '',
+        settlementFilter = 'all'
+    }) => {
+        const senderQuery = (senderSearch || '').trim().toLowerCase()
+
+        return rounds.reduce((acc, h) => {
+            const uHist = roundUserHistories[h.id] || []
+            const allPayments = roundPayments[h.id] || []
+            const eTransfers = roundTransfers[h.id] || []
+            const allUpstreamPayments = roundUpstreamPayments[h.id] || []
+
+            let inAmt = 0
+            let inComm = 0
+            let inPay = 0
+            let inProfit = 0
+            let outAmt = 0
+            let outComm = 0
+            let outWin = 0
+            let outProfit = 0
+
+            if (senderQuery) {
+                let matchingMembers = uHist.filter(uh => isMemberMatch(uh, senderQuery))
+                if (settlementFilter === 'settled') {
+                    matchingMembers = matchingMembers.filter(uh => isUhSettled(uh, allPayments))
+                } else if (settlementFilter === 'pending') {
+                    matchingMembers = matchingMembers.filter(uh => !isUhSettled(uh, allPayments))
+                }
+
+                matchingMembers.forEach(uh => {
+                    const amt = Number(uh.total_amount || 0)
+                    const comm = uh.total_commission !== undefined ? Number(uh.total_commission) : Math.round(amt * 0.20)
+                    const win = Number(uh.total_winnings || 0)
+                    inAmt += amt
+                    inComm += comm
+                    inPay += win
+                    inProfit += (amt - comm - win)
+                })
+
+                let matchingTransfers = eTransfers.filter(t => isUpstreamMatch(t, senderQuery))
+                if (settlementFilter === 'settled') {
+                    matchingTransfers = matchingTransfers.filter(t => isTransferSettled(t, allUpstreamPayments))
+                } else if (settlementFilter === 'pending') {
+                    matchingTransfers = matchingTransfers.filter(t => !isTransferSettled(t, allUpstreamPayments))
+                }
+
+                matchingTransfers.forEach(t => {
+                    const amt = Number(t.amount || 0)
+                    const comm = Number(t.commission_earned || 0)
+                    const win = Number(t.winnings || 0)
+                    outAmt += amt
+                    outComm += comm
+                    outWin += win
+                    outProfit += (-amt + comm + win)
+                })
+            } else {
+                inAmt = h.total_amount || 0
+                inComm = h.total_commission || 0
+                inPay = h.total_payout || 0
+                inProfit = inAmt - inComm - inPay
+
+                outAmt = h.transferred_amount || 0
+                outComm = h.upstream_commission || 0
+                outWin = h.upstream_winnings || 0
+                outProfit = -outAmt + outComm + outWin
+            }
+
+            acc.total_amount += inAmt
+            acc.total_commission += inComm
+            acc.total_payout += inPay
+            acc.incoming_profit += inProfit
+
+            acc.transferred_amount += outAmt
+            acc.upstream_commission += outComm
+            acc.upstream_winnings += outWin
+            acc.outgoing_profit += outProfit
+
+            acc.profit = acc.incoming_profit + acc.outgoing_profit
+            return acc
+        }, {
+            total_amount: 0,
+            total_commission: 0,
+            total_payout: 0,
+            incoming_profit: 0,
+            transferred_amount: 0,
+            upstream_commission: 0,
+            upstream_winnings: 0,
+            outgoing_profit: 0,
+            profit: 0
+        })
+    }
+
+    const getRoundCardStats = ({
+        history,
+        userHistories = [],
+        payments = [],
+        transfers = [],
+        upstreamPayments = [],
+        senderSearch = '',
+        settlementFilter = 'all'
+    }) => {
+        const senderQuery = (senderSearch || '').trim().toLowerCase()
+
+        if (senderQuery) {
+            let cardMembers = userHistories.filter(uh => isMemberMatch(uh, senderQuery))
+            if (settlementFilter === 'settled') {
+                cardMembers = cardMembers.filter(uh => isUhSettled(uh, payments))
+            } else if (settlementFilter === 'pending') {
+                cardMembers = cardMembers.filter(uh => !isUhSettled(uh, payments))
+            }
+
+            const hInAmt = cardMembers.reduce((sum, u) => sum + Number(u.total_amount || 0), 0)
+            const hInComm = cardMembers.reduce((sum, u) => sum + (u.total_commission !== undefined ? Number(u.total_commission) : Math.round(Number(u.total_amount || 0) * 0.20)), 0)
+            const hInPay = cardMembers.reduce((sum, u) => sum + Number(u.total_winnings || 0), 0)
+            const hInProfit = hInAmt - hInComm - hInPay
+
+            let cardTransfers = transfers.filter(t => isUpstreamMatch(t, senderQuery))
+            if (settlementFilter === 'settled') {
+                cardTransfers = cardTransfers.filter(t => isTransferSettled(t, upstreamPayments))
+            } else if (settlementFilter === 'pending') {
+                cardTransfers = cardTransfers.filter(t => !isTransferSettled(t, upstreamPayments))
+            }
+
+            const hOutAmt = cardTransfers.reduce((sum, t) => sum + Number(t.amount || 0), 0)
+            const hOutComm = cardTransfers.reduce((sum, t) => sum + Number(t.commission_earned || 0), 0)
+            const hOutWin = cardTransfers.reduce((sum, t) => sum + Number(t.winnings || 0), 0)
+            const hOutProfit = -hOutAmt + hOutComm + hOutWin
+            const cardProfit = hInProfit + hOutProfit
+
+            let cardMemberOwes = 0
+            let cardDealerOwes = 0
+            cardMembers.forEach(uh => {
+                const mPayments = payments.filter(p => p.user_id === uh.user_id)
+                const comm = uh.total_commission !== undefined ? Number(uh.total_commission) : Math.round(Number(uh.total_amount || 0) * 0.20)
+                const initBal = calculateMemberInitialBalance({ ...uh, total_commission: comm })
+                const currBal = calculateMemberCurrentBalance(initBal, mPayments)
+                if (currBal > 0.01) cardMemberOwes += currBal
+                else if (currBal < -0.01) cardDealerOwes += Math.abs(currBal)
+            })
+
+            let cardDealerOwesUpstream = 0
+            let cardUpstreamOwesDealer = 0
+            cardTransfers.forEach(t => {
+                const upstreamName = t.dealerName || "เจ้ามือ"
+                const upPayments = upstreamPayments.filter(p => p.upstream_dealer_name === upstreamName)
+                const initBal = calculateUpstreamInitialBalance(t)
+                const currBal = calculateUpstreamCurrentBalance(initBal, upPayments)
+                if (currBal > 0.01) cardDealerOwesUpstream += currBal
+                else if (currBal < -0.01) cardUpstreamOwesDealer += Math.abs(currBal)
+            })
+
+            const isSettled = (
+                cardMemberOwes <= 0.01 &&
+                cardDealerOwes <= 0.01 &&
+                cardDealerOwesUpstream <= 0.01 &&
+                cardUpstreamOwesDealer <= 0.01
+            )
+            const netOutstanding = (cardMemberOwes + cardUpstreamOwesDealer) - (cardDealerOwes + cardDealerOwesUpstream)
+
+            return {
+                hInAmt, hInComm, hInPay, hInProfit,
+                hOutAmt, hOutComm, hOutWin, hOutProfit,
+                cardProfit,
+                isSettled,
+                netOutstanding
+            }
+        }
+
+        const hInAmt = history.total_amount || 0
+        const hInComm = history.total_commission || 0
+        const hInPay = history.total_payout || 0
+        const hInProfit = hInAmt - hInComm - hInPay
+        const hOutAmt = history.transferred_amount || 0
+        const hOutComm = history.upstream_commission || 0
+        const hOutWin = history.upstream_winnings || 0
+        const hOutProfit = -hOutAmt + hOutComm + hOutWin
+        return {
+            hInAmt, hInComm, hInPay, hInProfit,
+            hOutAmt, hOutComm, hOutWin, hOutProfit,
+            cardProfit: hInProfit + hOutProfit,
+            isSettled: false,
+            netOutstanding: 0
+        }
+    }
+
+    // Mock scenario matching user's case:
+    // Round 1:
+    // - Nam1 submitted: amt 5,000, comm 1,000, win 2,000 -> net owed = 2,000. Paid 2,000 -> currBal = 0 (SETTLED)
+    // - Other member Somchai: amt 15,000, comm 3,000, win 0 -> net owed = 12,000. Paid 0 -> currBal = 12,000 (PENDING)
+    // - Upstream transfer to "เจ้ามือเป็ด" (Not Nam1): amount 2,000, comm 500, win 0 -> net owed = 1,500. Paid 1,500 (SETTLED)
+    const mockRounds = [
+        { id: 'round-101', total_amount: 20000, total_commission: 4000, total_payout: 2000, transferred_amount: 2000, upstream_commission: 500, upstream_winnings: 0 }
+    ]
+
+    const mockRoundUserHistories = {
+        'round-101': [
+            { user_id: 'user-nam1', total_amount: 5000, total_commission: 1000, total_winnings: 2000, profiles: { full_name: 'น้ำ1' } },
+            { user_id: 'user-somchai', total_amount: 15000, total_commission: 3000, total_winnings: 0, profiles: { full_name: 'นายสมชาย' } }
+        ]
+    }
+
+    const mockRoundPayments = {
+        'round-101': [
+            { user_id: 'user-nam1', amount: 2000, direction: 'member_to_dealer', status: 'completed' }
+        ]
+    }
+
+    const mockRoundTransfers = {
+        'round-101': [
+            { id: 'trf-1', dealerName: 'เจ้ามือเป็ด', amount: 2000, commission_earned: 500, winnings: 0 }
+        ]
+    }
+
+    const mockRoundUpstreamPayments = {
+        'round-101': [
+            { upstream_dealer_name: 'เจ้ามือเป็ด', amount: 1500, direction: 'dealer_to_upstream', status: 'completed' }
+        ]
+    }
+
+    it('correctly calculates historyTotals for "น้ำ1" filtering settled entries: outgoing must be 0 and incoming only from Nam1', () => {
+        const totals = calculateHistoryTotals({
+            rounds: mockRounds,
+            roundUserHistories: mockRoundUserHistories,
+            roundPayments: mockRoundPayments,
+            roundTransfers: mockRoundTransfers,
+            roundUpstreamPayments: mockRoundUpstreamPayments,
+            senderSearch: 'น้ำ1',
+            settlementFilter: 'settled'
+        })
+
+        // Incoming must ONLY be Nam1 (5000), not full round (20000)
+        expect(totals.total_amount).toBe(5000)
+        expect(totals.total_commission).toBe(1000)
+        expect(totals.total_payout).toBe(2000)
+        expect(totals.incoming_profit).toBe(2000) // 5000 - 1000 - 2000
+
+        // Outgoing must be 0 because upstream dealer is "เจ้ามือเป็ด", not "น้ำ1"
+        expect(totals.transferred_amount).toBe(0)
+        expect(totals.upstream_commission).toBe(0)
+        expect(totals.upstream_winnings).toBe(0)
+        expect(totals.outgoing_profit).toBe(0)
+
+        // Net profit
+        expect(totals.profit).toBe(2000)
+    })
+
+    it('correctly calculates round card stats for "น้ำ1": header shows only Nam1, outgoing is 0, and status is SETTLED', () => {
+        const cardStats = getRoundCardStats({
+            history: mockRounds[0],
+            userHistories: mockRoundUserHistories['round-101'],
+            payments: mockRoundPayments['round-101'],
+            transfers: mockRoundTransfers['round-101'],
+            upstreamPayments: mockRoundUpstreamPayments['round-101'],
+            senderSearch: 'น้ำ1',
+            settlementFilter: 'settled'
+        })
+
+        expect(cardStats.hInAmt).toBe(5000)
+        expect(cardStats.hInComm).toBe(1000)
+        expect(cardStats.hInPay).toBe(2000)
+        expect(cardStats.hInProfit).toBe(2000)
+
+        // Outgoing must be 0
+        expect(cardStats.hOutAmt).toBe(0)
+        expect(cardStats.hOutComm).toBe(0)
+        expect(cardStats.hOutWin).toBe(0)
+        expect(cardStats.hOutProfit).toBe(0)
+        expect(cardStats.cardProfit).toBe(2000)
+
+        // Crucial: Card is settled for Nam1 (netOutstanding = 0), even though Somchai is pending in the same round!
+        expect(cardStats.isSettled).toBe(true)
+        expect(cardStats.netOutstanding).toBe(0)
+    })
+
+    it('correctly calculates historyTotals when searching for an upstream dealer name e.g. "เป็ด"', () => {
+        const totals = calculateHistoryTotals({
+            rounds: mockRounds,
+            roundUserHistories: mockRoundUserHistories,
+            roundPayments: mockRoundPayments,
+            roundTransfers: mockRoundTransfers,
+            roundUpstreamPayments: mockRoundUpstreamPayments,
+            senderSearch: 'เป็ด',
+            settlementFilter: 'settled'
+        })
+
+        // Incoming must be 0 because no member has "เป็ด"
+        expect(totals.total_amount).toBe(0)
+        expect(totals.total_commission).toBe(0)
+        expect(totals.total_payout).toBe(0)
+        expect(totals.incoming_profit).toBe(0)
+
+        // Outgoing must reflect "เจ้ามือเป็ด"
+        expect(totals.transferred_amount).toBe(2000)
+        expect(totals.upstream_commission).toBe(500)
+        expect(totals.upstream_winnings).toBe(0)
+        expect(totals.outgoing_profit).toBe(-1500) // -2000 + 500 + 0
+
+        expect(totals.profit).toBe(-1500)
+    })
+
+    it('filters effective transfers by search query: returns empty array when searching "น้ำ1" and dealer is "เจ้ามือเป็ด"', () => {
+        const transfers = mockRoundTransfers['round-101']
+        const filteredForNam1 = transfers.filter(t => isUpstreamMatch(t, 'น้ำ1'))
+        expect(filteredForNam1).toHaveLength(0)
+
+        const filteredForPed = transfers.filter(t => isUpstreamMatch(t, 'เป็ด'))
+        expect(filteredForPed).toHaveLength(1)
+        expect(filteredForPed[0].dealerName).toBe('เจ้ามือเป็ด')
+    })
+})
+
+
 
 
 
