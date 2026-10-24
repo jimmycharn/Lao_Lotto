@@ -39,6 +39,7 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
     const [phone, setPhone] = useState('')
     const [role, setRole] = useState('user')
     const [isActive, setIsActive] = useState(true)
+    const [allowMultiDeviceLogin, setAllowMultiDeviceLogin] = useState(false)
     const [bankName, setBankName] = useState('')
     const [bankAccountName, setBankAccountName] = useState('')
     const [bankAccountNumber, setBankAccountNumber] = useState('')
@@ -55,6 +56,7 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
             setPhone(user.phone || '')
             setRole(user.role || 'user')
             setIsActive(user.is_active !== false)
+            setAllowMultiDeviceLogin(user.allow_multi_device_login === true)
             setBankName(user.bank_name || '')
             setBankAccountName(user.bank_account_name || '')
             setBankAccountNumber(user.bank_account_number || user.bank_account || '')
@@ -133,7 +135,8 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
                 new_bank_name: bankName.trim() || null,
                 new_bank_account_name: bankAccountName.trim() || null,
                 new_bank_account_number: bankAccountNumber.trim() || null,
-                new_is_active: isActive
+                new_is_active: isActive,
+                new_allow_multi_device_login: allowMultiDeviceLogin
             })
 
             if (rpcError) {
@@ -304,6 +307,19 @@ export default function EditMemberModal({ isOpen, user, onClose, onUpdated }) {
                                         </span>
                                     </label>
                                 </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label>การเข้าสู่ระบบ (อุปกรณ์)</label>
+                                <select
+                                    value={allowMultiDeviceLogin ? 'true' : 'false'}
+                                    onChange={(e) => setAllowMultiDeviceLogin(e.target.value === 'true')}
+                                    disabled={submitting}
+                                    className="edit-role-select"
+                                >
+                                    <option value="false">📱 เข้าสู่ระบบได้ทีละเครื่อง (Single Device) - มี OTP / ยืนยันเครื่องเดิม</option>
+                                    <option value="true">💻 เข้าสู่ระบบได้หลายเครื่องพร้อมกัน (Multi-Device) - ไม่เตะเครื่องเดิม</option>
+                                </select>
                             </div>
                         </div>
                     </div>

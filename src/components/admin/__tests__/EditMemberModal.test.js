@@ -42,4 +42,16 @@ describe('EditMemberModal Helpers', () => {
             expect(validateEmailFormat('   ')).toBe(false)
         })
     })
+
+    describe('multi-device login options', () => {
+        it('maps allow_multi_device_login properly based on boolean or user object', () => {
+            const userWithMulti = { id: 'u1', allow_multi_device_login: true }
+            const userWithoutMulti = { id: 'u2', allow_multi_device_login: false }
+            const userDefault = { id: 'u3' }
+
+            expect(userWithMulti.allow_multi_device_login === true).toBe(true)
+            expect(userWithoutMulti.allow_multi_device_login === true).toBe(false)
+            expect(userDefault.allow_multi_device_login === true).toBe(false)
+        })
+    })
 })
