@@ -24,7 +24,9 @@ import {
     FiGitBranch,
     FiSlash,
     FiUnlock,
-    FiLock
+    FiLock,
+    FiLayers,
+    FiSmartphone
 } from 'react-icons/fi'
 import './Admin.css'
 
@@ -142,6 +144,37 @@ export default function Admin() {
         } catch (error) {
             console.error('Error toggling block status:', error)
             toast.error('เกิดข้อผิดพลาดในการเปลี่ยนสถานะสมาชิก')
+        }
+    }
+
+    const handleToggleMultiDeviceLogin = async (targetUser) => {
+        const currentAllowed = targetUser.allow_multi_device_login === true
+        const nextAllowed = !currentAllowed
+        const actionTitle = nextAllowed ? 'อนุญาต Login หลายเครื่อง' : 'จำกัด Login ทีละเครื่อง'
+        const actionDesc = nextAllowed
+            ? `ต้องการอนุญาตให้คุณ ${targetUser.full_name || targetUser.email} เข้าสู่ระบบได้หลายเครื่องพร้อมกันหรือไม่? (จะไม่ต้องยืนยัน OTP เมื่อเข้าสู่ระบบจากเครื่องใหม่)`
+            : `ต้องการจำกัดให้คุณ ${targetUser.full_name || targetUser.email} เข้าสู่ระบบได้ทีละเครื่องหรือไม่? (หากมีเครื่องอื่นเข้า จะต้องได้รับอนุมัติหรือกรอก PIN)`
+
+        if (!(await confirmDialog({
+            title: actionTitle,
+            message: actionDesc,
+            confirmText: nextAllowed ? 'อนุญาตหลายเครื่อง' : 'จำกัดทีละเครื่อง',
+            type: nextAllowed ? 'info' : 'warning'
+        }))) return
+
+        try {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ allow_multi_device_login: nextAllowed })
+                .eq('id', targetUser.id)
+
+            if (error) throw error
+
+            toast.success(`ตั้งค่าให้คุณ ${targetUser.full_name || targetUser.email} ${nextAllowed ? 'เข้าสู่ระบบได้หลายเครื่องพร้อมกัน' : 'เข้าสู่ระบบได้ทีละเครื่อง'} เรียบร้อยแล้ว`)
+            fetchUsers()
+        } catch (error) {
+            console.error('Error toggling multi-device login:', error)
+            toast.error('เกิดข้อผิดพลาดในการตั้งค่าการเข้าสู่ระบบ: ' + (error.message || ''))
         }
     }
 
@@ -322,6 +355,9 @@ export default function Admin() {
                                                             {isSelf && (
                                                                 <span className="status-badge current-user" style={{ marginLeft: '6px', background: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', fontSize: '0.75rem' }}>(คุณ)</span>
                                                             )}
+                                                            {user.allow_multi_device_login && (
+                                                                <span className="status-badge multi-device" style={{ marginLeft: '6px' }} title="เข้าสู่ระบบได้หลายเครื่องพร้อมกัน">📱 หลายเครื่อง</span>
+                                                            )}
                                                             {user.is_active === false && (
                                                                 <span className="status-badge blocked" style={{ marginLeft: '6px' }}>🔴 โดนบล็อก</span>
                                                             )}
@@ -350,6 +386,13 @@ export default function Admin() {
                                                         </td>
                                                         <td>
                                                             <div className="action-buttons" style={{ justifyContent: 'center' }}>
+                                                                <button
+                                                                    className={`action-btn multi-device ${user.allow_multi_device_login ? 'active' : 'single'}`}
+                                                                    title={user.allow_multi_device_login ? 'อนุญาต Login หลายเครื่อง (คลิกเพื่อเปลี่ยนเป็น Login ทีละเครื่อง)' : 'จำกัด Login ทีละเครื่อง (คลิกเพื่ออนุญาต Login หลายเครื่อง)'}
+                                                                    onClick={() => handleToggleMultiDeviceLogin(user)}
+                                                                >
+                                                                    {user.allow_multi_device_login ? <FiLayers /> : <FiSmartphone />}
+                                                                </button>
                                                                 <button
                                                                     className="action-btn edit"
                                                                     title="แก้ไขข้อมูลสมาชิก"
