@@ -503,26 +503,29 @@ export function AuthProvider({ children }) {
         cleanups.push(stopCheck)
 
         // 3. Check for any existing pending login request on mount / reconnect (Device A prompt)
-        getPendingLoginRequest(user.id).then(res => {
-            if (res?.has_pending) {
-                console.log('Pending login request detected:', res)
-                setPendingLoginApproval(res)
-            }
-        }).catch(() => {})
-
         // 4. Subscribe to login verification requests from other devices (Device A prompt)
-        const unsubLoginRequests = subscribeToLoginRequests(user.id, {
-            onPendingRequest: (req) => {
-                console.log('Incoming login request from other device:', req)
-                setPendingLoginApproval(req)
-            },
-            onStatusChange: (decision) => {
-                if (decision?.status === 'rejected' || decision?.status === 'expired') {
-                    setPendingLoginApproval(null)
+        // Only needed when multi-device login is NOT enabled (multi-device accounts never prompt for device approval)
+        if (!profile.allow_multi_device_login) {
+            getPendingLoginRequest(user.id).then(res => {
+                if (res?.has_pending) {
+                    console.log('Pending login request detected:', res)
+                    setPendingLoginApproval(res)
                 }
-            }
-        })
-        cleanups.push(unsubLoginRequests)
+            }).catch(() => {})
+
+            const unsubLoginRequests = subscribeToLoginRequests(user.id, {
+                onPendingRequest: (req) => {
+                    console.log('Incoming login request from other device:', req)
+                    setPendingLoginApproval(req)
+                },
+                onStatusChange: (decision) => {
+                    if (decision?.status === 'rejected' || decision?.status === 'expired') {
+                        setPendingLoginApproval(null)
+                    }
+                }
+            })
+            cleanups.push(unsubLoginRequests)
+        }
 
         sessionCleanupRef.current = () => {
             cleanups.forEach(fn => fn())
@@ -534,7 +537,7 @@ export function AuthProvider({ children }) {
                 sessionCleanupRef.current = null
             }
         }
-    }, [user?.id, profile?.role, pendingOtp])
+    }, [user?.id, profile?.role, profile?.allow_multi_device_login, pendingOtp])
 
     // Approve a pending login request from another device (called by Device A)
     const approvePendingLogin = async (requestId) => {

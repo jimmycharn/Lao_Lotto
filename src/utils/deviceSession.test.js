@@ -165,4 +165,24 @@ describe('deviceSession - Multi-Device Login Approval & PIN System', () => {
             payload: expect.objectContaining({ request_id: 'req-999' })
         })
     })
+
+    it('checkDeviceSession bypasses OTP when multi-device login is enabled', async () => {
+        const mockChannel = { send: vi.fn() }
+        supabase.channel.mockReturnValue(mockChannel)
+        supabase.rpc.mockResolvedValue({
+            data: {
+                needs_otp: false,
+                session_created: true,
+                multi_device: true
+            },
+            error: null
+        })
+
+        const result = await checkDeviceSession('user-multi-device')
+        expect(result.needs_otp).toBe(false)
+        expect(result.session_created).toBe(true)
+        expect(result.multi_device).toBe(true)
+        // Does NOT broadcast any NEW_LOGIN_ATTEMPT event
+        expect(mockChannel.send).not.toHaveBeenCalled()
+    })
 })
