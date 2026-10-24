@@ -2555,7 +2555,7 @@ export default function Dealer() {
                     .from('lottery_rounds')
                     .select('*')
                     .eq('dealer_id', user.id)
-                    .in('status', ['closed', 'announced'])
+                    .or('status.eq.announced,is_result_announced.eq.true')
                     .order('close_time', { ascending: false }),
                 supabase
                     .from('user_settings')
@@ -2635,6 +2635,8 @@ export default function Dealer() {
 
             if (activeClosedRounds && activeClosedRounds.length > 0) {
                 for (const round of activeClosedRounds) {
+                    // Critical domain rule: unannounced rounds cannot be displayed in history tab
+                    if (!round.is_result_announced && round.status !== 'announced') continue
                     if (existingRoundIds.has(round.id) && existingUrhRoundIds.has(round.id)) continue
 
                     // Fetch submissions for this active closed round

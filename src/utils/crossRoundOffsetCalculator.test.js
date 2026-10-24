@@ -194,6 +194,25 @@ describe('crossRoundOffsetCalculator', () => {
             expect(allocation.pastRoundPayments[1].amount).toBe(1000) // Partially clears round-2
         })
 
+        it('does NOT create currentRoundPayment (prize_payout) when selectedPastRounds has 0 debt (Pee Rung case)', () => {
+            const currentRound = { id: 'round-22', roundDate: '2026-10-22', lotteryType: 'lao' }
+
+            const allocation = allocateCrossRoundOffsetPayments({
+                selectedPastRounds: [], // No past debts
+                offsetPrizeAmount: 3000,
+                actualSlipAmount: 254,
+                paidAt: '2026-10-23',
+                currentRound,
+                memberUserId: 'u-rung',
+                dealerId: 'dealer-1',
+                isUpstream: false
+            })
+
+            // When no past debts are being offset, prizeUsedForPast is 0, so NO prize_payout should be created!
+            expect(allocation.currentRoundPayment).toBeNull()
+            expect(allocation.pastRoundPayments).toHaveLength(0)
+        })
+
         it('handles upstream cross-round offset correctly with prize_collection and dealer_to_upstream', () => {
             const pastRounds = [
                 { roundId: 'round-1', roundDate: '2026-08-16', debt: 2500, lotteryType: 'lao' }

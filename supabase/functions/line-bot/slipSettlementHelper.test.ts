@@ -1500,6 +1500,137 @@ describe('slipSettlementHelper', () => {
             expect(msg).toContain('❌ ยังไม่ได้ตัดยอดในระบบ กรุณาตรวจสอบกับเจ้ามือ')
             expect(msg).not.toContain('ส่วนต่าง')
         })
+
+        it('Rule 2.9: Pee Rung case - Round 22 announced (debt 254), Round 23 closed/unannounced, slip 254, no past debts', () => {
+            // 1. Unannounced round (status: 'closed', is_result_announced: false) must NOT be selected as latestAnnouncedRound
+            const recentRounds = [
+                {
+                    id: 'round-lao-23',
+                    round_date: '2026-10-23',
+                    close_time: '2026-10-23T18:20:00+07:00',
+                    lottery_type: 'lao',
+                    status: 'closed',
+                    is_result_announced: false
+                },
+                {
+                    id: 'round-lao-22',
+                    round_date: '2026-10-22',
+                    close_time: '2026-10-22T18:20:00+07:00',
+                    lottery_type: 'lao',
+                    status: 'announced',
+                    is_result_announced: true
+                }
+            ]
+
+            const latestAnnouncedRound = recentRounds.find(r => r.status === 'announced' || r.is_result_announced === true)
+            expect(latestAnnouncedRound?.id).toBe('round-lao-22')
+
+            // 2. Member data for Round 22: bet 3800, comm 546, won 3000 -> net debt 254
+            const userHistories = [
+                {
+                    round_id: 'round-lao-22',
+                    user_id: 'u-rung',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-22',
+                    total_amount: 3800,
+                    total_commission: 546,
+                    total_winnings: 3000
+                }
+            ]
+
+            const crossDebtRes = calculateCrossRoundModeDebt({
+                userId: 'u-rung',
+                latestAnnouncedRound: latestAnnouncedRound!,
+                userHistories,
+                payments: [],
+                targetLotteryType: 'lao'
+            })
+
+            // No past debts before Round 22
+            expect(crossDebtRes.pastDebtsTotal).toBe(0)
+            expect(crossDebtRes.pastDebts).toHaveLength(0)
+            expect(crossDebtRes.currentRoundDebt).toBe(254)
+            expect(crossDebtRes.expectedAmount).toBe(254)
+
+            // 3. Auto evaluation must match strictly as 'immediate' (งวดต่องวด)
+            const autoRes = evaluateAutoSettlementCandidate({
+                slipAmount: 254,
+                toleranceAmount: 0,
+                currentRoundDebt: crossDebtRes.currentRoundDebt,
+                netPastDebt: crossDebtRes.expectedAmount,
+                totalDebtWithCurrent: crossDebtRes.totalDebtWithCurrent,
+                pastDebtsTotal: crossDebtRes.pastDebtsTotal
+            })
+
+            expect(autoRes.matched).toBe(true)
+            expect(autoRes.mode).toBe('immediate')
+            expect(autoRes.label).toBe('เคลียร์งวดต่องวด')
+            expect(autoRes.expectedAmount).toBe(254)
+
+            // 4. Payment allocation in immediate mode: ONLY 1 payment of 254 (member_to_dealer), NO prize_payout!
+            const immDebtRes = calculateImmediateModeDebt({
+                userId: 'u-rung',
+                latestRound: latestAnnouncedRound!,
+                userHistories,
+                payments: [],
+                targetLotteryType: 'lao'
+            })
+            expect(immDebtRes.totalExpectedAmount).toBe(254)
+            expect(immDebtRes.pastCredits).toHaveLength(0)
+
+            const alloc = allocateImmediateSettlement({
+                debtsToPay: immDebtRes.debtsToPay,
+                pastCredits: immDebtRes.pastCredits,
+                slipAmount: 254,
+                dealerId: 'dealer-1',
+                memberUserId: 'u-rung',
+                latestRound: latestAnnouncedRound!,
+                paidAt: '2026-10-23'
+            })
+
+            expect(alloc.payments).toHaveLength(1)
+            expect(alloc.payments[0].direction).toBe('member_to_dealer')
+            expect(alloc.payments[0].payment_type).toBe('net_settlement')
+            expect(alloc.payments[0].amount).toBe(254)
+            expect(alloc.payments[0].round_id).toBe('round-lao-22')
+
+            // 5. Line message formatting for immediate mode:
+            const successMsg = formatSlipSettlementLineMessage({
+                status: 'success',
+                memberName: 'พี่รุ้ง',
+                memberCode: '10040',
+                lotteryTypeName: 'หวยลาว',
+                settlementMode: 'immediate',
+                roundDateText: '2026-10-22',
+                expectedAmount: 254,
+                slipAmount: 254,
+                toleranceAmount: 0
+            })
+
+            expect(successMsg).toContain('📌 รูปแบบ: เคลียร์งวดต่องวด')
+            expect(successMsg).toContain('ยอดที่ต้องโอนสุทธิ: ฿254.00')
+            expect(successMsg).toContain('ยอดเงินตามสลิป: ฿254.00')
+            expect(successMsg).not.toContain('หักลบรางวัลงวดล่าสุด')
+            expect(successMsg).not.toContain('3,000')
+
+            // 6. allocateCrossRoundOffset (if ever called with 0 past debts) must NEVER generate prize_payout!
+            const crossAlloc = allocateCrossRoundOffset({
+                pastDebts: [],
+                currentRoundPrize: 3000,
+                slipAmount: 254,
+                dealerId: 'dealer-1',
+                memberUserId: 'u-rung',
+                currentRound: latestAnnouncedRound!,
+                paidAt: '2026-10-23',
+                currentRoundDebt: 254
+            })
+
+            const prizePayouts = crossAlloc.payments.filter(p => p.payment_type === 'prize_payout')
+            expect(prizePayouts).toHaveLength(0)
+            expect(crossAlloc.payments).toHaveLength(1)
+            expect(crossAlloc.payments[0].amount).toBe(254)
+            expect(crossAlloc.payments[0].direction).toBe('member_to_dealer')
+        })
     })
 })
 

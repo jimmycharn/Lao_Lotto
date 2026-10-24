@@ -223,17 +223,21 @@ export function allocateCrossRoundOffsetPayments({
         pastRoundPayments.push(pastPrizePayment)
     }
 
-    // 2. Current round prize record (if current round has prize to offset)
+    // 1. Calculate how much current round prize is actually needed to offset past debts
+    const totalPastDebts = pastDebts.reduce((sum, d) => sum + Math.max(0, Number(d.debt || 0)), 0)
+    const prizeUsedForPast = Math.min(curRoundPrize, totalPastDebts)
+
+    // 2. Current round prize record (if current round has prize actually used to offset past debts)
     let currentRoundPayment = null
-    if (curRoundPrize > 0) {
+    if (prizeUsedForPast > 0) {
         currentRoundPayment = {
             dealer_id: dealerId,
             round_id: curRoundId,
             lottery_type: currentRound.lottery_type || null,
             round_date: curRoundDateIso,
-            amount: curRoundPrize,
+            amount: prizeUsedForPast,
             paid_at: paidAt,
-            notes: `หักล้างหนี้งวดเก่า (${pastDateList}) ฿${curRoundPrize.toLocaleString()}${slip > 0 ? ` [สลิปโอน ฿${slip.toLocaleString()}]` : ''}`,
+            notes: `หักล้างหนี้งวดเก่า (${pastDateList}) ฿${prizeUsedForPast.toLocaleString()}${slip > 0 ? ` [สลิปโอน ฿${slip.toLocaleString()}]` : ''}`,
             created_by: dealerId
         }
 
@@ -249,8 +253,8 @@ export function allocateCrossRoundOffsetPayments({
         }
     }
 
-    // 3. Allocate total available clearing funds (curRoundPrize + totalPastPrizeCredit + slip) to past debts
-    let remainingToAllocate = Math.round(curRoundPrize + totalPastPrizeCredit + slip)
+    // 3. Allocate total available clearing funds (prizeUsedForPast + totalPastPrizeCredit + slip) to past debts
+    let remainingToAllocate = Math.round(prizeUsedForPast + totalPastPrizeCredit + slip)
 
     for (const past of pastDebts) {
         if (remainingToAllocate <= 0) break

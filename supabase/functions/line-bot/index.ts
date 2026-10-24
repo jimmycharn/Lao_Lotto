@@ -5279,10 +5279,10 @@ async function handleLineSlipMessage({
       ),
       supabase
         .from('lottery_rounds')
-        .select('id, lottery_type, lottery_name, round_date, close_time, status')
+        .select('id, lottery_type, lottery_name, round_date, close_time, status, is_result_announced')
         .eq('dealer_id', dealerId)
         .eq('lottery_type', groupLink.lottery_type)
-        .in('status', ['announced', 'closed'])
+        .or('status.eq.announced,is_result_announced.eq.true')
         .order('close_time', { ascending: false })
         .limit(15)
     ]) : Promise.resolve([ { data: [] }, { data: [] }, { data: [] } ] as any);
@@ -5446,16 +5446,23 @@ async function handleLineSlipMessage({
     let activeMode = settlementMode;
     let autoMatchedMode: 'immediate' | 'cross_round' | 'cross_round_all' | null = null;
 
-    if (settlementMode === 'auto') {
-      const latestAnnouncedRound = recentLotteryRounds?.find(r => r.status === 'announced' || r.status === 'closed') || recentLotteryRounds?.[0];
-      const crossDebtRes = latestAnnouncedRound ? calculateCrossRoundModeDebt({
-        userId: memberProfile.id,
-        latestAnnouncedRound,
-        userHistories: allHistoriesCombined,
-        payments: allPayments || [],
-        targetLotteryType: groupLink.lottery_type
-      }) : null;
+    // RULE 1: An announced round must be actually announced (status === 'announced' or is_result_announced === true)
+    // Unannounced rounds (status === 'closed' or status === 'open') are NOT the current round for settlement!
+    const latestAnnouncedRound = recentLotteryRounds?.find(r => r.status === 'announced' || r.is_result_announced === true);
+    const crossDebtRes = latestAnnouncedRound ? calculateCrossRoundModeDebt({
+      userId: memberProfile.id,
+      latestAnnouncedRound,
+      userHistories: allHistoriesCombined,
+      payments: allPayments || [],
+      targetLotteryType: groupLink.lottery_type
+    }) : null;
 
+    // RULE 2: If member has NO overdue past rounds (pastDebtsTotal === 0), it is strictly "งวดต่องวด" (immediate mode),
+    // because there are no past debts to cross-settle against.
+    if (crossDebtRes && crossDebtRes.pastDebtsTotal === 0) {
+      activeMode = 'immediate';
+      autoMatchedMode = 'immediate';
+    } else if (settlementMode === 'auto') {
       const autoRes = evaluateAutoSettlementCandidate({
         slipAmount,
         toleranceAmount: tolAmt,
@@ -5513,13 +5520,14 @@ async function handleLineSlipMessage({
 
     if (activeMode === 'immediate') {
       // --- MODE 1: IMMEDIATE SETTLEMENT (งวดต่องวด) ---
-      let latestRound = recentLotteryRounds?.[0];
+      let latestRound = latestAnnouncedRound || recentLotteryRounds?.find(r => r.status === 'announced' || r.is_result_announced === true);
       if (!latestRound) {
         const { data: anyRounds } = await supabase
           .from('lottery_rounds')
-          .select('id, lottery_type, lottery_name, round_date, close_time, status')
+          .select('id, lottery_type, lottery_name, round_date, close_time, status, is_result_announced')
           .eq('dealer_id', dealerId)
           .eq('lottery_type', groupLink.lottery_type)
+          .or('status.eq.announced,is_result_announced.eq.true')
           .order('close_time', { ascending: false })
           .limit(1);
         latestRound = anyRounds?.[0];
@@ -5698,7 +5706,7 @@ async function handleLineSlipMessage({
 
     } else {
       // --- MODE 2: CROSS ROUND SETTLEMENT (งวดชนงวด) ---
-      const latestAnnouncedRound = recentLotteryRounds?.find(r => r.status === 'announced' || r.status === 'closed');
+      const latestAnnouncedRound = recentLotteryRounds?.find(r => r.status === 'announced' || r.is_result_announced === true);
 
       if (!latestAnnouncedRound) {
         await sendLineReply(replyToken, formatSlipSettlementLineMessage({
@@ -10354,12 +10362,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              // Fetch active closed or announced rounds from lottery_rounds
+              // Fetch active announced rounds from lottery_rounds
               let roundsQuery = supabase
                 .from('lottery_rounds')
                 .select('*')
                 .eq('dealer_id', dealerId)
-                .in('status', ['closed', 'announced']);
+                .or('status.eq.announced,is_result_announced.eq.true');
 
               if (filterLotteryType) {
                 roundsQuery = roundsQuery.eq('lottery_type', filterLotteryType);
@@ -10380,6 +10388,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               if (activeClosedRounds && activeClosedRounds.length > 0) {
                 for (const round of activeClosedRounds) {
+                  if (!round.is_result_announced && round.status !== 'announced') {
+                    continue;
+                  }
                   if (existingRoundIds.has(round.id)) {
                     continue;
                   }
