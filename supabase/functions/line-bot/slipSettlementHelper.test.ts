@@ -1631,6 +1631,195 @@ describe('slipSettlementHelper', () => {
             expect(crossAlloc.payments[0].amount).toBe(254)
             expect(crossAlloc.payments[0].direction).toBe('member_to_dealer')
         })
+
+        it('Rule 2.10: Nong Beer case (id 10057) - Round 23 announced debt 390, past debts 1310 (rounds 20 & 22), past credits 688 (round 21: -65 & prior: -623), slip 1,012', () => {
+            const latestAnnouncedRound = {
+                id: 'round-lao-23',
+                round_date: '2026-10-23',
+                close_time: '2026-10-23T20:30:00+07:00',
+                lottery_type: 'lao',
+                status: 'announced',
+                is_result_announced: true
+            }
+
+            const userHistories = [
+                // Prior round: prize credit 623
+                {
+                    round_id: 'round-lao-19',
+                    user_id: 'u-beer-10057',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-19',
+                    close_time: '2026-10-19T20:30:00+07:00',
+                    total_amount: 100,
+                    total_commission: 20,
+                    total_winnings: 703 // net: (100 - 20) - 703 = -623 (prize credit)
+                },
+                // Round 20: debt 758
+                {
+                    round_id: 'round-lao-20',
+                    user_id: 'u-beer-10057',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-20',
+                    close_time: '2026-10-20T20:30:00+07:00',
+                    total_amount: 948,
+                    total_commission: 190,
+                    total_winnings: 0 // net: 948 - 190 = 758
+                },
+                // Round 21: prize credit 65 (sales 4,260, comm 825, winnings 3,500 -> 3435 - 3500 = -65)
+                {
+                    round_id: 'round-lao-21',
+                    user_id: 'u-beer-10057',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-21',
+                    close_time: '2026-10-21T20:30:00+07:00',
+                    total_amount: 4260,
+                    total_commission: 825,
+                    total_winnings: 3500 // net: (4260 - 825) - 3500 = -65 (prize credit)
+                },
+                // Round 22: debt 552
+                {
+                    round_id: 'round-lao-22',
+                    user_id: 'u-beer-10057',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-22',
+                    close_time: '2026-10-22T20:30:00+07:00',
+                    total_amount: 690,
+                    total_commission: 138,
+                    total_winnings: 0 // net: 690 - 138 = 552
+                },
+                // Round 23: current announced round, debt 390
+                {
+                    round_id: 'round-lao-23',
+                    user_id: 'u-beer-10057',
+                    lottery_type: 'lao',
+                    round_date: '2026-10-23',
+                    close_time: '2026-10-23T20:30:00+07:00',
+                    total_amount: 488,
+                    total_commission: 98,
+                    total_winnings: 0 // net: 488 - 98 = 390
+                }
+            ]
+
+            // 1. calculateCrossRoundModeDebt calculation
+            const crossRes = calculateCrossRoundModeDebt({
+                userId: 'u-beer-10057',
+                latestAnnouncedRound,
+                userHistories,
+                payments: [],
+                targetLotteryType: 'lao'
+            })
+
+            // Past debts: 758 (round 20) + 552 (round 22) = 1,310
+            expect(crossRes.pastDebtsTotal).toBe(1310)
+            expect(crossRes.pastDebts).toHaveLength(2)
+
+            // Past credits: 623 (round 19) + 65 (round 21) = 688
+            expect(crossRes.pastCreditsTotal).toBe(688)
+            expect(crossRes.pastCredits).toHaveLength(2)
+
+            // Net past debt: 1,310 - 688 = 622
+            expect(crossRes.expectedAmount).toBe(622)
+
+            // Current round debt: 390
+            expect(crossRes.currentRoundDebt).toBe(390)
+
+            // Total debt with current: 622 + 390 = 1,012!
+            expect(crossRes.totalDebtWithCurrent).toBe(1012)
+
+            // 2. evaluateAutoSettlementCandidate with slip 1,012
+            const autoRes = evaluateAutoSettlementCandidate({
+                slipAmount: 1012,
+                toleranceAmount: 0,
+                currentRoundDebt: crossRes.currentRoundDebt,
+                netPastDebt: crossRes.expectedAmount,
+                totalDebtWithCurrent: crossRes.totalDebtWithCurrent,
+                pastDebtsTotal: crossRes.pastDebtsTotal
+            })
+
+            expect(autoRes.matched).toBe(true)
+            expect(autoRes.mode).toBe('cross_round_all')
+            expect(autoRes.expectedAmount).toBe(1012)
+            expect(autoRes.label).toBe('เคลียร์หนี้ทั้งหมด (รวมงวดปัจจุบัน)')
+
+            // 3. allocateCrossRoundOffset with 1,012 slip
+            const alloc = allocateCrossRoundOffset({
+                pastDebts: crossRes.pastDebts,
+                pastCredits: crossRes.pastCredits || [],
+                currentRoundPrize: crossRes.latestRoundPrize,
+                slipAmount: 1012,
+                dealerId: 'dealer-1',
+                memberUserId: 'u-beer-10057',
+                currentRound: latestAnnouncedRound,
+                paidAt: '2026-10-26',
+                transRef: '016299191017COR05184',
+                currentRoundDebt: crossRes.currentRoundDebt
+            })
+
+            // Verify payments created:
+            // 2 prize payouts for past credits: 623 and 65
+            const prizePayoutsPast = alloc.payments.filter(p => p.payment_type === 'prize_payout' && p.direction === 'dealer_to_member')
+            expect(prizePayoutsPast).toHaveLength(2)
+            expect(prizePayoutsPast[0].amount).toBe(623)
+            expect(prizePayoutsPast[0].round_id).toBe('round-lao-19')
+            expect(prizePayoutsPast[1].amount).toBe(65)
+            expect(prizePayoutsPast[1].round_id).toBe('round-lao-21')
+
+            // 3 net settlement payments: round 20 (758), round 22 (552), round 23 (390)
+            const debtPayments = alloc.payments.filter(p => p.payment_type === 'net_settlement' && p.direction === 'member_to_dealer')
+            expect(debtPayments).toHaveLength(3)
+            expect(debtPayments[0].amount).toBe(758)
+            expect(debtPayments[0].round_id).toBe('round-lao-20')
+            expect(debtPayments[1].amount).toBe(552)
+            expect(debtPayments[1].round_id).toBe('round-lao-22')
+            expect(debtPayments[2].amount).toBe(390)
+            expect(debtPayments[2].round_id).toBe('round-lao-23')
+
+            expect(alloc.remainingFunds).toBe(0)
+
+            // 4. Test formatSlipSettlementLineMessage for success
+            const successMsg = formatSlipSettlementLineMessage({
+                status: 'success',
+                memberName: 'น้องเบียร์ คลองโสด',
+                memberCode: '10057',
+                lotteryTypeName: 'หวยลาว',
+                settlementMode: 'cross_round_all',
+                roundDateText: '2026-10-23',
+                expectedAmount: 1012,
+                slipAmount: 1012,
+                pastDebtTotal: 1310,
+                pastCreditsTotal: 688,
+                currentRoundDebt: 390
+            })
+
+            expect(successMsg).toContain('📌 รูปแบบ: เคลียร์หนี้ทั้งหมด (รวมงวดปัจจุบัน)')
+            expect(successMsg).toContain('รวมหนี้งวดก่อนหน้า: ฿1,310.00')
+            expect(successMsg).toContain('หักลบรางวัลค้างงวดก่อนๆ: -฿688.00')
+            expect(successMsg).toContain('ยอดที่ต้องโอนสุทธิ: ฿1,012.00')
+            expect(successMsg).toContain('ยอดเงินตามสลิป: ฿1,012.00')
+
+            // 5. Test formatSlipSettlementLineMessage for auto mismatch breakdown
+            const mismatchMsg = formatSlipSettlementLineMessage({
+                status: 'amount_mismatch',
+                memberName: 'น้องเบียร์ คลองโสด',
+                memberCode: '10057',
+                lotteryTypeName: 'หวยลาว',
+                settlementMode: 'auto',
+                roundDateText: '2026-10-23',
+                currentRoundDebt: 390,
+                pastDebts: crossRes.pastDebts,
+                pastCredits: crossRes.pastCredits,
+                pastCreditsTotal: 688,
+                totalAllDebts: 1012,
+                expectedAmount: 1012,
+                slipAmount: 900
+            })
+
+            expect(mismatchMsg).toContain('ยอดงวดปัจจุบัน 23-10-2569: ฿390.00')
+            expect(mismatchMsg).toContain('ยอดค้างจ่ายงวด 20-10-2569: ฿758.00')
+            expect(mismatchMsg).toContain('ยอดค้างจ่ายงวด 22-10-2569: ฿552.00')
+            expect(mismatchMsg).toContain('หักลบรางวัลค้างงวด 21-10-2569: -฿65.00')
+            expect(mismatchMsg).toContain('รวมทุกงวด: ฿1,012.00')
+        })
     })
 })
 

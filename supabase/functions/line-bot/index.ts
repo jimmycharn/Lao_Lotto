@@ -5496,7 +5496,7 @@ async function handleLineSlipMessage({
           return;
         }
 
-        const totalAllDebts = (crossDebtRes?.currentRoundDebt || 0) + (crossDebtRes?.pastDebtsTotal || 0);
+        const totalAllDebts = Math.max(0, (crossDebtRes?.currentRoundDebt || 0) + (crossDebtRes?.pastDebtsTotal || 0) - (crossDebtRes?.pastCreditsTotal || 0) - (crossDebtRes?.latestRoundPrize || 0));
 
         const mismatchMsg = formatSlipSettlementLineMessage({
           status: 'amount_mismatch',
@@ -5508,6 +5508,9 @@ async function handleLineSlipMessage({
           currentRoundDateText: getRoundCloseDate(latestAnnouncedRound) || todayStr,
           currentRoundDebt: crossDebtRes?.currentRoundDebt || 0,
           pastDebts: crossDebtRes?.pastDebts || [],
+          pastCredits: crossDebtRes?.pastCredits || [],
+          pastCreditsTotal: crossDebtRes?.pastCreditsTotal || 0,
+          currentRoundPrize: crossDebtRes?.latestRoundPrize || 0,
           totalAllDebts,
           expectedAmount: autoRes.candidateCrossRound || autoRes.candidateImmediate || autoRes.candidateCrossRoundAll,
           slipAmount,
@@ -5780,7 +5783,7 @@ async function handleLineSlipMessage({
       });
 
       if (!tolRes.isValid) {
-        const totalAllDebts = currentRoundDebt + pastDebtsTotal;
+        const totalAllDebts = Math.max(0, currentRoundDebt + pastDebtsTotal - (crossDebtRes?.pastCreditsTotal || 0) - latestRoundPrize);
         const mismatchMsg = formatSlipSettlementLineMessage({
           status: 'amount_mismatch',
           memberName,
@@ -5791,6 +5794,8 @@ async function handleLineSlipMessage({
           currentRoundDateText: currentRoundDate,
           currentRoundDebt,
           pastDebts,
+          pastCredits: crossDebtRes?.pastCredits || [],
+          pastCreditsTotal: crossDebtRes?.pastCreditsTotal || 0,
           totalAllDebts,
           expectedAmount: effectiveExpectedAmount,
           slipAmount,
@@ -5804,6 +5809,7 @@ async function handleLineSlipMessage({
 
       const allocResult = allocateCrossRoundOffset({
         pastDebts,
+        pastCredits: crossDebtRes?.pastCredits || [],
         currentRoundPrize: latestRoundPrize,
         slipAmount: tolRes.recordedAmount,
         dealerId,
@@ -5834,6 +5840,7 @@ async function handleLineSlipMessage({
         toleranceAmount: tolAmt,
         bankAccountText: receiverText,
         pastDebtTotal: pastDebtsTotal,
+        pastCreditsTotal: crossDebtRes?.pastCreditsTotal || 0,
         currentRoundPrize: latestRoundPrize,
         currentRoundDebt,
         adjustmentNote: tolRes.adjustmentNote

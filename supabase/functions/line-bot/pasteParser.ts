@@ -97,6 +97,7 @@ function preprocessShorthands(line: string): string {
     s = s.replace(/\/+=?(\d+)\*([ชุดช])$/i, '=$1*$2');
     s = s.replace(/\/+([*xX\u00D7])\s*(\d+)$/i, '$1$2');
     s = s.replace(/\/+=(\d+)$/i, '=$1');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])[tT][\s./\-]?\s*(?=\d)/g, 'โต๊ด ');
     return s;
 }
 
@@ -198,7 +199,7 @@ function cleanPrefixNoiseButKeepContext(line: string): string {
     if (!line) return '';
     let s = line.trim();
     // Remove optional timestamp and any non-digit/non-equals noise before context, betting keywords, or numbers
-    s = s.replace(/^(?:\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*)?([^=\d]*?)(?=(?:หน้าบน|กลางบน|หลังบน|หน้าล่าง|หลังล่าง|วิ่งบน|วิ่งล่าง|ลอยบน|ลอยล่าง|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|พี่น้อง|พน|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|หาง|เบิ้ล|คู่|หน้าหลัง|น้าหลัง|นห|รูดหน้า|หน้า|น้า|น|รูดหลัง|หลัง|ลัง|ห|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต|มี)(?![ก-๛a-zA-Z])|\d)/i, '');
+    s = s.replace(/^(?:\d{1,2}[:.:]\d{2}([:.:]\d{2})?\s*)?([^=\d]*?)(?=(?:หน้าบน|กลางบน|หลังบน|หน้าล่าง|หลังล่าง|วิ่งบน|วิ่งล่าง|ลอยบน|ลอยล่าง|ลอยทั่วไป|บนล่าง|ล่างบน|บล|ลบ|บ[+\-]?ล|ล[+\-]?บ|บน|บ|ล่าง|ล|พี่น้อง|พน|คู่คี่|คู่คี|คู่คู่|คู่คู|คี่คี่|คี่คี|วินกลับ|วินเบิ้ล|วิน|หาง|เบิ้ล|คู่|หน้าหลัง|น้าหลัง|นห|รูดหน้า|หน้า|น้า|น|รูดหลัง|หลัง|ลัง|ห|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต|[tT]|มี)(?![ก-๛a-zA-Z])|\d)/i, '');
     return s.trim();
 }
 
@@ -264,6 +265,7 @@ function normalizeUnicode(str: string): string {
     s = s.replace(/(\d)\s*([*\-+/\/,'])\s*(\d)/g, '$1$2$3');
     // Normalize t, T, ต between digits (with optional spaces) to *
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])[tT][\s./\-]?\s*(?=\d)/g, 'โต๊ด ');
 
     // Replace dash connecting digit and Thai keyword with a space (e.g. "47-ล่าง" -> "47 ล่าง", "บน-47" -> "บน 47")
     s = s.replace(/(\d)\s*-\s*(?=[ก-๛])/g, '$1 ');
@@ -1197,6 +1199,7 @@ function extractAmountFromLine(line: string): AmountInfo | null {
     s = s.replace(/\s*(กลับ|กลับตัว|กลับด้วย)\s*$/, '').trim();
     s = s.replace(/(\d+)\s*[*×xX\-+]?\s*ชุด/g, '$1*ชุด');
     s = s.replace(/(\d)\s*[tTต]\s*(\d)/g, '$1*$2');
+    s = s.replace(/(?<![ก-๛a-zA-Z0-9])[tT][\s./\-]?\s*(?=\d)/g, 'โต๊ด ');
     s = s.replace(/(\d)\s*[/+]\s*(\d)/g, '$1*$2');
     s = s.replace(/(\d),(\d{3})/g, '$1$2');
 
@@ -1532,13 +1535,13 @@ function parseContextLine(line: string, contextMode?: string): string | null {
     if (/^\d*ตัว(บนล่าง|ล่างบน|บล|ลบ)$/.test(bracketCleaned)) return 'both';
     if (/^\d*ตัว(บน|บ)$/.test(bracketCleaned)) return 'top';
     if (/^\d*ตัว(วิ่งล่าง|ลอยล่าง)$/.test(bracketCleaned)) return 'float_bottom';
-    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|มี)$/.test(bracketCleaned)) return 'float_top';
+    if (/^\d*ตัว(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|[tT]\.?|มี)$/i.test(bracketCleaned)) return 'float_top';
 
     const cleanedFloat = withPunct.replace(/[\s.+\-]/g, '');
     if (/^(วิ่งบน|ลอยบน|วิ่งบ|ลอยบ|ลอยทั่วไป)$/.test(cleanedFloat)) return 'float_top';
     if (/^(วิ่งล่าง|ลอยล่าง|วิ่งล|ลอยล)$/.test(cleanedFloat)) return 'float_bottom';
-    if (/^(วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|มี)$/.test(cleanedFloat)) return 'float_top';
-    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?)$/.test(cleanedFloat)) return 'float_top';
+    if (/^(วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|[tT]\.?|มี)$/i.test(cleanedFloat)) return 'float_top';
+    if (/^2ตัว(มี|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|[tT]\.?)$/i.test(cleanedFloat)) return 'float_top';
 
     if (isBothContext(withPunct)) return 'both';
 
@@ -1547,7 +1550,7 @@ function parseContextLine(line: string, contextMode?: string): string | null {
     if (/^(ล่าง|ล)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(cleaned)) return 'bottom';
 
     const testStr = cleaned.replace(/^\d+ตัว/, '');
-    if (/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|มี)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_top';
+    if (/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|[tT]\.?|มี)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/i.test(testStr)) return 'float_top';
     if (/^(วิ่งล่าง|ลอยล่าง)(?:นะ|คะ|ค่ะ|ครับ|จ้า|กลุ่ม|จ๊ะ|คับ|จร้า|ก๊าบ|คะะ|ค่ะะ|ครับบ|จ้าา|นะจ๊ะ|นะคะ|นะค่ะ|นะคับ|นะจร้า|นะเว้ย|นะเออ)*$/.test(testStr)) return 'float_bottom';
 
     if (/^บ\.?$/.test(withPunct)) return 'top';
@@ -1660,7 +1663,7 @@ function extractInlineContext(line: string, contextMode?: string): InlineContext
         return { cleaned: `${posMiddle[1]}=${posMiddle[4].trim()}`, mode };
     }
 
-    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\.?\s*(\d.*)$/);
+    const floatPrefixTop = s.match(/^(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|[tT]\.?|ลอยทั่วไป|มี)\.?\s*(\d.*)$/i);
     if (floatPrefixTop) {
         const kw = floatPrefixTop[1];
         let mode = /ล่าง/.test(kw) ? 'float_bottom' : 'float_top';
@@ -1680,7 +1683,7 @@ function extractInlineContext(line: string, contextMode?: string): InlineContext
         mode = refineFloatMode(mode, s);
         return { cleaned: floatSuffixBot[1].trim(), mode };
     }
-    const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|ลอยทั่วไป|มี)\s*$/);
+    const floatSuffix = s.match(/^(.+?)\s*(วิ่งบน|ลอยบน|วิ่ง|ลอย|โต๊ด|โต้ด|โตด|ต\.?|[tT]\.?|ลอยทั่วไป|มี)\s*$/i);
     if (floatSuffix) {
         const kw = floatSuffix[2];
         const beforeKw = floatSuffix[1].trim();

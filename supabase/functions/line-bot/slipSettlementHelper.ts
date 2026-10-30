@@ -29,6 +29,7 @@ export interface SlipResultMessageParams {
     currentRoundDebt?: number
     pastCreditsTotal?: number
     pastDebts?: Array<{ roundDate?: string; debt: number }>
+    pastCredits?: Array<{ roundDate?: string; debt: number }>
     totalAllDebts?: number
     adjustmentNote?: string | null
     transRef?: string
@@ -183,6 +184,9 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
             if (params.pastDebtTotal !== undefined && params.pastDebtTotal > 0) {
                 lines.push(`- รวมหนี้งวดก่อนหน้า: ฿${params.pastDebtTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             }
+            if (params.pastCreditsTotal !== undefined && params.pastCreditsTotal > 0) {
+                lines.push(`- หักลบรางวัลค้างงวดก่อนๆ: -฿${params.pastCreditsTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            }
             if (params.currentRoundPrize !== undefined && params.currentRoundPrize > 0) {
                 lines.push(`- หักลบรางวัลงวดล่าสุด: -฿${params.currentRoundPrize.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             }
@@ -232,10 +236,21 @@ export function formatSlipSettlementLineMessage(params: SlipResultMessageParams)
                     }
                 }
             }
+            if (params.pastCredits && params.pastCredits.length > 0) {
+                for (const pc of params.pastCredits) {
+                    const pastDate = formatThaiDateDDMMYYYY(pc.roundDate)
+                    lines.push(`  • หักลบรางวัลค้างงวด ${pastDate}: -฿${Math.abs(pc.debt).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+                }
+            } else if (params.pastCreditsTotal && params.pastCreditsTotal > 0) {
+                lines.push(`  • หักลบรางวัลค้างงวดก่อนๆ: -฿${params.pastCreditsTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            }
+            if (params.currentRoundPrize && params.currentRoundPrize > 0) {
+                lines.push(`  • หักลบรางวัลงวดล่าสุด: -฿${params.currentRoundPrize.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
+            }
             lines.push('----------------------------')
             const total = params.totalAllDebts !== undefined
                 ? params.totalAllDebts
-                : ((params.currentRoundDebt || 0) + (params.pastDebts?.reduce((s, d) => s + (d.debt || 0), 0) || 0))
+                : Math.max(0, (params.currentRoundDebt || 0) + (params.pastDebts?.reduce((s, d) => s + (d.debt || 0), 0) || 0) - (params.pastCreditsTotal || 0) - (params.currentRoundPrize || 0))
             lines.push(`  • รวมทุกงวด: ฿${total.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             lines.push(`- ยอดเงินในสลิป: ฿${(params.slipAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}`)
             lines.push('- ยอดเงินในสลิป ไม่ตรงตามเงื่อนไขการชำระ')
@@ -326,6 +341,7 @@ export interface CrossRoundDebtItem {
 
 export interface CrossRoundAllocationParams {
     pastDebts: CrossRoundDebtItem[]
+    pastCredits?: CrossRoundDebtItem[]
     currentRoundPrize: number
     slipAmount: number
     dealerId: string
@@ -685,6 +701,7 @@ export function getRoundCloseDate(roundOrVal: any): string {
 export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): CrossRoundAllocationResult {
     const {
         pastDebts,
+        pastCredits = [],
         currentRoundPrize = 0,
         slipAmount = 0,
         dealerId,
@@ -720,9 +737,44 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
         }
     }
 
-    // 1. Calculate how much current round prize is actually needed to offset past debts
+    // 1. For each past round with unpaid prize credit (debt < 0), record prize payout to clear it
+    let totalPastPrizeCredit = 0
+    for (const credit of pastCredits) {
+        const prizeAmt = Math.abs(Number(credit.debt) || 0)
+        if (prizeAmt <= 0) continue
+        totalPastPrizeCredit += prizeAmt
+
+        let pastCreditNotes = `นำรางวัลไปหักล้างยอดข้ามงวด (งวด ${curRoundDate}) [สลิปอัตโนมัติ]${transRef ? ` #${transRef}` : ''}`
+        if (slipData) {
+            const prizeDetails = extractSlipTransferDetails({
+                slipData,
+                dealerBankAccounts: dealerAccounts,
+                prefix: `นำรางวัลไปหักล้างยอดข้ามงวด (งวด ${curRoundDate}) [สลิปอัตโนมัติ]`,
+                adjustmentNote,
+                fallbackPaidAt: paidAt
+            })
+            pastCreditNotes = prizeDetails.fullNotes
+        }
+
+        payments.push({
+            dealer_id: dealerId,
+            user_id: memberUserId,
+            round_id: credit.roundId,
+            lottery_type: credit.lotteryType,
+            round_date: credit.roundDate,
+            payment_type: 'prize_payout',
+            direction: 'dealer_to_member',
+            amount: prizeAmt,
+            paid_at: effectivePaidAt,
+            notes: pastCreditNotes,
+            created_by: dealerId
+        })
+    }
+
+    // 2. Calculate how much current round prize is actually needed to offset past debts (after considering past prize credits)
     const totalPastDebts = pastDebts.reduce((sum, d) => sum + Math.max(0, Number(d.debt) || 0), 0)
-    const prizeUsedForPast = Math.min(prize, totalPastDebts)
+    const pastDebtsAfterCredits = Math.max(0, totalPastDebts - totalPastPrizeCredit)
+    const prizeUsedForPast = Math.min(prize, pastDebtsAfterCredits)
 
     // Current round prize payout record is ONLY created for the portion of prize actually used to clear past debts
     if (prizeUsedForPast > 0) {
@@ -753,8 +805,8 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
         })
     }
 
-    // 2. Allocate clearing funds (prizeUsedForPast + slip) to past debts
-    let remainingToPast = Math.round((prizeUsedForPast + slip) * 100) / 100
+    // 3. Allocate clearing funds (prizeUsedForPast + totalPastPrizeCredit + slip) to past debts
+    let remainingToPast = Math.round((prizeUsedForPast + totalPastPrizeCredit + slip) * 100) / 100
 
     for (const past of pastDebts) {
         if (remainingToPast <= 0) break
@@ -781,8 +833,9 @@ export function allocateCrossRoundOffset(params: CrossRoundAllocationParams): Cr
         }
     }
 
-    // 3. Allocate remaining slip funds to current round debt (if any)
-    const slipUsedForPast = Math.max(0, Math.round((totalPastDebts - prizeUsedForPast) * 100) / 100)
+    // 4. Allocate remaining slip funds to current round debt (if any)
+    const totalPrizeUsedForPast = prizeUsedForPast + totalPastPrizeCredit
+    const slipUsedForPast = Math.max(0, Math.min(slip, totalPastDebts - totalPrizeUsedForPast))
     let remainingSlipForCurrent = Math.max(0, Math.round((slip - slipUsedForPast) * 100) / 100)
 
     if (remainingSlipForCurrent > 0 && currentRoundDebt > 0) {
@@ -829,14 +882,28 @@ export interface CalculatePastDebtsParams {
  * - Excludes fractional satang rounding noise (requires Math.round(bal) > 0).
  * - Sorts FIFO (oldest first) for offset allocation.
  */
-export function calculateMemberPastDebts({
+export interface MemberPastUnpaidRoundsResult {
+    pastDebts: CrossRoundDebtItem[]
+    pastCredits: CrossRoundDebtItem[]
+}
+
+/**
+ * Calculates member's outstanding debts and prize credits across past rounds.
+ * - Strictly filters by targetLotteryType so debts/credits from other lotteries are not included.
+ * - Applies 20% fallback commission if total_commission is missing/0.
+ * - Aggregates payments by direction (member_to_dealer vs dealer_to_member).
+ * - Excludes fractional satang rounding noise (requires Math.round(bal) !== 0).
+ * - Separates bal > 0 (debts) and bal < 0 (prize credits).
+ * - Sorts FIFO (oldest first).
+ */
+export function calculateMemberPastUnpaidRounds({
     userId,
     currentRoundId,
     currentRoundDate,
     targetLotteryType,
     userHistories = [],
     payments = []
-}: CalculatePastDebtsParams): CrossRoundDebtItem[] {
+}: CalculatePastDebtsParams): MemberPastUnpaidRoundsResult {
     const normType = targetLotteryType ? String(targetLotteryType).trim().toLowerCase() : ''
     const roundMap: Record<string, {
         roundId: string
@@ -886,7 +953,8 @@ export function calculateMemberPastDebts({
         if (!roundMap[rId].lotteryType && h.lottery_type) roundMap[rId].lotteryType = h.lottery_type
     }
 
-    const results: CrossRoundDebtItem[] = []
+    const pastDebts: CrossRoundDebtItem[] = []
+    const pastCredits: CrossRoundDebtItem[] = []
 
     for (const rId of Object.keys(roundMap)) {
         const item = roundMap[rId]
@@ -906,7 +974,14 @@ export function calculateMemberPastDebts({
 
         const bal = Math.round(initial - paidByMember + paidByDealer)
         if (bal > 0) {
-            results.push({
+            pastDebts.push({
+                roundId: rId,
+                roundDate: item.roundDate,
+                lotteryType: item.lotteryType,
+                debt: bal
+            })
+        } else if (bal < 0) {
+            pastCredits.push({
                 roundId: rId,
                 roundDate: item.roundDate,
                 lotteryType: item.lotteryType,
@@ -915,7 +990,17 @@ export function calculateMemberPastDebts({
         }
     }
 
-    return results.sort((a, b) => (a.roundDate || '').localeCompare(b.roundDate || ''))
+    pastDebts.sort((a, b) => (a.roundDate || '').localeCompare(b.roundDate || ''))
+    pastCredits.sort((a, b) => (a.roundDate || '').localeCompare(b.roundDate || ''))
+
+    return { pastDebts, pastCredits }
+}
+
+/**
+ * Calculates member's outstanding debts across past rounds (only bal > 0).
+ */
+export function calculateMemberPastDebts(params: CalculatePastDebtsParams): CrossRoundDebtItem[] {
+    return calculateMemberPastUnpaidRounds(params).pastDebts
 }
 
 export interface ImmediateModeDebtParams {
@@ -1221,8 +1306,10 @@ export interface CrossRoundModeDebtParams {
 export interface CrossRoundModeDebtResult {
     latestRoundPrize: number
     pastDebtsTotal: number
+    pastCreditsTotal?: number
     expectedAmount: number
     pastDebts: CrossRoundDebtItem[]
+    pastCredits?: CrossRoundDebtItem[]
     currentRoundDebt: number
     totalDebtWithCurrent: number
 }
@@ -1287,8 +1374,8 @@ export function calculateCrossRoundModeDebt({
     const curInitial = Math.round(curAmt - curComm - latestWin)
     const currentRoundDebt = Math.max(0, Math.round(curInitial - curPaidByMember + curPaidByDealer))
 
-    // 2. Calculate past debts strictly before latestAnnouncedRound
-    const pastDebts = calculateMemberPastDebts({
+    // 2. Calculate past debts and credits strictly before latestAnnouncedRound
+    const { pastDebts, pastCredits } = calculateMemberPastUnpaidRounds({
         userId,
         currentRoundId: latestRoundId,
         currentRoundDate: latestRoundDate,
@@ -1298,18 +1385,35 @@ export function calculateCrossRoundModeDebt({
     })
 
     const pastDebtsTotal = pastDebts.reduce((sum, d) => sum + d.debt, 0)
-    const netPastDebt = Math.max(0, Math.round(pastDebtsTotal - availableWinnings))
+    const pastCreditsTotal = pastCredits.reduce((sum, c) => sum + Math.abs(c.debt), 0)
+
+    const totalPrizeForPastDebts = availableWinnings + pastCreditsTotal
+
+    // Net past debt: past debts minus (current round winnings + past prize credits)
+    const netPastDebt = Math.max(0, Math.round(pastDebtsTotal - totalPrizeForPastDebts))
+
+    // Surplus past prize credits (beyond past debts) can offset current round debt.
+    // (Note: availableWinnings is from the current round and is ALREADY deducted from currentRoundDebt,
+    // so availableWinnings cannot be applied to currentRoundDebt a second time!)
+    const surplusPastCreditsForCurrent = Math.max(0, Math.round(pastCreditsTotal - pastDebtsTotal))
+    const netCurrentDebt = Math.max(0, Math.round(currentRoundDebt - surplusPastCreditsForCurrent))
 
     // If member has past debts, the primary cross-round expected amount is netPastDebt.
-    // If member has NO past debts (pastDebtsTotal === 0), they owe the current round debt!
-    const expectedAmount = pastDebtsTotal > 0 ? netPastDebt : currentRoundDebt
-    const totalDebtWithCurrent = Math.round(netPastDebt + currentRoundDebt)
+    // If past debts are fully covered by prizes (netPastDebt === 0) or member had no past debts,
+    // expectedAmount is netCurrentDebt.
+    const expectedAmount = pastDebtsTotal > 0
+        ? (netPastDebt > 0 ? netPastDebt : netCurrentDebt)
+        : netCurrentDebt
+
+    const totalDebtWithCurrent = Math.round(netPastDebt + netCurrentDebt)
 
     return {
         latestRoundPrize: availableWinnings,
         pastDebtsTotal,
+        pastCreditsTotal,
         expectedAmount,
         pastDebts,
+        pastCredits,
         currentRoundDebt,
         totalDebtWithCurrent
     }

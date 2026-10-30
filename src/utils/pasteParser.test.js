@@ -2291,8 +2291,99 @@ describe('pasteParser - parseMultiLinePaste', () => {
         })
       }
     })
+    it('should parse 2-digit float/tod with T or t prefix as 2_run (ลอย) (e.g. T49 = 200, T 49=200, t49 200)', () => {
+      const cases = [
+        'T49 = 200',
+        'T 49=200',
+        't49 = 200',
+        't 49=200',
+        'T49 200',
+        't49 200',
+        'T 49 200',
+        't 49 200',
+        'T-49 = 200',
+        'T.49 = 200',
+        'T49*200',
+        'T49-200'
+      ]
+
+      for (const text of cases) {
+        const res = parseMultiLinePaste(text, 'lao')
+        expect(res).toHaveLength(1)
+        expect(res[0]).toMatchObject({
+          numbers: '49',
+          amount: 200,
+          betType: '2_run',
+          typeLabel: 'ลอย',
+          formattedLine: '49=200 ลอย'
+        })
+      }
+    })
+
+    it('should parse the exact user screenshot message with T prefix and suffix correctly', () => {
+      const text = `974 = 55 x 6\nT 49 = 300\nT 47 = 200 โต๊ด`
+      const res = parseMultiLinePaste(text, 'lao')
+      expect(res).toHaveLength(3)
+
+      expect(res[0]).toMatchObject({
+        numbers: '974',
+        amount: 55,
+        amount2: 6,
+        betType: '3_top',
+        specialType: 'set6',
+        typeLabel: 'คูณชุด',
+        formattedLine: '974=55*6 คูณชุด'
+      })
+
+      expect(res[1]).toMatchObject({
+        numbers: '49',
+        amount: 300,
+        amount2: null,
+        betType: '2_run',
+        typeLabel: 'ลอย',
+        formattedLine: '49=300 ลอย'
+      })
+
+      expect(res[2]).toMatchObject({
+        numbers: '47',
+        amount: 200,
+        amount2: null,
+        betType: '2_run',
+        typeLabel: 'ลอย',
+        formattedLine: '47=200 ลอย'
+      })
+    })
+
+    it('should parse T context header and multi-number lines with T prefix', () => {
+      const contextRes = parseMultiLinePaste('T\n49=200\n58=100', 'lao')
+      expect(contextRes).toHaveLength(2)
+      expect(contextRes[0]).toMatchObject({
+        numbers: '49',
+        amount: 200,
+        betType: '2_run',
+        typeLabel: 'ลอย'
+      })
+      expect(contextRes[1]).toMatchObject({
+        numbers: '58',
+        amount: 100,
+        betType: '2_run',
+        typeLabel: 'ลอย'
+      })
+
+      const multiRes = parseMultiLinePaste('T 49, 58 = 200', 'lao')
+      expect(multiRes).toHaveLength(2)
+      expect(multiRes[0]).toMatchObject({
+        numbers: '49',
+        amount: 200,
+        betType: '2_run',
+        typeLabel: 'ลอย'
+      })
+      expect(multiRes[1]).toMatchObject({
+        numbers: '58',
+        amount: 200,
+        betType: '2_run',
+        typeLabel: 'ลอย'
+      })
+    })
   })
 })
-
-
-
