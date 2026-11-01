@@ -230,12 +230,18 @@ export function allocateCrossRoundOffsetPayments({
     // 2. Current round prize record (if current round has prize actually used to offset past debts)
     let currentRoundPayment = null
     if (prizeUsedForPast > 0) {
+        // When curRoundPrize > totalPastDebts, the remaining excess prize (or the slip amount transferred)
+        // is paid directly to the member (or collected from upstream).
+        // The total prize settled/paid in the current round is therefore prizeUsedForPast + slip.
+        const slipForCurrentPrize = (curRoundPrize > totalPastDebts) ? slip : 0
+        const totalCurPrizeSettled = prizeUsedForPast + slipForCurrentPrize
+
         currentRoundPayment = {
             dealer_id: dealerId,
             round_id: curRoundId,
             lottery_type: currentRound.lottery_type || null,
             round_date: curRoundDateIso,
-            amount: prizeUsedForPast,
+            amount: totalCurPrizeSettled,
             paid_at: paidAt,
             notes: `หักล้างหนี้งวดเก่า (${pastDateList}) ฿${prizeUsedForPast.toLocaleString()}${slip > 0 ? ` [สลิปโอน ฿${slip.toLocaleString()}]` : ''}`,
             created_by: dealerId
@@ -253,8 +259,12 @@ export function allocateCrossRoundOffsetPayments({
         }
     }
 
-    // 3. Allocate total available clearing funds (prizeUsedForPast + totalPastPrizeCredit + slip) to past debts
-    let remainingToAllocate = Math.round(prizeUsedForPast + totalPastPrizeCredit + slip)
+    // 3. Allocate total available clearing funds to past debts
+    // Note: If curRoundPrize > totalPastDebts, the slip was transferred in the opposite direction (dealer to member)
+    // for the excess prize and is NOT funds for clearing past debt. Only when curRoundPrize < totalPastDebts does
+    // a slip from member to dealer help clear past debts.
+    const slipForPastDebts = (curRoundPrize < totalPastDebts) ? slip : 0
+    let remainingToAllocate = Math.round(prizeUsedForPast + totalPastPrizeCredit + slipForPastDebts)
 
     for (const past of pastDebts) {
         if (remainingToAllocate <= 0) break

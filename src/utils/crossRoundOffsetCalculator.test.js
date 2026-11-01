@@ -275,6 +275,48 @@ describe('crossRoundOffsetCalculator', () => {
             expect(allocation.pastRoundPayments[0].amount).toBe(2600)
             expect(allocation.pastRoundPayments[0].notes).toContain('หักล้างรางวัลจากงวด 2026-08-16')
         })
+
+        it('allocates full prize in currentRoundPayment when current round prize > past debts and excess is paid via slip (Khun Nam case)', () => {
+            const pastRounds = [
+                { roundId: 'round-16-oct', roundDate: '2026-10-16', debt: 41331, lotteryType: 'thai' }
+            ]
+            const currentRound = {
+                id: 'round-01-nov',
+                round_id: 'round-01-nov',
+                round_date: '2026-11-01',
+                lottery_type: 'thai'
+            }
+
+            const allocation = allocateCrossRoundOffsetPayments({
+                selectedPastRounds: pastRounds,
+                offsetPrizeAmount: 48500,
+                actualSlipAmount: 7169, // 48,500 - 41,331 = 7,169
+                paidAt: '2026-11-01',
+                currentRound,
+                memberUserId: 'user-nam-10039',
+                dealerId: 'dealer-game',
+                isUpstream: false
+            })
+
+            // Current round must record full prize payout of ฿48,500 (฿41,331 offset + ฿7,169 slip)
+            expect(allocation.currentRoundPayment).toMatchObject({
+                round_id: 'round-01-nov',
+                payment_type: 'prize_payout',
+                direction: 'dealer_to_member',
+                amount: 48500,
+                paid_at: '2026-11-01'
+            })
+
+            // Past round must record debt clearance of ฿41,331
+            expect(allocation.pastRoundPayments).toHaveLength(1)
+            expect(allocation.pastRoundPayments[0]).toMatchObject({
+                round_id: 'round-16-oct',
+                payment_type: 'net_settlement',
+                direction: 'member_to_dealer',
+                amount: 41331,
+                paid_at: '2026-11-01'
+            })
+        })
     })
 
     describe('findMemberPastUnpaidRounds', () => {
@@ -877,6 +919,34 @@ describe('crossRoundOffsetCalculator', () => {
             })
             expect(alloc.currentRoundPayment.direction).toBe('dealer_to_member')
             expect(alloc.currentRoundPayment.notes).toBe('เคลียร์ยอดคงค้าง (ออมสิน น.ส.มุกจริญา แก้วผ่อง ธนาคารกรุงไทย 98xxx...)')
+        })
+
+        it('allocates offset_prize_past_debt correctly with full prize when prize > past debt and slip covers remainder', () => {
+            const alloc = allocateSettlementPaymentsByMode({
+                mode: 'offset_prize_past_debt',
+                currentWinnings: 48500,
+                selectedPastRounds: [{ roundId: 'r-past', roundDate: '2026-10-16', debt: 41331 }],
+                actualSlipAmount: 7169,
+                paidAt: '2026-11-01',
+                currentRound: curRound,
+                memberUserId: 'm-1',
+                dealerId: 'd-1',
+                senderBank: 'ธนาคารออมสิน',
+                customNotes: 'โอนไป พร้อมเพย์'
+            })
+
+            expect(alloc.currentRoundPayment.amount).toBe(48500)
+            expect(alloc.currentRoundPayment.payment_type).toBe('prize_payout')
+            expect(alloc.currentRoundPayment.direction).toBe('dealer_to_member')
+            expect(alloc.currentRoundPayment.notes).toContain('หักล้างหนี้งวดเก่า (2026-10-16) ฿41,331 [สลิปโอน ฿7,169]')
+            expect(alloc.currentRoundPayment.notes).toContain('ออมสิน โอนไป พร้อมเพย์')
+
+            expect(alloc.pastRoundPayments).toHaveLength(1)
+            expect(alloc.pastRoundPayments[0].amount).toBe(41331)
+            expect(alloc.pastRoundPayments[0].payment_type).toBe('net_settlement')
+            expect(alloc.pastRoundPayments[0].direction).toBe('member_to_dealer')
+            expect(alloc.pastRoundPayments[0].notes).toContain('หักล้างรางวัลจากงวด 2026-09-11 (฿48,500) + สลิปโอน ฿7,169')
+            expect(alloc.pastRoundPayments[0].notes).toContain('ออมสิน โอนไป พร้อมเพย์')
         })
     })
 
