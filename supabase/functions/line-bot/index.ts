@@ -19371,6 +19371,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         const senderProfile = profile;
         const memberRecord = memberRecordRes.data;
         const managerRecord = managerRecordRes.data;
+        const managerErr = managerRecordRes.error;
 
         // Override profile if using an assistant private session
         if (privateSession && privateSession.is_assistant) {
