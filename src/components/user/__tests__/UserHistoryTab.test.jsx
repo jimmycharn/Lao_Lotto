@@ -80,7 +80,7 @@ describe('UserHistoryTab', () => {
         })
 
         it('starts with current month selected and cards collapsed by default', () => {
-            const html = renderToString(<UserHistoryTab history={mockHistory} />)
+            const html = renderToString(<UserHistoryTab history={mockHistory} initialMonth="2026-10" />)
             expect(html).toContain('ขยายทั้งหมด')
             expect(html).not.toContain('user-history-table')
             // Profit card has dedicated class
@@ -198,7 +198,7 @@ describe('UserHistoryTab', () => {
                     is_active_announced: true
                 }
             ]
-            const html = renderToString(<UserHistoryTab history={historyWithActiveAnnounced} initialExpandedAll={true} />)
+            const html = renderToString(<UserHistoryTab history={historyWithActiveAnnounced} initialMonth="all" initialExpandedAll={true} />)
             expect(html).toContain('หวยไทย')
             expect(html).toContain('16 ต.ค. 2569')
             expect(html).toContain('฿3,000')

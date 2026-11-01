@@ -378,9 +378,10 @@ export default function Dealer() {
     }, [upstreamDealers])
 
     // Fetch details for an expanded history round
-    async function fetchHistoryDetails(historyItem) {
+    async function fetchHistoryDetails(historyItem, force = false) {
+        if (!historyItem?.id) return
         const historyId = historyItem.id
-        if (historyDetails[historyId]?.loaded) return
+        if (!force && historyDetails[historyId]?.loaded) return
 
         setHistoryDetails(prev => ({
             ...prev,
@@ -2937,6 +2938,7 @@ export default function Dealer() {
                 upstreamPayments: allUpstreamPayments || [],
                 transfers: allTransfersCombined
             })
+            return combinedHistory;
         } catch (error) {
             console.error('Error fetching round history:', error)
         } finally {
@@ -4093,9 +4095,13 @@ export default function Dealer() {
     }
 
     // Synchronize round data to history tables (round_history and user_round_history)
-    async function handleSyncRoundToHistory(roundId, isSilent = false) {
+    async function handleSyncRoundToHistory(roundId, isSilent = false, historyId = null) {
         if (!user?.id || !roundId) return
-        setSyncingRoundIds(prev => ({ ...prev, [roundId]: true }))
+        setSyncingRoundIds(prev => ({
+            ...prev,
+            [roundId]: true,
+            ...(historyId ? { [historyId]: true } : {})
+        }))
 
         let loadingToastId = null
         if (!isSilent && toast?.loading) {
@@ -4109,12 +4115,13 @@ export default function Dealer() {
         // Safety fallback timer: guarantee spinner stops even if unexpected async hiccups occur
         const safetyTimeout = setTimeout(() => {
             setSyncingRoundIds(prev => {
-                if (!prev[roundId]) return prev
+                if (!prev[roundId] && (!historyId || !prev[historyId])) return prev
                 const next = { ...prev }
                 delete next[roundId]
+                if (historyId) delete next[historyId]
                 return next
             })
-        }, 3000)
+        }, 5000)
 
         try {
             const rpcCall = supabase.rpc('sync_round_to_history', {
@@ -4122,7 +4129,7 @@ export default function Dealer() {
                 p_dealer_id: user?.id || null
             })
             const networkTimeout = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('การเชื่อมต่อหมดเวลา กรุณาลองใหม่')), 6000)
+                setTimeout(() => reject(new Error('การเชื่อมต่อหมดเวลา กรุณาลองใหม่')), 10000)
             )
             const minSpinTime = new Promise(resolve => setTimeout(resolve, 800))
 
@@ -4141,18 +4148,38 @@ export default function Dealer() {
                 return
             }
 
-            // Clear cached history details for this round
+            // Thoroughly clear cached history details for this round and historyItem id
             setHistoryDetails(prev => {
                 const next = { ...prev }
                 delete next[roundId]
+                if (historyId) delete next[historyId]
+                Object.keys(next).forEach(k => {
+                    if (k === roundId || k === historyId || next[k]?.round_id === roundId || next[k]?.id === historyId) {
+                        delete next[k]
+                    }
+                })
                 return next
             })
 
-            if (!isSilent) toast.success('ซิงค์ยอดเข้าแท็บประวัติเรียบร้อยแล้ว')
-
-            // Trigger background reload without blocking the button stop
-            fetchRoundHistory(true).catch(console.error)
+            // Await round history refresh so overview and roundHistory list update
+            const updatedHistoryList = await fetchRoundHistory(true).catch(err => {
+                console.error(err)
+                return null
+            })
             fetchDealerCredit().catch(console.error)
+
+            // If an expanded round card is currently open, refresh its details immediately
+            const activeTargetId = historyId || expandedHistoryId
+            const list = Array.isArray(updatedHistoryList) && updatedHistoryList.length > 0 ? updatedHistoryList : roundHistory
+            const targetHist = list.find(h => 
+                (activeTargetId && (h.id === activeTargetId || h.round_id === activeTargetId)) ||
+                (roundId && (h.round_id === roundId || h.id === roundId))
+            )
+            if (targetHist) {
+                await fetchHistoryDetails(targetHist, true).catch(console.error)
+            }
+
+            if (!isSilent) toast.success('ซิงค์ยอดเข้าแท็บประวัติเรียบร้อยแล้ว')
         } catch (err) {
             if (loadingToastId && toast?.dismiss) {
                 try { toast.dismiss(loadingToastId) } catch (e) {}
@@ -4164,6 +4191,7 @@ export default function Dealer() {
             setSyncingRoundIds(prev => {
                 const next = { ...prev }
                 delete next[roundId]
+                if (historyId) delete next[historyId]
                 return next
             })
         }
@@ -5120,7 +5148,7 @@ export default function Dealer() {
                                                                                             disabled={isSyncing}
                                                                                             onClick={(e) => {
                                                                                                 e.stopPropagation();
-                                                                                                handleSyncRoundToHistory(syncTargetId);
+                                                                                                handleSyncRoundToHistory(syncTargetId, false, history.id);
                                                                                             }}
                                                                                             style={{
                                                                                                 background: isSyncing ? 'rgba(59, 130, 246, 0.25)' : 'none',

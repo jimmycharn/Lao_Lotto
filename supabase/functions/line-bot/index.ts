@@ -3463,6 +3463,49 @@ async function fetchAllSubmissions(roundId: string, filterUserId?: string | null
   return allSubs;
 }
 
+async function fetchAllWinningSubmissions(
+  roundId: string,
+  filterUserId?: string | null,
+  onlyWinners: boolean = true
+): Promise<any[]> {
+  let allSubs: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  while (true) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = supabase
+      .from('submissions')
+      .select('id, amount, user_id, prize_amount, is_winner, bet_type, numbers, bill_id, bill_note, entry_id, display_numbers, display_amount, display_bet_type, created_at')
+      .eq('round_id', roundId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .range(from, to);
+
+    if (onlyWinners) {
+      query = query.eq('is_winner', true);
+    }
+    if (filterUserId) {
+      query = query.eq('user_id', filterUserId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      console.error("Error fetching winning submissions page:", error);
+      throw error;
+    }
+    if (!data || data.length === 0) {
+      break;
+    }
+    allSubs.push(...data);
+    if (data.length < pageSize) {
+      break;
+    }
+    page++;
+  }
+  return allSubs;
+}
+
 async function calculateRoundOutgoingProfit(
   activeRound: any,
   dealerId: string,
@@ -18265,9 +18308,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               billCode = text.substring('/โพย'.length).trim();
             }
 
-            const isWinningQuery = billCode === 'ถูก' || billCode === 'win' || billCode === 'won';
-            const isWinningMemberQuery = billCode.startsWith('ถูก ') || billCode.startsWith('win ') || billCode.startsWith('won ');
-            const targetMemberId = isWinningMemberQuery ? billCode.split(/\s+/)[1]?.trim() : null;
+            const winMatch = billCode.match(/^(?:ถูก|win|won)(?:\s+(.+)|(\d+))?$/i);
+            const isWinningAny = !!winMatch;
+            const targetMemberId = (winMatch?.[1] || winMatch?.[2])?.trim() || null;
+            const isWinningMemberQuery = isWinningAny && !!targetMemberId;
+            const isWinningQuery = isWinningAny && !targetMemberId;
 
             if (isWinningQuery || isWinningMemberQuery) {
               let listDealerId = null;
@@ -18321,6 +18366,30 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               }
               const isAuthorized = isStaffSender || isManagerSender;
 
+              // Non-admin trying to query another member's winning slips
+              if (isWinningMemberQuery && targetMemberId && !isAuthorized) {
+                await sendLineReply(replyToken, `❌ คำสั่งดูโพยถูกของสมาชิกเฉพาะเจาะจง ใช้ได้เฉพาะแอดมิน/เจ้ามือ/ผู้จัดการ เท่านั้นค่ะ\n💡 หากต้องการดูโพยถูกของตัวเอง พิมพ์ /โพย ถูก`);
+                continue;
+              }
+
+              // Admin querying a specific member: Resolve target profile FIRST before fetching submissions
+              let targetProfile: any = null;
+              if (isWinningMemberQuery && targetMemberId && isAuthorized) {
+                const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetMemberId);
+                let targetQuery = supabase.from('profiles').select('id, full_name, member_code');
+                if (isUuid) {
+                  targetQuery = targetQuery.eq('id', targetMemberId);
+                } else {
+                  targetQuery = targetQuery.eq('member_code', targetMemberId);
+                }
+                const { data: foundProfile } = await targetQuery.maybeSingle();
+                if (!foundProfile) {
+                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีรหัส "${targetMemberId}" ในระบบค่ะ`);
+                  continue;
+                }
+                targetProfile = foundProfile;
+              }
+
               // 4. Find the latest announced round (is_result_announced = true)
               const { data: targetRounds } = await supabase
                 .from('lottery_rounds')
@@ -18337,30 +18406,24 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              // 5. Fetch winning submissions
+              // Determine user filter for query:
+              // - Admin querying specific member -> targetProfile.id
+              // - Member querying own winning slips -> senderProfile.id
+              // - Admin querying all round winners -> null (all members)
+              let queryUserId: string | null = null;
+              if (targetProfile) {
+                queryUserId = targetProfile.id;
+              } else if (!isAuthorized) {
+                queryUserId = senderProfile.id;
+              }
+
+              // 5. Fetch winning submissions with pagination (Domain Rule #2)
               let winningSubs: any[] = [];
               let fetchErr: any = null;
-              if (isAuthorized) {
-                const { data, error } = await supabase
-                  .from('submissions')
-                  .select('id, amount, user_id, prize_amount, is_winner, bet_type, numbers, bill_id, bill_note, entry_id, display_numbers, display_amount, display_bet_type')
-                  .eq('round_id', activeRound.id)
-                  .eq('is_winner', true)
-                  .eq('is_deleted', false)
-                  .order('created_at', { ascending: true });
-                winningSubs = data || [];
-                fetchErr = error;
-              } else {
-                const { data, error } = await supabase
-                  .from('submissions')
-                  .select('id, amount, user_id, prize_amount, is_winner, bet_type, numbers, bill_id, bill_note, entry_id, display_numbers, display_amount, display_bet_type')
-                  .eq('round_id', activeRound.id)
-                  .eq('user_id', senderProfile.id)
-                  .eq('is_winner', true)
-                  .eq('is_deleted', false)
-                  .order('created_at', { ascending: true });
-                winningSubs = data || [];
-                fetchErr = error;
+              try {
+                winningSubs = await fetchAllWinningSubmissions(activeRound.id, queryUserId, true);
+              } catch (err) {
+                fetchErr = err;
               }
 
               if (fetchErr) {
@@ -18369,9 +18432,27 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              const roundDateStr = getRoundDisplayDate(activeRound, false);
+              // Fetch user_settings for member custom payout calculation
+              const memberSettingsMap: Record<string, any> = {};
+              const relevantUserIds = queryUserId ? [queryUserId] : [...new Set(winningSubs.map((s: any) => s.user_id))];
+              if (relevantUserIds.length > 0) {
+                const roundDealerId = activeRound.dealer_id || listDealerId;
+                let settingsQuery = supabase
+                  .from('user_settings')
+                  .select('*')
+                  .in('user_id', relevantUserIds);
+                if (roundDealerId) {
+                  settingsQuery = settingsQuery.eq('dealer_id', roundDealerId);
+                }
+                const { data: memberSettings } = await settingsQuery;
+                (memberSettings || []).forEach((s: any) => {
+                  memberSettingsMap[s.user_id] = s;
+                });
+              }
 
+              const roundDateStr = getRoundDisplayDate(activeRound, false);
               const setPrice = activeRound.set_prices?.['4_top'] || 120;
+
               const calculatePayout = (sub: any) => {
                 const amt = Number(sub.amount || 0);
                 let win = 0;
@@ -18381,6 +18462,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   win = sub.prize_amount != null ? Number(sub.prize_amount) : 0;
                 }
                 if (win === 0) {
+                  const uSetting = memberSettingsMap[sub.user_id];
+                  let memberPrizeSettings = DEFAULT_4_SET_SETTINGS.prizes;
+                  const betKey = (activeRound.lottery_type === 'lao' || activeRound.lottery_type === 'hanoi') ? 'lao' : activeRound.lottery_type;
+                  if (uSetting?.lottery_settings?.[betKey]?.['4_set']?.prizes) {
+                    memberPrizeSettings = uSetting.lottery_settings[betKey]['4_set'].prizes;
+                  }
                   const winResult = checkTransferWin(
                     sub.bet_type,
                     sub.numbers,
@@ -18388,10 +18475,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     activeRound.lottery_type,
                     amt,
                     setPrice,
-                    DEFAULT_4_SET_SETTINGS.prizes
+                    memberPrizeSettings
                   );
                   if (winResult.wins) {
-                    win = winResult.payout;
+                    const settingsKey = getBetSettingsKey(sub.bet_type, betKey);
+                    const customPayout = uSetting?.lottery_settings?.[betKey]?.[settingsKey]?.payout;
+                    if (customPayout && sub.bet_type !== '4_set' && sub.bet_type !== '4_top') {
+                      win = amt * Number(customPayout);
+                    } else {
+                      win = winResult.payout;
+                    }
                   }
                 }
                 return win;
@@ -18399,18 +18492,28 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
               // Dynamic fallback for /โพยถูก if DB is_winner has not been populated
               if (winningSubs.length === 0 && activeRound.winning_numbers) {
-                let candidateQuery = supabase
-                  .from('submissions')
-                  .select('id, amount, user_id, prize_amount, is_winner, bet_type, numbers, bill_id, bill_note, entry_id, display_numbers, display_amount, display_bet_type')
-                  .eq('round_id', activeRound.id)
-                  .eq('is_deleted', false)
-                  .order('created_at', { ascending: true });
-                if (!isAuthorized) {
-                  candidateQuery = candidateQuery.eq('user_id', senderProfile.id);
-                }
-                const { data: candidates } = await candidateQuery;
-                if (candidates && candidates.length > 0) {
-                  winningSubs = candidates.filter((sub: any) => calculatePayout(sub) > 0);
+                try {
+                  const candidates = await fetchAllWinningSubmissions(activeRound.id, queryUserId, false);
+                  if (candidates && candidates.length > 0) {
+                    const candidateUserIds = queryUserId ? [queryUserId] : [...new Set(candidates.map((s: any) => s.user_id))];
+                    if (candidateUserIds.length > 0 && Object.keys(memberSettingsMap).length === 0) {
+                      const roundDealerId = activeRound.dealer_id || listDealerId;
+                      let settingsQuery = supabase
+                        .from('user_settings')
+                        .select('*')
+                        .in('user_id', candidateUserIds);
+                      if (roundDealerId) {
+                        settingsQuery = settingsQuery.eq('dealer_id', roundDealerId);
+                      }
+                      const { data: memberSettings } = await settingsQuery;
+                      (memberSettings || []).forEach((s: any) => {
+                        memberSettingsMap[s.user_id] = s;
+                      });
+                    }
+                    winningSubs = candidates.filter((sub: any) => calculatePayout(sub) > 0);
+                  }
+                } catch (fallbackErr) {
+                  console.error("Error in fallback winning candidates:", fallbackErr);
                 }
               }
 
@@ -18437,28 +18540,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 '4_float': '4 ตัวลอยแพ',
                 '5_float': '5 ตัวลอยแพ',
                 'run_top': 'ลอยบน',
-                'run_bottom': 'ลอยล่าง'
+                'run_bottom': 'ลอยล่าง',
+                'pak_top': 'ปักบน',
+                'pak_bottom': 'ปักล่าง'
               };
 
-              // Admin querying a specific member's winning slips
-              if (isWinningMemberQuery && targetMemberId && isAuthorized) {
-                // Look up the target member's profile by member_code or id (UUID)
-                const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetMemberId);
-                let targetQuery = supabase.from('profiles').select('id, full_name');
-                if (isUuid) {
-                  targetQuery = targetQuery.eq('id', targetMemberId);
-                } else {
-                  targetQuery = targetQuery.eq('member_code', targetMemberId);
-                }
-                const { data: targetProfile } = await targetQuery.maybeSingle();
-
-                if (!targetProfile) {
-                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกที่มีรหัส "${targetMemberId}" ในระบบค่ะ`);
-                  continue;
-                }
-
-                // Filter winning subs to only this member
-                const memberWinningSubs = winningSubs.filter((s: any) => s.user_id === targetProfile.id);
+              // Branch 1: Admin querying a specific member's winning slips
+              if (targetProfile) {
+                const memberWinningSubs = winningSubs;
 
                 if (memberWinningSubs.length === 0) {
                   const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
@@ -18468,8 +18557,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
                 const billOrder: string[] = [];
                 const billMap = new Map<string, { billId: string; note: string; totalWin: number; lines: string[] }>();
+                let totalWinningItems = 0;
 
                 memberWinningSubs.forEach((s: any) => {
+                  const payout = calculatePayout(s);
+                  if (payout <= 0) return;
+
                   const bid = s.bill_id || '-';
                   if (!billMap.has(bid)) {
                     billMap.set(bid, {
@@ -18481,12 +18574,18 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     billOrder.push(bid);
                   }
                   const b = billMap.get(bid)!;
-                  const payout = calculatePayout(s);
                   b.totalWin += payout;
+                  totalWinningItems++;
 
                   const label = LABELS[s.bet_type] || s.bet_type;
                   b.lines.push(`- ${s.numbers}=${s.amount} (${label}) [ถูกรางวัล: ฿${payout.toLocaleString('th-TH')}]`);
                 });
+
+                if (billOrder.length === 0) {
+                  const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
+                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} (ผลรางวัล: ${winNumStr}) คุณ ${targetProfile.full_name} ยังไม่มีเลขที่ถูกรางวัลค่ะ`);
+                  continue;
+                }
 
                 const lotteryName = (activeRound.lottery_type || '').toUpperCase();
                 const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
@@ -18510,25 +18609,23 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   out += `----------------------\n`;
                 });
 
-                out += `รวมถูกรางวัลทั้งหมด: ${billOrder.length} ใบโพย\n`;
+                out += `รวมถูกรางวัลทั้งหมด: ${billOrder.length} ใบโพย (${totalWinningItems} รายการ)\n`;
                 out += `🏆 ยอดรวมรางวัลรวม: ฿${grandTotalWin.toLocaleString('th-TH')}`;
 
-                await sendLineReply(replyToken, out);
+                await sendLineReply(replyToken, splitTextByLimit(out, 4000));
                 continue;
               }
 
-              // Non-admin trying to use member-specific query
-              if (isWinningMemberQuery && targetMemberId && !isAuthorized) {
-                await sendLineReply(replyToken, `❌ คำสั่งดูโพยถูกของสมาชิกเฉพาะเจาะจง ใช้ได้เฉพาะแอดมิน/เจ้ามือ/ผู้จัดการ เท่านั้นค่ะ\n💡 หากต้องการดูโพยถูกของตัวเอง พิมพ์ /โพย ถูก`);
-                continue;
-              }
-
+              // Branch 2: Regular member querying own winning slips
               if (!isAuthorized) {
-                // Member specific view
                 const billOrder: string[] = [];
                 const billMap = new Map<string, { billId: string; note: string; totalWin: number; lines: string[] }>();
+                let totalWinningItems = 0;
 
                 winningSubs.forEach((s: any) => {
+                  const payout = calculatePayout(s);
+                  if (payout <= 0) return;
+
                   const bid = s.bill_id || '-';
                   if (!billMap.has(bid)) {
                     billMap.set(bid, {
@@ -18540,9 +18637,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     billOrder.push(bid);
                   }
                   const b = billMap.get(bid)!;
-                  const payout = calculatePayout(s);
                   b.totalWin += payout;
-                  
+                  totalWinningItems++;
+
                   const label = LABELS[s.bet_type] || s.bet_type;
                   b.lines.push(`- ${s.numbers}=${s.amount} (${label}) [ถูกรางวัล: ฿${payout.toLocaleString('th-TH')}]`);
                 });
@@ -18575,29 +18672,27 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   out += `----------------------\n`;
                 });
 
-                out += `รวมถูกรางวัลทั้งหมด: ${billOrder.length} ใบโพย\n`;
+                out += `รวมถูกรางวัลทั้งหมด: ${billOrder.length} ใบโพย (${totalWinningItems} รายการ)\n`;
                 out += `🏆 ยอดรวมรางวัลรวม: ฿${grandTotalWin.toLocaleString('th-TH')}`;
 
-                await sendLineReply(replyToken, out);
+                await sendLineReply(replyToken, splitTextByLimit(out, 4000));
                 continue;
               } else {
-                // Dealer/Manager specific view
+                // Branch 3: Dealer/Manager viewing all members who won in this round
                 const winningUserIds = [...new Set(winningSubs.map((s: any) => s.user_id))];
                 const userProfileMap = new Map<string, string>();
                 if (winningUserIds.length > 0) {
-                  const { data: profiles } = await supabase
-                    .from('profiles')
-                    .select('id, full_name')
-                    .in('id', winningUserIds);
-                  profiles?.forEach((p: any) => {
-                    userProfileMap.set(p.id, p.full_name || 'ไม่ระบุชื่อ');
-                  });
-                }
-
-                if (winningUserIds.length === 0) {
-                  const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
-                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} (ผลรางวัล: ${winNumStr}) ยังไม่มีสมาชิกคนใดถูกรางวัลสำหรับหวยประเภท ${listLotteryType.toUpperCase()} ค่ะ`);
-                  continue;
+                  const chunkSize = 500;
+                  for (let i = 0; i < winningUserIds.length; i += chunkSize) {
+                    const chunk = winningUserIds.slice(i, i + chunkSize);
+                    const { data: profiles } = await supabase
+                      .from('profiles')
+                      .select('id, full_name')
+                      .in('id', chunk);
+                    profiles?.forEach((p: any) => {
+                      userProfileMap.set(p.id, p.full_name || 'ไม่ระบุชื่อ');
+                    });
+                  }
                 }
 
                 const userOrder: string[] = [];
@@ -18607,8 +18702,12 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   billOrder: string[];
                   billMap: Map<string, { billId: string; note: string; totalWin: number; lines: string[] }>
                 }>();
+                let totalRoundWinningItems = 0;
 
                 winningSubs.forEach((s: any) => {
+                  const payout = calculatePayout(s);
+                  if (payout <= 0) return;
+
                   const uid = s.user_id;
                   if (!userMap.has(uid)) {
                     userMap.set(uid, {
@@ -18619,10 +18718,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     });
                     userOrder.push(uid);
                   }
-                  
+
                   const u = userMap.get(uid)!;
-                  const payout = calculatePayout(s);
                   u.totalWin += payout;
+                  totalRoundWinningItems++;
 
                   const bid = s.bill_id || '-';
                   if (!u.billMap.has(bid)) {
@@ -18634,12 +18733,18 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     });
                     u.billOrder.push(bid);
                   }
-                  
+
                   const b = u.billMap.get(bid)!;
                   b.totalWin += payout;
                   const label = LABELS[s.bet_type] || s.bet_type;
                   b.lines.push(`  • ${s.numbers}=${s.amount} (${label}) [฿${payout.toLocaleString('th-TH')}]`);
                 });
+
+                if (userOrder.length === 0) {
+                  const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
+                  await sendLineReply(replyToken, `📭 ในงวดวันที่ ${roundDateStr} (ผลรางวัล: ${winNumStr}) ยังไม่มีสมาชิกคนใดถูกรางวัลสำหรับหวยประเภท ${listLotteryType.toUpperCase()} ค่ะ`);
+                  continue;
+                }
 
                 const lotteryName = (activeRound.lottery_type || '').toUpperCase();
                 const winNumStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
@@ -18653,7 +18758,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   const u = userMap.get(uid)!;
                   grandTotalWin += u.totalWin;
                   out += `👤 คุณ ${u.userName} (รวมถูก: ฿${u.totalWin.toLocaleString('th-TH')})\n`;
-                  
+
                   u.billOrder.forEach((bid) => {
                     const b = u.billMap.get(bid)!;
                     out += `  📄 โพย: ${b.billId}\n`;
@@ -18665,9 +18770,10 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   out += `----------------------\n`;
                 });
 
-                out += `🏆 ยอดรวมจ่ายรางวัลทั้งหมด: ฿${grandTotalWin.toLocaleString('th-TH')}`;
+                out += `🏆 ยอดรวมจ่ายรางวัลทั้งหมด: ฿${grandTotalWin.toLocaleString('th-TH')}\n`;
+                out += `(รวมถูกรางวัล ${totalRoundWinningItems} รายการ จากสมาชิก ${userOrder.length} ท่าน)`;
 
-                await sendLineReply(replyToken, out);
+                await sendLineReply(replyToken, splitTextByLimit(out, 4000));
                 continue;
               }
             }
