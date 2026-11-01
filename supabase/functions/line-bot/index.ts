@@ -2662,26 +2662,36 @@ async function performReturnBatch(
 }
 
 // Helper: Check Dealer Credit for Bet (Deno port of creditCheck.js)
-async function checkDealerCreditForBet(dealerId: string, newBetAmount: number): Promise<{ allowed: boolean; message: string }> {
+async function checkDealerCreditForBet(
+  dealerId: string,
+  newBetAmount: number,
+  preloadedSubscription?: any,
+  preloadedCredit?: any
+): Promise<{ allowed: boolean; message: string }> {
   try {
-    const { data: subscriptions, error: subError } = await supabase
-      .from('dealer_subscriptions')
-      .select(`
-        *,
-        subscription_packages (
-          id,
-          billing_model,
-          percentage_rate,
-          min_amount_before_charge
-        )
-      `)
-      .eq('dealer_id', dealerId)
-      .in('status', ['active', 'trial'])
-      .order('created_at', { ascending: false })
-      .limit(1);
+    let subscription = preloadedSubscription !== undefined ? preloadedSubscription : null;
+    if (preloadedSubscription === undefined) {
+      const { data: subscriptions, error: subError } = await supabase
+        .from('dealer_subscriptions')
+        .select(`
+          *,
+          subscription_packages (
+            id,
+            billing_model,
+            percentage_rate,
+            min_amount_before_charge
+          )
+        `)
+        .eq('dealer_id', dealerId)
+        .in('status', ['active', 'trial'])
+        .order('created_at', { ascending: false })
+        .limit(1);
 
-    const subscription = subscriptions?.[0] || null;
-    if (subError || !subscription) {
+      subscription = subscriptions?.[0] || null;
+      if (subError || !subscription) {
+        return { allowed: true, message: 'No active subscription' };
+      }
+    } else if (!subscription) {
       return { allowed: true, message: 'No active subscription' };
     }
 
@@ -2694,11 +2704,15 @@ async function checkDealerCreditForBet(dealerId: string, newBetAmount: number): 
 
     const percentageRate = pkg?.percentage_rate || 0;
 
-    const { data: creditData } = await supabase
-      .from('dealer_credits')
-      .select('balance, pending_deduction')
-      .eq('dealer_id', dealerId)
-      .single();
+    let creditData = preloadedCredit !== undefined ? preloadedCredit : null;
+    if (preloadedCredit === undefined) {
+      const { data: cd } = await supabase
+        .from('dealer_credits')
+        .select('balance, pending_deduction')
+        .eq('dealer_id', dealerId)
+        .single();
+      creditData = cd;
+    }
 
     const currentBalance = creditData?.balance || 0;
     const currentPendingDeduction = creditData?.pending_deduction || 0;
@@ -3425,6 +3439,80 @@ function getThaiBetTypeLabel(betType: string, lotteryType: string): string {
     };
     return labels[betType] || betType;
   }
+}
+
+
+// Optimized helper: fetch submissions totals only for numbers involved in current bet
+async function fetchTargetedSubmissionsTotals(
+  roundId: string,
+  numbersBeingBet: string[],
+  isSetBasedLottery: boolean,
+  setPrice: number = 120
+): Promise<{
+  currentTotals: Map<string, number>;
+  currentExactSetsMap: Map<string, number>;
+  current3SetTotalMap: Map<string, number>;
+}> {
+  const currentTotals = new Map<string, number>();
+  const currentExactSetsMap = new Map<string, number>();
+  const current3SetTotalMap = new Map<string, number>();
+
+  if (!roundId || numbersBeingBet.length === 0) {
+    return { currentTotals, currentExactSetsMap, current3SetTotalMap };
+  }
+
+  // 1. Fetch submissions matching the specific numbers in this bet (chunk by 100)
+  const chunkSize = 100;
+  const queries: Promise<any>[] = [];
+  for (let i = 0; i < numbersBeingBet.length; i += chunkSize) {
+    const chunk = numbersBeingBet.slice(i, i + chunkSize);
+    queries.push(
+      supabase
+        .from('submissions')
+        .select('id, bet_type, numbers, amount')
+        .eq('round_id', roundId)
+        .eq('is_deleted', false)
+        .in('numbers', chunk)
+    );
+  }
+
+  // 2. If set-based (Lao/Hanoi) and any 4-digit bets are present, also fetch 4-digit set bets
+  const fourDigitBets = numbersBeingBet.filter(n => n.length === 4);
+  if (isSetBasedLottery && fourDigitBets.length > 0) {
+    queries.push(
+      supabase
+        .from('submissions')
+        .select('id, bet_type, numbers, amount')
+        .eq('round_id', roundId)
+        .eq('is_deleted', false)
+        .in('bet_type', ['4_set', '4_top'])
+    );
+  }
+
+  const results = await Promise.all(queries);
+  const seenIds = new Set<string>();
+
+  for (const res of results) {
+    if (res.data) {
+      for (const s of res.data) {
+        if (s.id && seenIds.has(s.id)) continue;
+        if (s.id) seenIds.add(s.id);
+
+        const key = `${s.bet_type}|${s.numbers}`;
+        const amt = Number(s.amount || 0);
+        currentTotals.set(key, (currentTotals.get(key) || 0) + amt);
+
+        if (isSetBasedLottery && (s.bet_type === '4_set' || s.bet_type === '4_top') && s.numbers?.length === 4) {
+          const sets = Math.ceil(amt / setPrice);
+          currentExactSetsMap.set(s.numbers, (currentExactSetsMap.get(s.numbers) || 0) + sets);
+          const last3 = s.numbers.slice(-3);
+          current3SetTotalMap.set(last3, (current3SetTotalMap.get(last3) || 0) + sets);
+        }
+      }
+    }
+  }
+
+  return { currentTotals, currentExactSetsMap, current3SetTotalMap };
 }
 
 async function fetchAllSubmissions(roundId: string, filterUserId?: string | null): Promise<any[]> {
@@ -8321,13 +8409,16 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
       const incomingEvents = parsedBody?.events || [];
       const hasImageEvent = incomingEvents.some((ev: any) => ev.type === 'message' && ev.message?.type === 'image');
+      const hasFastPathTextEvent = incomingEvents.some((ev: any) => {
+        if (ev.type !== 'message' || ev.message?.type !== 'text') return false;
+        const txt = (ev.message?.text || '').trim();
+        return txt.startsWith('/') || txt.startsWith('#') || /\d/.test(txt);
+      });
 
-      if (hasImageEvent) {
-        // --- FAST-PATH FOR IMAGE MESSAGES (BANK SLIPS) ---
-        // Image verification needs to download the image, call SlipOK API, compute debts, and reply to LINE.
-        // If put in the pg_net queue, the 6+ second async queue delay causes LINE's replyToken to expire!
-        // Processing directly preserves the replyToken fresh so reply succeeds without consuming Push quota.
-        console.log(`[SLIP FAST-PATH] Detected image message event, processing synchronously to preserve replyToken`);
+      if (hasImageEvent || hasFastPathTextEvent) {
+        // --- FAST-PATH FOR IMAGE (SLIPS) AND BET/COMMAND MESSAGES ---
+        // Processing directly preserves the replyToken fresh so reply succeeds immediately without queue lag!
+        console.log(`[FAST-PATH] Detected fast-path event (image=${hasImageEvent}, text=${hasFastPathTextEvent}), processing synchronously`);
         payload = parsedBody;
         events = incomingEvents;
 
@@ -8346,7 +8437,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             currentQueueId = qItem.id;
           }
         } catch (queueErr) {
-          console.error("Failed to log fast-path slip to line_webhook_queue:", queueErr);
+          console.error("Failed to log fast-path event to line_webhook_queue:", queueErr);
         }
       } else {
         // --- ENQUEUE WEBHOOK IN BACKGROUND QUEUE FOR REGULAR/TEXT EVENTS ---
@@ -19251,15 +19342,35 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         console.log(`[LINE BOT MSG] Found session for target dealerId: ${dealerId}`);
 
-        // Verify if sender has a linked profile
-        let { data: profile, error: profileErr } = await supabase
-          .from('profiles')
-          .select('id, full_name, is_active, role, line_poy_display, admin_poy_display, member_code')
-          .eq('line_user_id', userId)
-          .eq('is_active', true)
-          .maybeSingle();
+        // Verify sender's profile, group membership, and manager record in parallel
+        const [profileRes, memberRecordRes, managerRecordRes] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('id, full_name, is_active, role, line_poy_display, admin_poy_display, member_code')
+            .eq('line_user_id', userId)
+            .eq('is_active', true)
+            .maybeSingle(),
+          supabase
+            .from('line_group_members')
+            .select('poy_display, admin_poy_display')
+            .eq('line_group_id', groupId)
+            .eq('line_user_id', userId)
+            .maybeSingle(),
+          dealerId
+            ? supabase
+                .from('line_managers')
+                .select('id')
+                .eq('dealer_id', dealerId)
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null })
+        ]);
 
+        let profile = profileRes.data;
         const senderProfile = profile;
+        const memberRecord = memberRecordRes.data;
+        const managerRecord = managerRecordRes.data;
 
         // Override profile if using an assistant private session
         if (privateSession && privateSession.is_assistant) {
@@ -19274,28 +19385,11 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           }
         }
 
-        // Verify sender's group membership for display settings
-        const { data: memberRecord } = await supabase
-          .from('line_group_members')
-          .select('poy_display, admin_poy_display')
-          .eq('line_group_id', groupId)
-          .eq('line_user_id', userId)
-          .maybeSingle();
-
         const groupMemberPoy = memberRecord?.poy_display || null;
         const groupMemberAdminPoy = memberRecord?.admin_poy_display || 'normal';
         const globalPoy = groupLink?.poy_display || 'normal';
 
         let senderPoyDisplay = groupMemberPoy || 'short';
-
-        // Check if sender is a manager for this dealer
-        const { data: managerRecord, error: managerErr } = await supabase
-          .from('line_managers')
-          .select('id')
-          .eq('dealer_id', dealerId)
-          .eq('line_user_id', userId)
-          .eq('is_active', true)
-          .maybeSingle();
 
         console.log(`[LINE BOT MSG] managerRecord lookup result:`, { managerRecord, managerErr });
 
@@ -19395,13 +19489,60 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         const submittedById = originalSenderId || (profile ? profile.id : null);
 
-        // Check active membership with the group's dealer
-        const { data: membership } = await supabase
-          .from('user_dealer_memberships')
-          .select('id, status')
-          .eq('user_id', profile.id)
-          .eq('dealer_id', dealerId)
-          .maybeSingle();
+        // Batch 2: Parallelize membership, open rounds, user settings, and dealer credit lookups
+        const [
+          membershipRes,
+          openRoundsRes,
+          userSettingsRes,
+          dealerSubRes,
+          dealerCreditRes
+        ] = await Promise.all([
+          supabase
+            .from('user_dealer_memberships')
+            .select('id, status')
+            .eq('user_id', profile.id)
+            .eq('dealer_id', dealerId)
+            .maybeSingle(),
+          supabase
+            .from('lottery_rounds')
+            .select('*')
+            .eq('dealer_id', dealerId)
+            .eq('lottery_type', lotteryType)
+            .in('status', ['open', 'closed', 'announced'])
+            .order('open_time', { ascending: false }),
+          supabase
+            .from('user_settings')
+            .select('lottery_settings')
+            .eq('user_id', profile.id)
+            .eq('dealer_id', dealerId)
+            .maybeSingle(),
+          supabase
+            .from('dealer_subscriptions')
+            .select(`
+              *,
+              subscription_packages (
+                id,
+                billing_model,
+                percentage_rate,
+                min_amount_before_charge
+              )
+            `)
+            .eq('dealer_id', dealerId)
+            .in('status', ['active', 'trial'])
+            .order('created_at', { ascending: false })
+            .limit(1),
+          supabase
+            .from('dealer_credits')
+            .select('balance, pending_deduction')
+            .eq('dealer_id', dealerId)
+            .single()
+        ]);
+
+        const membership = membershipRes.data;
+        const openRounds = openRoundsRes.data;
+        const userSettings = userSettingsRes.data;
+        const preloadedSubscription = dealerSubRes.data?.[0] || null;
+        const preloadedCredit = dealerCreditRes.data || null;
 
         if (!membership || membership.status !== 'active') {
           const statusText = membership?.status === 'pending'
@@ -19410,15 +19551,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           await sendLineReply(replyToken, `❌ ขออภัยค่ะ คุณ ${profile.full_name} ${statusText}`);
           continue;
         }
-
-        // Check active round for this dealer (must be open/closed/announced, is_active=true, and current time is past open time)
-        const { data: openRounds } = await supabase
-          .from('lottery_rounds')
-          .select('*')
-          .eq('dealer_id', dealerId)
-          .eq('lottery_type', lotteryType)
-          .in('status', ['open', 'closed', 'announced'])
-          .order('open_time', { ascending: false });
 
         const now = new Date();
         const activeRound = (openRounds || []).find(round => {
@@ -19475,14 +19607,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           // Member has temp access — fall through to allow betting
         }
 
-        // Retrieve returnExcessOnOverflow setting for the member
         const effectiveDealerId = activeRound?.dealer_id || dealerId;
-        const { data: userSettings } = await supabase
-          .from('user_settings')
-          .select('lottery_settings')
-          .eq('user_id', profile.id)
-          .eq('dealer_id', effectiveDealerId)
-          .maybeSingle();
 
         const returnExcess = !!userSettings?.lottery_settings?.[lotteryType]?.returnExcessOnOverflow;
 
@@ -19513,59 +19638,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           });
         }
 
-        let typeLimitsMap: Record<string, number> = {};
-        const typeCloseTimesMap: Record<string, string | null> = {};
-        const typeCloseTimeBehaviorsMap: Record<string, string> = {};
-        let numberLimits: any[] = [];
-        const currentTotals = new Map<string, number>();
-        let transfersList: any[] = [];
         const isSetBasedLottery = ['lao', 'hanoi'].includes(lotteryType);
-
-        // Fetch type limits unconditionally (needed for specific close times validation)
-        const { data: typeLimitsData } = await supabase
-          .from('type_limits')
-          .select('bet_type, max_per_number, close_time, close_time_behavior')
-          .eq('round_id', activeRound.id);
-        (typeLimitsData || []).forEach((tl: any) => {
-          typeLimitsMap[tl.bet_type] = Number(tl.max_per_number);
-          typeCloseTimesMap[tl.bet_type] = tl.close_time;
-          typeCloseTimeBehaviorsMap[tl.bet_type] = tl.close_time_behavior || 'close_immediately';
-        });
-
-        const hasReturnExcessBehaviors = (typeLimitsData || []).some(
-          (tl: any) => tl.close_time && tl.close_time_behavior === 'return_excess'
-        );
-        const shouldLoadLimits = returnExcess || hasReturnExcessBehaviors;
-
-        // Always fetch number limits (needed to always enforce blocked numbers/เลขปิด
-        // and to always show payout percent/เลขอั้นเฉพาะจ่าย% info), regardless of returnExcess setting
-        const { data: numberLimitsData } = await supabase
-          .from('number_limits')
-          .select('bet_type, numbers, max_amount, is_active, limit_type, payout_percent, include_reversed, reversed_numbers, time_condition')
-          .eq('round_id', activeRound.id);
-        numberLimits = (numberLimitsData || []).filter((nl: any) => nl.is_active === undefined || nl.is_active === true);
-
-        if (shouldLoadLimits) {
-
-          // Fetch submissions totals
-          let submissionsData = [];
-          try {
-            submissionsData = await fetchAllSubmissions(activeRound.id);
-          } catch (err) {
-            console.error("Failed to fetch submissions totals:", err);
-          }
-          (submissionsData || []).forEach((s: any) => {
-            const key = `${s.bet_type}|${s.numbers}`;
-            currentTotals.set(key, (currentTotals.get(key) || 0) + Number(s.amount || 0));
-          });
-
-          // Fetch layoffs
-          const { data: transfersData } = await supabase
-            .from('bet_transfers')
-            .select('bet_type, numbers, amount, status')
-            .eq('round_id', activeRound.id);
-          transfersList = (transfersData || []).filter((t: any) => t.status !== 'returned');
-        }
 
         // Calculate total bet amount
         let totalBetAmount = 0;
@@ -19850,26 +19923,61 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           }
         }
 
+        // Batch 3: Parallel limits, targeted submissions, and transfers lookups
+        const setPrice = activeRound.set_prices?.['4_set'] || activeRound.set_prices?.['4_top'] || 120;
+        const numbersBeingBet = Array.from(new Set(processedInserts.map(i => i.numbers)));
+
+        let typeLimitsMap: Record<string, number> = {};
+        const typeCloseTimesMap: Record<string, string | null> = {};
+        const typeCloseTimeBehaviorsMap: Record<string, string> = {};
+        let numberLimits: any[] = [];
+        let currentTotals = new Map<string, number>();
+        let currentExactSetsMap = new Map<string, number>();
+        let current3SetTotalMap = new Map<string, number>();
+        let transfersList: any[] = [];
+
+        const [
+          typeLimitsRes,
+          numberLimitsRes,
+          targetedSubsResult,
+          transfersRes
+        ] = await Promise.all([
+          supabase
+            .from('type_limits')
+            .select('bet_type, max_per_number, close_time, close_time_behavior')
+            .eq('round_id', activeRound.id),
+          supabase
+            .from('number_limits')
+            .select('bet_type, numbers, max_amount, is_active, limit_type, payout_percent, include_reversed, reversed_numbers, time_condition')
+            .eq('round_id', activeRound.id),
+          fetchTargetedSubmissionsTotals(activeRound.id, numbersBeingBet, isSetBasedLottery, setPrice),
+          supabase
+            .from('bet_transfers')
+            .select('bet_type, numbers, amount, status')
+            .eq('round_id', activeRound.id)
+        ]);
+
+        const typeLimitsData = typeLimitsRes.data;
+        (typeLimitsData || []).forEach((tl: any) => {
+          typeLimitsMap[tl.bet_type] = Number(tl.max_per_number);
+          typeCloseTimesMap[tl.bet_type] = tl.close_time;
+          typeCloseTimeBehaviorsMap[tl.bet_type] = tl.close_time_behavior || 'close_immediately';
+        });
+
+        const hasReturnExcessBehaviors = (typeLimitsData || []).some(
+          (tl: any) => tl.close_time && tl.close_time_behavior === 'return_excess'
+        );
+        const shouldLoadLimits = returnExcess || hasReturnExcessBehaviors;
+
+        numberLimits = (numberLimitsRes.data || []).filter((nl: any) => nl.is_active === undefined || nl.is_active === true);
+        currentTotals = targetedSubsResult.currentTotals;
+        currentExactSetsMap = targetedSubsResult.currentExactSetsMap;
+        current3SetTotalMap = targetedSubsResult.current3SetTotalMap;
+        transfersList = (transfersRes.data || []).filter((t: any) => t.status !== 'returned');
+
         const finalInserts = [];
         const returnedBets: { numbers: string; betType: string; amount: number; typeLabel: string; reason?: 'closed' | 'overflow' | 'blocked'; entry_id?: string; displayNumbers?: string }[] = [];
         const insertPayoutPercentMap = new Map<any, number>();
-
-        const currentExactSetsMap = new Map<string, number>();
-        const current3SetTotalMap = new Map<string, number>();
-        const setPrice = activeRound.set_prices?.['4_set'] || activeRound.set_prices?.['4_top'] || 120;
-
-        if (shouldLoadLimits && isSetBasedLottery) {
-          for (const [key, val] of currentTotals.entries()) {
-            const [bt, num] = key.split('|');
-            if ((bt === '4_set' || bt === '4_top') && num?.length === 4) {
-              const sets = Math.ceil(val / setPrice);
-              currentExactSetsMap.set(num, (currentExactSetsMap.get(num) || 0) + sets);
-
-              const last3 = num.slice(-3);
-              current3SetTotalMap.set(last3, (current3SetTotalMap.get(last3) || 0) + sets);
-            }
-          }
-        }
 
         for (const insert of processedInserts) {
           const betType = insert.bet_type;
@@ -20135,8 +20243,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             continue;
           }
 
-        // Verify Credit Limit of Dealer
-        const creditCheck = await checkDealerCreditForBet(dealerId, totalBetAmount);
+        // Verify Credit Limit of Dealer (using preloaded credit in 0ms)
+        const creditCheck = await checkDealerCreditForBet(dealerId, totalBetAmount, preloadedSubscription, preloadedCredit);
         if (!creditCheck.allowed) {
           await sendLineReply(replyToken, `❌ ส่งโพยไม่สำเร็จ: เครดิตห้องของเจ้ามือไม่เพียงพอกรุณาแจ้งเจ้ามือเพื่อเพิ่มเครดิตค่ะ\n(${creditCheck.message})`);
           continue;
