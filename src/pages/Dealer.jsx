@@ -5462,7 +5462,7 @@ export default function Dealer() {
                                                                                                             ) : (
                                                                                                                 filteredUserHistories.map((uh, memberIdx) => {
                                                                                                                 const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || "ไม่ระบุ"
-                                                                                                                const dealerProfit = (uh.total_amount || 0) - (uh.total_commission || 0) - (uh.total_winnings || 0)
+                                                                                                                const dealerProfit = Math.round(uh.total_amount || 0) - Math.round(uh.total_commission || 0) - Math.round(uh.total_winnings || 0)
                                                                                                                 const targetRoundId = history.round_id || history.id
                                                                                                                 const detailsPayments = details?.payments || []
                                                                                                                 const detailsPaymentIds = new Set(detailsPayments.map(p => p.id).filter(Boolean))

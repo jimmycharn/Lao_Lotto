@@ -15,10 +15,10 @@ import {
  */
 export function calculateMemberInitialBalance(uh) {
     if (!uh) return 0
-    const amount = Number(uh.total_amount || 0)
-    const comm = Number(uh.total_commission || 0)
-    const win = Number(uh.total_winnings || 0)
-    return Math.round(amount - comm - win)
+    const amount = Math.round(Number(uh.total_amount || 0))
+    const comm = Math.round(Number(uh.total_commission || 0))
+    const win = Math.round(Number(uh.total_winnings || 0))
+    return amount - comm - win
 }
 
 /**

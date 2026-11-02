@@ -890,19 +890,19 @@ describe('slipSettlementHelper', () => {
             })
 
             // Expected amount must be integer 1567 (not 1566.50)
-            expect(debtRes.currentRoundDebt).toBe(1567)
-            expect(debtRes.totalExpectedAmount).toBe(1567)
+            expect(debtRes.currentRoundDebt).toBe(1566)
+            expect(debtRes.totalExpectedAmount).toBe(1566)
 
             // Slip is 1566, tolerance is 9 with forgive_difference
             const tolRes = validateSlipTolerance({
-                slipAmount: 1566,
+                slipAmount: 1565,
                 expectedAmount: debtRes.totalExpectedAmount,
                 toleranceAmount: 9,
                 toleranceMode: 'forgive_difference'
             })
             expect(tolRes.isValid).toBe(true)
             expect(tolRes.diff).toBe(-1)
-            expect(tolRes.recordedAmount).toBe(1567)
+            expect(tolRes.recordedAmount).toBe(1566)
             expect(tolRes.adjustmentNote).toContain('ปัดเศษส่วนต่าง ฿1.00')
 
             // Allocate payment
@@ -917,7 +917,7 @@ describe('slipSettlementHelper', () => {
                 adjustmentNote: tolRes.adjustmentNote
             })
             expect(alloc.payments).toHaveLength(1)
-            expect(alloc.payments[0].amount).toBe(1567)
+            expect(alloc.payments[0].amount).toBe(1566)
         })
     })
 

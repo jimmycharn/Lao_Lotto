@@ -109,7 +109,7 @@ export function calculateImmediateDebt(
     totalWinnings: number,
     alreadyPaid: number = 0
 ): number {
-    const net = Math.round((Number(totalAmount) || 0) - (Number(totalCommission) || 0) - (Number(totalWinnings) || 0)) - Math.round(Number(alreadyPaid) || 0)
+    const net = (Math.round(Number(totalAmount) || 0) - Math.round(Number(totalCommission) || 0) - Math.round(Number(totalWinnings) || 0)) - Math.round(Number(alreadyPaid) || 0)
     return Math.max(0, net)
 }
 
@@ -958,7 +958,7 @@ export function calculateMemberPastUnpaidRounds({
 
     for (const rId of Object.keys(roundMap)) {
         const item = roundMap[rId]
-        const initial = Math.round(item.total_amount - item.total_commission - item.total_winnings)
+        const initial = Math.round(item.total_amount) - Math.round(item.total_commission) - Math.round(item.total_winnings)
         const roundPayments = (payments || []).filter(p => String(p.round_id || p.roundId) === rId)
 
         let paidByMember = 0
@@ -1065,7 +1065,7 @@ export function calculateImmediateModeDebt({
         }
     }
 
-    const curInitial = Math.round(curAmt - curComm - curWin)
+    const curInitial = Math.round(curAmt) - Math.round(curComm) - Math.round(curWin)
     const curPayments = (payments || []).filter(p => String(p.round_id || p.roundId) === latestRoundId)
     let curPaidByMember = 0
     let curPaidByDealer = 0
@@ -1129,7 +1129,7 @@ export function calculateImmediateModeDebt({
 
     for (const rId of Object.keys(roundMap)) {
         const item = roundMap[rId]
-        const initial = Math.round(item.total_amount - item.total_commission - item.total_winnings)
+        const initial = Math.round(item.total_amount) - Math.round(item.total_commission) - Math.round(item.total_winnings)
         const roundPayments = (payments || []).filter(p => String(p.round_id || p.roundId) === rId)
 
         let paidByMember = 0
@@ -1371,7 +1371,7 @@ export function calculateCrossRoundModeDebt({
     const availableWinnings = Math.max(0, Math.round(latestWin - alreadyPrizePaid))
 
     // Net initial debt of current round: (ยอดส่ง - ค่าคอม) - เงินถูกรางวัล
-    const curInitial = Math.round(curAmt - curComm - latestWin)
+    const curInitial = Math.round(curAmt) - Math.round(curComm) - Math.round(latestWin)
     const currentRoundDebt = Math.max(0, Math.round(curInitial - curPaidByMember + curPaidByDealer))
 
     // 2. Calculate past debts and credits strictly before latestAnnouncedRound

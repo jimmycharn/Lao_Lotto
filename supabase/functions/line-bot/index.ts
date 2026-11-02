@@ -1275,7 +1275,7 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string, 
       const roundedBet = Math.round(u.totalBet);
       const roundedComm = Math.round(u.totalCommission);
       const roundedWin = Math.round(u.totalWin);
-      const net = u.totalWin - (u.totalBet - u.totalCommission);
+      const net = Math.round(u.totalWin) - (Math.round(u.totalBet) - Math.round(u.totalCommission));
       const roundedNet = Math.round(net);
 
       let netLabel = '';
@@ -3999,7 +3999,7 @@ async function generateRoundSummaryFlex(
 
   if (showOwnOnly) {
     const u = userSummaries[targetUserId!];
-    const net = u.totalWin - (u.totalBet - u.totalCommission);
+    const net = Math.round(u.totalWin) - (Math.round(u.totalBet) - Math.round(u.totalCommission));
     const roundedNet = Math.round(net);
     const roundedBet = Math.round(u.totalBet);
     const roundedComm = Math.round(u.totalCommission);
@@ -4267,7 +4267,7 @@ async function generateRoundSummaryFlex(
 
     // Helper function to create individual member summary card box
     const createMemberSummaryBox = (u: any, idx: number) => {
-      const net = u.totalWin - (u.totalBet - u.totalCommission);
+      const net = Math.round(u.totalWin) - (Math.round(u.totalBet) - Math.round(u.totalCommission));
       const roundedNet = Math.round(net);
       const roundedBet = Math.round(u.totalBet);
       const roundedComm = Math.round(u.totalCommission);
@@ -4386,7 +4386,7 @@ async function generateRoundSummaryFlex(
       summaryText += `ยังไม่มียอดแทงส่งเข้ามาค่ะ\n`;
     } else {
       sortedUserSummaries.forEach((u, idx) => {
-        const net = u.totalWin - (u.totalBet - u.totalCommission);
+        const net = Math.round(u.totalWin) - (Math.round(u.totalBet) - Math.round(u.totalCommission));
         const roundedNet = Math.round(net);
         const roundedBet = Math.round(u.totalBet);
         const roundedComm = Math.round(u.totalCommission);
@@ -10180,7 +10180,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   const roundedBet = Math.round(u.totalBet);
                   const roundedComm = Math.round(u.totalCommission);
                   const roundedWin = Math.round(u.totalWin);
-                  const net = u.totalWin - (u.totalBet - u.totalCommission);
+                  const net = Math.round(u.totalWin) - (Math.round(u.totalBet) - Math.round(u.totalCommission));
                   const roundedNet = Math.round(net);
 
                   let netLabel = '';
