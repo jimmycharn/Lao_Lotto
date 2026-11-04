@@ -32,7 +32,6 @@ export default function GraphLayoffModal({
     initialCategory = '3_digit',
     onProceedToTransfer = () => {}
 }) {
-    if (!isOpen) return null
 
     // 1. Number Category Tab ('3_digit' | '2_digit' | 'run')
     const [activeCategory, setActiveCategory] = useState(initialCategory || '3_digit')
@@ -60,6 +59,15 @@ export default function GraphLayoffModal({
     // 5. Tooltip & Cursor tracking
     const [hoveredNumberInfo, setHoveredNumberInfo] = useState(null)
     const [canvasCursor, setCanvasCursor] = useState('default')
+
+    // 6. Window resize tracking for responsive canvas redraw
+    const [, setResizeTick] = useState(0)
+    useEffect(() => {
+        if (!isOpen) return
+        const handleResize = () => setResizeTick(t => t + 1)
+        window.addEventListener('resize', handleResize)
+        return () => window.removeEventListener('resize', handleResize)
+    }, [isOpen])
 
     // Canvas references
     const canvasRef = useRef(null)
@@ -91,17 +99,15 @@ export default function GraphLayoffModal({
     const upperLineVal = lines.length >= 2 ? sortedLines[0].value : 0
     const lowerLineVal = lines.length >= 2 ? sortedLines[1].value : 0
 
-    // Auto-sync cutMode when line count changes
-    useEffect(() => {
+    // Derive effective cutMode based on current line count
+    const effectiveCutMode = useMemo(() => {
         if (lines.length === 1) {
-            if (cutMode !== 'above' && cutMode !== 'below') {
-                setCutMode('above')
-            }
-        } else if (lines.length === 2) {
-            if (cutMode !== 'between' && cutMode !== 'outside') {
-                setCutMode('between')
-            }
+            return (cutMode === 'above' || cutMode === 'below') ? cutMode : 'above'
         }
+        if (lines.length === 2) {
+            return (cutMode === 'between' || cutMode === 'outside') ? cutMode : 'between'
+        }
+        return cutMode
     }, [lines.length, cutMode])
 
     // Live preview calculation of cuts
@@ -112,10 +118,10 @@ export default function GraphLayoffModal({
             singleLine: singleLineVal,
             upperLine: upperLineVal,
             lowerLine: lowerLineVal,
-            cutMode,
+            cutMode: effectiveCutMode,
             amountMode
         })
-    }, [buckets, lines.length, singleLineVal, upperLineVal, lowerLineVal, cutMode, amountMode])
+    }, [buckets, lines.length, singleLineVal, upperLineVal, lowerLineVal, effectiveCutMode, amountMode])
 
     // Basket Grand Total
     const totalStagedAmount = useMemo(() => {
@@ -204,7 +210,8 @@ export default function GraphLayoffModal({
 
         const getY = (amount) => padding.top + plotH - (amount / yMax) * plotH
         const getAmountFromY = (y) => {
-            const ratio = (padding.top + plotH - y) / plotH
+            const clampedY = Math.max(padding.top, Math.min(padding.top + plotH, y))
+            const ratio = (padding.top + plotH - clampedY) / plotH
             return Math.max(0, Math.round(ratio * yMax))
         }
         const slotW = plotW / domain.length
@@ -298,7 +305,7 @@ export default function GraphLayoffModal({
                 singleLine: singleLineVal,
                 upperLine: upperLineVal,
                 lowerLine: lowerLineVal,
-                cutMode,
+                cutMode: effectiveCutMode,
                 amountMode
             })
 
@@ -366,7 +373,7 @@ export default function GraphLayoffModal({
         singleLineVal,
         upperLineVal,
         lowerLineVal,
-        cutMode,
+        effectiveCutMode,
         amountMode,
         currencySymbol,
         getPlotGeometry
@@ -412,7 +419,9 @@ export default function GraphLayoffModal({
         // If currently dragging a line, update its threshold value
         if (draggingLineId !== null) {
             const rawAmt = getAmountFromY(relY)
-            const snappedAmt = Math.max(1, Math.round(rawAmt / 10) * 10)
+            const maxCeiling = Math.round(Math.max(maxDataAmount, 100) * 1.15)
+            const clampedAmt = Math.min(maxCeiling, rawAmt)
+            const snappedAmt = Math.max(1, Math.round(clampedAmt / 10) * 10)
             setLines(prev => prev.map(l => l.id === draggingLineId ? { ...l, value: snappedAmt } : l))
             setCanvasCursor('ns-resize')
             return
@@ -444,7 +453,7 @@ export default function GraphLayoffModal({
                     singleLine: singleLineVal,
                     upperLine: upperLineVal,
                     lowerLine: lowerLineVal,
-                    cutMode,
+                    cutMode: effectiveCutMode,
                     amountMode
                 })
 
@@ -470,8 +479,9 @@ export default function GraphLayoffModal({
         singleLineVal,
         upperLineVal,
         lowerLineVal,
-        cutMode,
+        effectiveCutMode,
         amountMode,
+        maxDataAmount,
         getPlotGeometry
     ])
 
@@ -504,6 +514,8 @@ export default function GraphLayoffModal({
             setEditingLineModal({ lineId: hitLine.id, value: String(hitLine.value) })
         }
     }, [lines, getPlotGeometry])
+
+    if (!isOpen) return null
 
     return (
         <div
@@ -703,7 +715,6 @@ export default function GraphLayoffModal({
 
                         {/* Line Pills */}
                         {lines.map((line, idx) => {
-                            const isLine1 = line.id === 1
                             const label = lines.length === 2
                                 ? (line.value === upperLineVal ? 'เส้นบน' : 'เส้นล่าง')
                                 : `เส้น ${idx + 1}`
@@ -781,14 +792,18 @@ export default function GraphLayoffModal({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                         {/* Cut Mode */}
                         <div style={{ display: 'flex', backgroundColor: '#0f172a', borderRadius: '6px', padding: '2px', border: '1px solid #334155' }}>
-                            {lines.length === 1 ? (
+                            {lines.length === 0 ? (
+                                <span style={{ fontSize: '0.8rem', color: '#94a3b8', padding: '0.25rem 0.6rem' }}>
+                                    กด &quot;+ เพิ่มเส้นราคา&quot; เพื่อกำหนดจุดตัด
+                                </span>
+                            ) : lines.length === 1 ? (
                                 <>
                                     <button
                                         type="button"
-                                        className={`btn btn-sm ${cutMode === 'above' ? 'active' : ''}`}
+                                        className={`btn btn-sm ${effectiveCutMode === 'above' ? 'active' : ''}`}
                                         onClick={() => setCutMode('above')}
                                         style={{
-                                            backgroundColor: cutMode === 'above' ? '#ef4444' : 'transparent',
+                                            backgroundColor: effectiveCutMode === 'above' ? '#ef4444' : 'transparent',
                                             color: '#ffffff',
                                             border: 'none',
                                             padding: '0.25rem 0.55rem',
@@ -801,10 +816,10 @@ export default function GraphLayoffModal({
                                     </button>
                                     <button
                                         type="button"
-                                        className={`btn btn-sm ${cutMode === 'below' ? 'active' : ''}`}
+                                        className={`btn btn-sm ${effectiveCutMode === 'below' ? 'active' : ''}`}
                                         onClick={() => setCutMode('below')}
                                         style={{
-                                            backgroundColor: cutMode === 'below' ? '#3b82f6' : 'transparent',
+                                            backgroundColor: effectiveCutMode === 'below' ? '#3b82f6' : 'transparent',
                                             color: '#ffffff',
                                             border: 'none',
                                             padding: '0.25rem 0.55rem',
@@ -820,12 +835,12 @@ export default function GraphLayoffModal({
                                 <>
                                     <button
                                         type="button"
-                                        className={`btn btn-sm ${cutMode === 'between' ? 'active' : ''}`}
+                                        className={`btn btn-sm ${effectiveCutMode === 'between' ? 'active' : ''}`}
                                         onClick={() => setCutMode('between')}
                                         style={{
-                                            backgroundColor: cutMode === 'between' ? '#f59e0b' : 'transparent',
-                                            color: cutMode === 'between' ? '#000000' : '#ffffff',
-                                            fontWeight: cutMode === 'between' ? 600 : 400,
+                                            backgroundColor: effectiveCutMode === 'between' ? '#f59e0b' : 'transparent',
+                                            color: effectiveCutMode === 'between' ? '#000000' : '#ffffff',
+                                            fontWeight: effectiveCutMode === 'between' ? 600 : 400,
                                             border: 'none',
                                             padding: '0.25rem 0.55rem',
                                             borderRadius: '4px',
@@ -837,10 +852,10 @@ export default function GraphLayoffModal({
                                     </button>
                                     <button
                                         type="button"
-                                        className={`btn btn-sm ${cutMode === 'outside' ? 'active' : ''}`}
+                                        className={`btn btn-sm ${effectiveCutMode === 'outside' ? 'active' : ''}`}
                                         onClick={() => setCutMode('outside')}
                                         style={{
-                                            backgroundColor: cutMode === 'outside' ? '#8b5cf6' : 'transparent',
+                                            backgroundColor: effectiveCutMode === 'outside' ? '#8b5cf6' : 'transparent',
                                             color: '#ffffff',
                                             border: 'none',
                                             padding: '0.25rem 0.55rem',
