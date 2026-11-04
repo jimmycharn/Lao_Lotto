@@ -27,7 +27,8 @@ import {
     FiSlash,
     FiCheckSquare,
     FiTag,
-    FiHash
+    FiHash,
+    FiBarChart2
 } from 'react-icons/fi'
 import {
     LOTTERY_TYPES,
@@ -59,6 +60,7 @@ import { isBetTypeMatched, isSearchNumberMatched } from '../../utils/betTypeFilt
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
 import MemberTimeExtensionModal from './MemberTimeExtensionModal'
+import GraphLayoffModal from './GraphLayoffModal'
 
 // Helper functions for default fallbacks
 const getFallbackCommission = (betType, lotteryType) => {
@@ -401,6 +403,11 @@ export default function RoundAccordionItem({
     const [remainingSortBy, setRemainingSortBy] = useState('number') // 'number' | 'remaining' | 'total'
     const [remainingSortOrder, setRemainingSortOrder] = useState('asc') // 'asc' | 'desc'
     
+    // Graph-based Layoff states
+    const [showGraphLayoffModal, setShowGraphLayoffModal] = useState(false)
+    const [graphLayoffSource, setGraphLayoffSource] = useState('excess') // 'excess' | 'remaining'
+    const [graphTransferItems, setGraphTransferItems] = useState(null)
+
     // Upstream dealers for transfer selection
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [selectedUpstreamDealer, setSelectedUpstreamDealer] = useState(null) // null = manual, object = linked
@@ -1878,6 +1885,7 @@ export default function RoundAccordionItem({
             toast.warning('กรุณาเลือกรายการที่ต้องการตีออก')
             return
         }
+        setGraphTransferItems(null)
         setTransferSource('excess')
         const initialTypes = {}
         rawSelected.forEach(item => {
@@ -1887,7 +1895,48 @@ export default function RoundAccordionItem({
         setShowTransferModal(true)
     }
 
+    // Helper to open transfer modal from Graph Layoff Modal
+    const handleOpenTransferFromGraph = (stagedItems, source) => {
+        if (!stagedItems || stagedItems.length === 0) {
+            toast.warning('ไม่มีรายการในตะกร้าที่จะตีออก')
+            return
+        }
+        setGraphTransferItems(stagedItems)
+        setTransferSource(source)
+        const initialTypes = {}
+        stagedItems.forEach(item => {
+            initialTypes[item.bet_type] = true
+        })
+        setTransferModalBetTypes(initialTypes)
+        setShowTransferModal(true)
+    }
+
     const modalBetTypeBreakdown = useMemo(() => {
+        if (graphTransferItems && graphTransferItems.length > 0) {
+            const breakdown = {}
+            graphTransferItems.forEach(item => {
+                const bt = item.bet_type
+                if (!breakdown[bt]) {
+                    breakdown[bt] = {
+                        bet_type: bt,
+                        label: BET_TYPES_BY_LOTTERY[round.lottery_type]?.[bt]?.label || BET_TYPES[bt] || bt,
+                        count: 0,
+                        amount: 0,
+                        isSetBased: item.isSetBased,
+                        excessSets: 0
+                    }
+                }
+                const setPrice = round?.set_prices?.['4_top'] || 120
+                const excessAmt = item.isSetBased ? item.excess * setPrice : item.excess
+                if (item.excess > 0) {
+                    breakdown[bt].count += 1
+                    breakdown[bt].amount += excessAmt
+                    if (item.isSetBased) breakdown[bt].excessSets += item.excess
+                }
+            })
+            return breakdown
+        }
+
         if (transferSource === 'remaining') {
             const breakdown = {}
             calculatedRemainingTransferItems.forEach(item => {
@@ -1934,15 +1983,18 @@ export default function RoundAccordionItem({
             if (item.isSetBased) breakdown[bt].excessSets += item.excess
         })
         return breakdown
-    }, [transferSource, calculatedRemainingTransferItems, activeExcessItems, selectedExcessItems, round])
+    }, [graphTransferItems, transferSource, calculatedRemainingTransferItems, activeExcessItems, selectedExcessItems, round])
 
     const modalSelectedItems = useMemo(() => {
+        if (graphTransferItems && graphTransferItems.length > 0) {
+            return graphTransferItems.filter(item => transferModalBetTypes[item.bet_type] !== false)
+        }
         if (transferSource === 'remaining') {
             return calculatedRemainingTransferItems
         }
         const selected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
         return selected.filter(item => transferModalBetTypes[item.bet_type] !== false)
-    }, [transferSource, calculatedRemainingTransferItems, activeExcessItems, selectedExcessItems, transferModalBetTypes])
+    }, [graphTransferItems, transferSource, calculatedRemainingTransferItems, activeExcessItems, selectedExcessItems, transferModalBetTypes])
 
     const modalSelectedCount = modalSelectedItems.length
     const modalSelectedAmount = useMemo(() => {
@@ -5828,6 +5880,19 @@ export default function RoundAccordionItem({
                                                                     </span>
                                                                 )}
                                                                 <button
+                                                                    type="button"
+                                                                    className="btn btn-outline"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        setGraphLayoffSource('remaining')
+                                                                        setShowGraphLayoffModal(true)
+                                                                    }}
+                                                                    title="เปิดดูกราฟและตัดยอดที่เหลือ"
+                                                                    style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.75rem', borderRadius: '6px' }}
+                                                                >
+                                                                    <FiBarChart2 /> ตัดจากกราฟ
+                                                                </button>
+                                                                <button
                                                                     className="btn btn-warning"
                                                                     onClick={(e) => { e.stopPropagation(); handleOpenRemainingTransferModal(); }}
                                                                     disabled={filteredSelectedCount === 0 || calculatedRemainingTransferItems.length === 0}
@@ -6268,6 +6333,19 @@ export default function RoundAccordionItem({
                                                                     </span>
                                                                 )}
                                                                 <button
+                                                                    type="button"
+                                                                    className="btn btn-outline"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        setGraphLayoffSource('excess')
+                                                                        setShowGraphLayoffModal(true)
+                                                                    }}
+                                                                    title="เปิดดูกราฟและตัดยอดเกิน"
+                                                                    style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.35rem 0.75rem', borderRadius: '6px' }}
+                                                                >
+                                                                    <FiBarChart2 /> ตัดจากกราฟ
+                                                                </button>
+                                                                <button
                                                                     className="btn btn-warning"
                                                                     onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(); }}
                                                                     disabled={filteredSelectedCount === 0}
@@ -6355,15 +6433,15 @@ export default function RoundAccordionItem({
                                     })()}
 
                                     {showTransferModal && (
-                                        <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowTransferModal(false) }}>
-                                            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: transferSource === 'remaining' ? '540px' : '450px' }}>
+                                        <div className="modal-overlay" onClick={(e) => { e.stopPropagation(); setShowTransferModal(false); setGraphTransferItems(null); }}>
+                                            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: (transferSource === 'remaining' || (graphTransferItems && graphTransferItems.length > 0)) ? '540px' : '450px' }}>
                                                 <div className="modal-header">
-                                                    <h3><FiSend /> {transferSource === 'remaining' ? 'ตีออกยอดที่เหลือ' : 'ตีออกยอดเกิน'}</h3>
-                                                    <button className="modal-close" onClick={() => setShowTransferModal(false)}><FiX /></button>
+                                                    <h3><FiSend /> {graphTransferItems && graphTransferItems.length > 0 ? 'ตีออกยอดตัดจากกราฟ' : (transferSource === 'remaining' ? 'ตีออกยอดที่เหลือ' : 'ตีออกยอดเกิน')}</h3>
+                                                    <button className="modal-close" onClick={() => { setShowTransferModal(false); setGraphTransferItems(null); }}><FiX /></button>
                                                 </div>
                                                 <div className="modal-body">
-                                                    {/* Remaining Tab: Summary Banner */}
-                                                    {transferSource === 'remaining' && (
+                                                    {/* Remaining / Graph Tab: Summary Banner */}
+                                                    {(transferSource === 'remaining' || (graphTransferItems && graphTransferItems.length > 0)) && (
                                                         <div style={{
                                                             background: 'rgba(245, 158, 11, 0.08)',
                                                             border: '1px solid rgba(245, 158, 11, 0.25)',
@@ -6400,8 +6478,8 @@ export default function RoundAccordionItem({
                                                         </div>
                                                     )}
 
-                                                    {/* Bet Type Breakdown & Selection Checklist (Only for Excess Tab) */}
-                                                    {transferSource === 'excess' && (
+                                                    {/* Bet Type Breakdown & Selection Checklist */}
+                                                    {(transferSource === 'excess' || (graphTransferItems && graphTransferItems.length > 0)) && (
                                                         <div style={{
                                                             background: 'var(--color-surface-light, rgba(255,255,255,0.04))',
                                                             border: '1px solid var(--color-border, #334155)',
@@ -6604,7 +6682,7 @@ export default function RoundAccordionItem({
                                                     </div>
                                                 </div>
                                                 <div className="modal-footer">
-                                                    <button className="btn btn-outline" onClick={() => setShowTransferModal(false)}>ยกเลิก</button>
+                                                    <button className="btn btn-outline" onClick={() => { setShowTransferModal(false); setGraphTransferItems(null); }}>ยกเลิก</button>
                                                     <button 
                                                         className="btn btn-warning" 
                                                         onClick={handleSaveTransfer} 
@@ -7253,6 +7331,20 @@ export default function RoundAccordionItem({
                 onSave={handleSaveTimeExtension}
                 onRevoke={handleRevokeTimeExtension}
             />
+
+            {showGraphLayoffModal && (
+                <GraphLayoffModal
+                    isOpen={showGraphLayoffModal}
+                    onClose={() => setShowGraphLayoffModal(false)}
+                    round={round}
+                    sourceTab={graphLayoffSource}
+                    items={graphLayoffSource === 'remaining' ? baseRemainingItems : activeExcessItems}
+                    onProceedToTransfer={(stagedItems) => {
+                        setShowGraphLayoffModal(false)
+                        handleOpenTransferFromGraph(stagedItems, graphLayoffSource)
+                    }}
+                />
+            )}
         </div>
     )
 }
