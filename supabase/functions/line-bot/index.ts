@@ -1274,6 +1274,7 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string, 
       const userName = profilesMap[u.userId] || 'ไม่ระบุชื่อ';
       const roundedBet = Math.round(u.totalBet);
       const roundedComm = Math.round(u.totalCommission);
+      const roundedRemaining = roundedBet - roundedComm;
       const roundedWin = Math.round(u.totalWin);
       const net = Math.round(u.totalWin) - (Math.round(u.totalBet) - Math.round(u.totalCommission));
       const roundedNet = Math.round(net);
@@ -1373,6 +1374,15 @@ async function sendMemberResultAnnouncements(roundId: string, dealerId: string, 
                   "contents": [
                     { "type": "text", "text": "ส่วนลด/ค่าคอม:", "size": "sm", "color": "#64748b" },
                     { "type": "text", "text": `฿${roundedComm.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#0f172a", "align": "end" }
+                  ]
+                },
+                {
+                  "type": "box",
+                  "layout": "horizontal",
+                  "margin": "sm",
+                  "contents": [
+                    { "type": "text", "text": "ยอดเหลือสุทธิ:", "size": "sm", "color": "#64748b" },
+                    { "type": "text", "text": `฿${roundedRemaining.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#10b981", "align": "end" }
                   ]
                 },
                 {
@@ -10179,6 +10189,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                   const userName = profilesMap[u.userId] || 'ไม่ระบุชื่อ';
                   const roundedBet = Math.round(u.totalBet);
                   const roundedComm = Math.round(u.totalCommission);
+                  const roundedRemaining = roundedBet - roundedComm;
                   const roundedWin = Math.round(u.totalWin);
                   const net = Math.round(u.totalWin) - (Math.round(u.totalBet) - Math.round(u.totalCommission));
                   const roundedNet = Math.round(net);
@@ -10285,6 +10296,15 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                               "layout": "horizontal",
                               "margin": "sm",
                               "contents": [
+                                { "type": "text", "text": "ยอดเหลือสุทธิ:", "size": "sm", "color": "#64748b" },
+                                { "type": "text", "text": `฿${roundedRemaining.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#10b981", "align": "end" }
+                              ]
+                            },
+                            {
+                              "type": "box",
+                              "layout": "horizontal",
+                              "margin": "sm",
+                              "contents": [
                                 { "type": "text", "text": "ยอดถูกรางวัล:", "size": "sm", "color": "#64748b" },
                                 { "type": "text", "text": `ถูก ${u.winCount} ครั้ง / ฿${roundedWin.toLocaleString('th-TH')}`, "weight": "bold", "size": "sm", "color": "#0f172a", "align": "end" }
                               ]
@@ -10340,12 +10360,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                     const userName = profilesMap[u.userId] || 'ไม่ระบุชื่อ';
                     const roundedBet = Math.round(u.totalBet);
                     const roundedComm = Math.round(u.totalCommission);
+                    const roundedRemaining = roundedBet - roundedComm;
                     const roundedWin = Math.round(u.totalWin);
 
                     groupSummaryText += `----------------------------------\n` +
                       `👤 คุณ ${userName}\n` +
                       `💰 ยอดแทงรวม: ฿${roundedBet.toLocaleString('th-TH')}\n` +
                       `💸 ค่าคอมรวม: ฿${roundedComm.toLocaleString('th-TH')}\n` +
+                      `💵 ยอดเหลือสุทธิ: ฿${roundedRemaining.toLocaleString('th-TH')}\n` +
                       `🎉 ถูกรางวัลรวม: ฿${roundedWin.toLocaleString('th-TH')}\n`;
                   });
                 }
