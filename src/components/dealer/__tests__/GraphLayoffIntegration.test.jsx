@@ -27,3 +27,4 @@ describe('GraphLayoff Integration Smoke Tests', () => {
         expect(fileContent).toContain('<GraphLayoffModal')
     })
 })
+

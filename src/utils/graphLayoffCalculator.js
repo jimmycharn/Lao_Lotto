@@ -220,3 +220,59 @@ export function aggregateStagedLayoffItems(existingBasket = [], newCutItems = []
 
     return Array.from(map.values()).filter(item => (item.excess || 0) > 0)
 }
+
+/**
+ * Calculates remaining available items after deducting amounts already staged in the basket.
+ *
+ * @param {Array} items - Original items list (with bet_type, numbers, and excess/remainingAmount/amount)
+ * @param {Array} stagedBasket - Current staged items in basket (with bet_type, numbers, and excess)
+ * @returns {Array} List of items with remaining amounts > 0
+ */
+export function getAvailableItemsAfterStaging(items = [], stagedBasket = []) {
+    if (!stagedBasket || stagedBasket.length === 0) {
+        return items
+    }
+
+    // Build mutable map of staged amounts by key: `${item.bet_type}|${item.numbers}`
+    const stagedMap = new Map()
+    stagedBasket.forEach(staged => {
+        if (!staged || !staged.bet_type || !staged.numbers) return
+        const key = `${staged.bet_type}|${staged.numbers}`
+        const current = stagedMap.get(key) || 0
+        stagedMap.set(key, current + (Number(staged.excess) || 0))
+    })
+
+    if (stagedMap.size === 0) {
+        return items
+    }
+
+    return items.map(item => {
+        if (!item) return item
+        const key = `${item.bet_type}|${item.numbers}`
+        const stagedAvailable = stagedMap.get(key) || 0
+        if (stagedAvailable <= 0) return item
+
+        const origAmt = Number(
+            item.excess !== undefined ? item.excess :
+            (item.remainingAmount !== undefined ? item.remainingAmount : item.amount)
+        ) || 0
+
+        const deductAmt = Math.min(origAmt, stagedAvailable)
+        const remAmt = Math.max(0, origAmt - deductAmt)
+        stagedMap.set(key, stagedAvailable - deductAmt)
+
+        return {
+            ...item,
+            excess: remAmt,
+            remainingAmount: remAmt,
+            totalAmount: remAmt,
+            originalTotalAmount: origAmt
+        }
+    }).filter(item => {
+        const amt = Number(
+            item.excess !== undefined ? item.excess :
+            (item.remainingAmount !== undefined ? item.remainingAmount : item.amount)
+        ) || 0
+        return amt > 0
+    })
+}

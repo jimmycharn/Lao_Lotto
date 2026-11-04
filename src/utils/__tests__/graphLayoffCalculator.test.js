@@ -5,7 +5,8 @@ import {
     groupItemsByNumber,
     evaluateLineCut,
     calculateGraphCuts,
-    aggregateStagedLayoffItems
+    aggregateStagedLayoffItems,
+    getAvailableItemsAfterStaging
 } from '../graphLayoffCalculator'
 
 describe('graphLayoffCalculator', () => {
@@ -252,6 +253,87 @@ describe('graphLayoffCalculator', () => {
 
             const item99 = merged.find(i => i.numbers === '99')
             expect(item99.excess).toBe(200)
+        })
+    })
+
+    describe('getAvailableItemsAfterStaging', () => {
+        const originalItems = [
+            { numbers: '101', bet_type: '3_top', excess: 100 },
+            { numbers: '202', bet_type: '3_top', excess: 50 },
+            { numbers: '303', bet_type: '3_top', excess: 80 }
+        ]
+
+        it('returns original items if stagedBasket is empty', () => {
+            const result = getAvailableItemsAfterStaging(originalItems, [])
+            expect(result).toHaveLength(3)
+            expect(result[0].excess).toBe(100)
+        })
+
+        it('deducts staged amount and reduces available height', () => {
+            // Cut 20 from '101' (reducing from 100 to 80)
+            const stagedBasket = [
+                { numbers: '101', bet_type: '3_top', excess: 20 }
+            ]
+            const result = getAvailableItemsAfterStaging(originalItems, stagedBasket)
+            expect(result).toHaveLength(3)
+
+            const item101 = result.find(i => i.numbers === '101')
+            expect(item101.excess).toBe(80)
+            expect(item101.totalAmount).toBe(80)
+
+            // Other items remain unchanged
+            const item202 = result.find(i => i.numbers === '202')
+            expect(item202.excess).toBe(50)
+        })
+
+        it('completely removes items whose amount is fully staged', () => {
+            // Cut all 50 from '202'
+            const stagedBasket = [
+                { numbers: '202', bet_type: '3_top', excess: 50 }
+            ]
+            const result = getAvailableItemsAfterStaging(originalItems, stagedBasket)
+            expect(result).toHaveLength(2)
+            expect(result.some(i => i.numbers === '202')).toBe(false)
+        })
+
+        it('prevents repeated cut when line stays at the same threshold', () => {
+            // 1. Initial state: line at 80, cutting above difference
+            const buckets1 = groupItemsByNumber(originalItems, '3_digit')
+            const cut1 = calculateGraphCuts({
+                buckets: buckets1,
+                lineCount: 1,
+                singleLine: 80,
+                cutMode: 'above',
+                amountMode: 'difference'
+            })
+            // Only '101' has 100 > 80, so cutAmount is 20
+            expect(cut1.matchedNumbersCount).toBe(1)
+            expect(cut1.totalCutAmount).toBe(20)
+
+            // 2. Stage into basket
+            const stagedBasket = aggregateStagedLayoffItems([], cut1.cutItems)
+            expect(stagedBasket).toHaveLength(1)
+            expect(stagedBasket[0].excess).toBe(20)
+
+            // 3. Re-calculate available items after staging
+            const availableItems = getAvailableItemsAfterStaging(originalItems, stagedBasket)
+            const buckets2 = groupItemsByNumber(availableItems, '3_digit')
+
+            // Number 101 now has 80 (capped at line 80)
+            expect(buckets2['101'].totalAmount).toBe(80)
+
+            // 4. Re-evaluating cut at line 80
+            const cut2 = calculateGraphCuts({
+                buckets: buckets2,
+                lineCount: 1,
+                singleLine: 80,
+                cutMode: 'above',
+                amountMode: 'difference'
+            })
+            // Nothing exceeds 80 anymore! Matched count is 0, total cut amount is 0!
+            expect(cut2.matchedNumbersCount).toBe(0)
+            expect(cut2.totalCutAmount).toBe(0)
+            expect(cut2.cutItems).toHaveLength(0)
         })
     })
 })

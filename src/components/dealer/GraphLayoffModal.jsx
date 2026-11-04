@@ -17,7 +17,8 @@ import {
     groupItemsByNumber,
     evaluateLineCut,
     calculateGraphCuts,
-    aggregateStagedLayoffItems
+    aggregateStagedLayoffItems,
+    getAvailableItemsAfterStaging
 } from '../../utils/graphLayoffCalculator'
 import { getRoundCloseDate, formatThaiDate } from '../../utils/crossRoundOffsetCalculator'
 
@@ -77,18 +78,24 @@ export default function GraphLayoffModal({
     const roundDateStr = getRoundCloseDate(round) || round?.round_date || ''
     const formattedDate = roundDateStr ? formatThaiDate(roundDateStr) : ''
 
-    // Domain & Buckets for active category
-    const domain = useMemo(() => getNumberDomainForCategory(activeCategory), [activeCategory])
-    const buckets = useMemo(() => groupItemsByNumber(items, activeCategory), [items, activeCategory])
-
-    // Find highest bet amount for dynamic Y scaling
-    const maxDataAmount = useMemo(() => {
+    // 1. Original buckets and max original amount for stable Y-axis scaling
+    const originalBuckets = useMemo(() => groupItemsByNumber(items, activeCategory), [items, activeCategory])
+    const maxOriginalAmount = useMemo(() => {
         let max = 0
-        Object.values(buckets).forEach(b => {
+        Object.values(originalBuckets).forEach(b => {
             if (b.totalAmount > max) max = b.totalAmount
         })
         return max
-    }, [buckets])
+    }, [originalBuckets])
+
+    // 2. Available items deducting already staged basket items
+    const availableItems = useMemo(() => {
+        return getAvailableItemsAfterStaging(items, stagedBasket)
+    }, [items, stagedBasket])
+
+    // 3. Domain & Active Buckets after staging deduction
+    const domain = useMemo(() => getNumberDomainForCategory(activeCategory), [activeCategory])
+    const buckets = useMemo(() => groupItemsByNumber(availableItems, activeCategory), [availableItems, activeCategory])
 
     // Determine upper/lower/single lines
     const sortedLines = useMemo(() => {
@@ -139,13 +146,13 @@ export default function GraphLayoffModal({
         if (lines.length === 1) {
             const firstVal = lines[0].value
             defaultVal = firstVal > 200 ? Math.round(firstVal * 0.5) : firstVal + 200
-        } else if (maxDataAmount > 0) {
-            defaultVal = Math.round(maxDataAmount * 0.5)
+        } else if (maxOriginalAmount > 0) {
+            defaultVal = Math.round(maxOriginalAmount * 0.5)
         }
 
         setLines(prev => [...prev, { id: newId, value: Math.max(10, defaultVal), color: newColor }])
         setSelectedLineId(newId)
-    }, [lines, maxDataAmount])
+    }, [lines, maxOriginalAmount])
 
     // Remove a line
     const handleRemoveLine = useCallback((lineId) => {
@@ -206,7 +213,7 @@ export default function GraphLayoffModal({
         const plotH = Math.max(10, h - padding.top - padding.bottom)
 
         const lineValues = lines.map(l => l.value)
-        const yMax = Math.max(maxDataAmount, ...lineValues, 100) * 1.15
+        const yMax = Math.max(maxOriginalAmount, ...lineValues, 100) * 1.15
 
         const getY = (amount) => padding.top + plotH - (amount / yMax) * plotH
         const getAmountFromY = (y) => {
@@ -217,7 +224,7 @@ export default function GraphLayoffModal({
         const slotW = plotW / domain.length
 
         return { padding, w, h, plotW, plotH, yMax, getY, getAmountFromY, slotW }
-    }, [lines, maxDataAmount, domain.length])
+    }, [lines, maxOriginalAmount, domain.length])
 
     // Draw Canvas Chart
     useEffect(() => {
@@ -419,7 +426,7 @@ export default function GraphLayoffModal({
         // If currently dragging a line, update its threshold value
         if (draggingLineId !== null) {
             const rawAmt = getAmountFromY(relY)
-            const maxCeiling = Math.round(Math.max(maxDataAmount, 100) * 1.15)
+            const maxCeiling = Math.round(Math.max(maxOriginalAmount, 100) * 1.15)
             const clampedAmt = Math.min(maxCeiling, rawAmt)
             const snappedAmt = Math.max(1, Math.round(clampedAmt / 10) * 10)
             setLines(prev => prev.map(l => l.id === draggingLineId ? { ...l, value: snappedAmt } : l))
@@ -446,6 +453,8 @@ export default function GraphLayoffModal({
                 const numStr = domain[slotIdx]
                 const bucket = buckets[numStr]
                 const amt = bucket?.totalAmount || 0
+                const origAmt = originalBuckets[numStr]?.totalAmount || 0
+                const stagedAmt = Math.max(0, origAmt - amt)
 
                 const evalRes = evaluateLineCut({
                     amount: amt,
@@ -460,6 +469,8 @@ export default function GraphLayoffModal({
                 setHoveredNumberInfo({
                     number: numStr,
                     totalAmount: amt,
+                    originalAmount: origAmt,
+                    stagedAmount: stagedAmt,
                     isMatched: evalRes.isMatched,
                     cutAmount: evalRes.cutAmount,
                     retainedAmount: evalRes.retainedAmount,
@@ -476,12 +487,13 @@ export default function GraphLayoffModal({
         lines,
         domain,
         buckets,
+        originalBuckets,
         singleLineVal,
         upperLineVal,
         lowerLineVal,
         effectiveCutMode,
         amountMode,
-        maxDataAmount,
+        maxOriginalAmount,
         getPlotGeometry
     ])
 
@@ -989,7 +1001,12 @@ export default function GraphLayoffModal({
                                 เลข: <span style={{ color: '#f59e0b', fontSize: '0.9rem' }}>{hoveredNumberInfo.number}</span>
                             </div>
                             <div style={{ color: '#94a3b8' }}>
-                                ยอดรวม: {currencySymbol}{hoveredNumberInfo.totalAmount.toLocaleString()}
+                                ยอดคงเหลือ: <strong style={{ color: '#ffffff' }}>{currencySymbol}{hoveredNumberInfo.totalAmount.toLocaleString()}</strong>
+                                {hoveredNumberInfo.stagedAmount > 0 && (
+                                    <span style={{ color: '#10b981', marginLeft: '0.4rem', fontSize: '0.72rem' }}>
+                                        (ตัดเข้าตะกร้าแล้ว: {currencySymbol}{hoveredNumberInfo.stagedAmount.toLocaleString()})
+                                    </span>
+                                )}
                             </div>
                             {hoveredNumberInfo.isMatched && (
                                 <>
