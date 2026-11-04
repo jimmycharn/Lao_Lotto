@@ -29,9 +29,9 @@ export function getNumberDomainForCategory(category) {
 
 export function mapBetTypeToCategory(betType) {
     if (!betType) return null
-    if (['3_top', '3_tod', '3_bottom', '3_front'].includes(betType)) return '3_digit'
-    if (['2_top', '2_bottom'].includes(betType)) return '2_digit'
-    if (['run_top', 'run_bottom'].includes(betType)) return 'run'
+    if (['3_top', '3_straight', '3_tod', '3_tod_single', '3_front', '3_bottom', '3_set'].includes(betType)) return '3_digit'
+    if (['2_top', '2_bottom', '2_front', '2_center', '2_spread', '2_run', '2_teng', '2_tang', '2_have'].includes(betType)) return '2_digit'
+    if (['run_top', 'run_bottom', '1_top', '1_bottom', 'pak_top', 'pak_bottom', 'front_top_1', 'middle_top_1', 'back_top_1'].includes(betType)) return 'run'
     if (betType.startsWith('4_')) return '4_digit'
     return null
 }
@@ -91,7 +91,7 @@ export function evaluateLineCut({
             return { isMatched: false, cutAmount: 0, retainedAmount: numAmt }
         } else if (cutMode === 'below') {
             if (numAmt < line) {
-                const cut = amountMode === 'difference' ? numAmt : numAmt
+                const cut = numAmt
                 return {
                     isMatched: true,
                     cutAmount: Math.max(0, cut),
@@ -201,11 +201,13 @@ export function aggregateStagedLayoffItems(existingBasket = [], newCutItems = []
     const map = new Map()
 
     existingBasket.forEach(item => {
+        if (!item || !item.bet_type || !item.numbers) return
         const key = `${item.bet_type}|${item.numbers}`
         map.set(key, { ...item, excess: Number(item.excess) || 0 })
     })
 
     newCutItems.forEach(item => {
+        if (!item || !item.bet_type || !item.numbers) return
         const key = `${item.bet_type}|${item.numbers}`
         const amt = Number(item.excess) || 0
         if (map.has(key)) {
