@@ -91,6 +91,27 @@ describe('layoffTodConverter', () => {
                 expect(item.excess).toBe(34) // Math.ceil(200/6) = 34
             })
         })
+
+        it('assigns original tod amount to original number and 0 to all other permutations', () => {
+            const todItem = {
+                bet_type: '3_tod',
+                numbers: '123',
+                excess: 60
+            }
+            const converted = convertTodItemToTopItems(todItem, 'thai')
+            expect(converted).toHaveLength(6)
+
+            const orig = converted.find(i => i.numbers === '123')
+            expect(orig.excess).toBe(10)
+            expect(orig.originalRemaining).toBe(60)
+
+            const perms = converted.filter(i => i.numbers !== '123')
+            expect(perms).toHaveLength(5)
+            perms.forEach(p => {
+                expect(p.excess).toBe(10)
+                expect(p.originalRemaining).toBe(0)
+            })
+        })
     })
 
     describe('mergeTodToTopExcessItems (Approach A)', () => {

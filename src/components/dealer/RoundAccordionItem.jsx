@@ -1874,6 +1874,7 @@ export default function RoundAccordionItem({
             toast.warning('ไม่มีรายการที่จะตีออก (ทุกเลขที่เลือกมียอดไม่เกินจำนวนเงินที่ตั้งเก็บไว้)')
             return
         }
+        setGraphTransferItems(null)
         setTransferSource('remaining')
         setShowTransferModal(true)
     }
@@ -1901,10 +1902,15 @@ export default function RoundAccordionItem({
             toast.warning('ไม่มีรายการในตะกร้าที่จะตีออก')
             return
         }
-        setGraphTransferItems(stagedItems)
+        const shouldConvertTodToTop = (source === 'remaining' && isConvertTodToTopRemainingActive) || (source === 'excess' && isConvertTodToTopActive)
+        const stagedItemsToTransfer = (shouldConvertTodToTop && stagedItems.some(i => i.bet_type === '3_tod'))
+            ? mergeTodToTopExcessItems(stagedItems, round?.lottery_type)
+            : stagedItems
+
+        setGraphTransferItems(stagedItemsToTransfer)
         setTransferSource(source)
         const initialTypes = {}
-        stagedItems.forEach(item => {
+        stagedItemsToTransfer.forEach(item => {
             initialTypes[item.bet_type] = true
         })
         setTransferModalBetTypes(initialTypes)
@@ -2147,6 +2153,7 @@ export default function RoundAccordionItem({
 
             await fetchInlineSubmissions(true)
             setShowTransferModal(false)
+            setGraphTransferItems(null)
             if (transferSource === 'remaining') {
                 setSelectedRemainingItems(prev => {
                     const next = { ...prev }
@@ -6462,7 +6469,7 @@ export default function RoundAccordionItem({
                                                                     {modalSelectedCount} รายการ • {round?.currency_symbol || '฿'}{(Number(modalSelectedAmount) || 0).toLocaleString()}
                                                                 </div>
                                                             </div>
-                                                            {((transferSource === 'remaining' && isConvertTodToTopRemainingActive) || (transferSource === 'excess' && isConvertTodToTopActive)) && (
+                                                            {((transferSource === 'remaining' && isConvertTodToTopRemainingActive) || (transferSource === 'excess' && isConvertTodToTopActive)) && modalSelectedItems.some(item => item.isConvertedFromTod) && (
                                                                 <span style={{
                                                                     fontSize: '0.74rem',
                                                                     color: '#38bdf8',
@@ -6550,7 +6557,7 @@ export default function RoundAccordionItem({
                                                     )}
 
                                                     {/* Items Preview for Remaining tab */}
-                                                    {transferSource === 'remaining' && (
+                                                    {(transferSource === 'remaining' || (graphTransferItems && graphTransferItems.length > 0)) && (
                                                         <div style={{
                                                             background: 'rgba(0,0,0,0.2)',
                                                             border: '1px solid var(--color-border)',
@@ -6594,9 +6601,11 @@ export default function RoundAccordionItem({
                                                                                 )}
                                                                             </div>
                                                                             <div style={{ textAlign: 'right' }}>
-                                                                                <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginRight: '0.4rem' }}>
-                                                                                    (เดิม {round?.currency_symbol || '฿'}{(Number(item.originalRemaining) || 0).toLocaleString()})
-                                                                                </span>
+                                                                                {(!graphTransferItems || item.isConvertedFromTod) && item.originalRemaining !== undefined && item.originalRemaining !== null && (
+                                                                                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.72rem', marginRight: '0.4rem' }}>
+                                                                                        (เดิม {round?.currency_symbol || '฿'}{(Number(item.originalRemaining) || 0).toLocaleString()})
+                                                                                    </span>
+                                                                                )}
                                                                                 <span style={{ color: 'var(--color-warning)', fontWeight: 600 }}>
                                                                                     ตีออก {round?.currency_symbol || '฿'}{(Number(item.excess) || 0).toLocaleString()}
                                                                                 </span>

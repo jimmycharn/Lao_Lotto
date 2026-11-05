@@ -58,20 +58,24 @@ export function convertTodItemToTopItems(todItem, lotteryType) {
     const perms = get3DigitPermutations(todItem.numbers)
     const perPermExcess = Math.ceil(todItem.excess / perms.length)
 
-    return perms.map(num => ({
-        ...todItem,
-        bet_type: '3_top',
-        display_bet_type: getRemainingBetTypeDisplay('3_top', lType),
-        numbers: num,
-        excess: perPermExcess,
-        isConvertedFromTod: true,
-        isMergedWithTod: false,
-        originalTodNumbers: todItem.numbers,
-        originalTodExcess: todItem.excess,
-        originalTodFullExcess: todItem.excess,
-        convertedTodExcess: perPermExcess,
-        convertedPermutationsCount: perms.length
-    }))
+    return perms.map(num => {
+        const isOriginalNumber = (num === todItem.numbers)
+        return {
+            ...todItem,
+            bet_type: '3_top',
+            display_bet_type: getRemainingBetTypeDisplay('3_top', lType),
+            numbers: num,
+            excess: perPermExcess,
+            originalRemaining: isOriginalNumber ? (todItem.excess || 0) : 0,
+            isConvertedFromTod: true,
+            isMergedWithTod: false,
+            originalTodNumbers: todItem.numbers,
+            originalTodExcess: todItem.excess,
+            originalTodFullExcess: todItem.excess,
+            convertedTodExcess: perPermExcess,
+            convertedPermutationsCount: perms.length
+        }
+    })
 }
 
 /**
@@ -121,6 +125,7 @@ export function mergeTodToTopExcessItems(excessItems, lotteryType) {
                 ...existing,
                 display_bet_type: topDisplayType,
                 excess: (existing.excess || 0) + conv.excess,
+                originalRemaining: (existing.originalRemaining !== undefined ? existing.originalRemaining : (existing.remainingAmount !== undefined ? existing.remainingAmount : (existing.excess || 0))) + (conv.originalRemaining !== undefined ? conv.originalRemaining : 0),
                 isMergedWithTod: true,
                 isConvertedFromTod: true,
                 originalTopExcess: existing.excess || 0,
