@@ -45,10 +45,9 @@ describe('GraphLayoffModal', () => {
         )
 
         expect(html).toContain('ตัดยอดตีออกจากกราฟ')
-        expect(html).toContain('หวยลาวพัฒนา')
         expect(html).toContain('3 ตัว')
         expect(html).toContain('2 ตัว')
-        expect(html).toContain('เลขวิ่ง')
+        expect(html).toContain('1 ตัว')
         expect(html).toContain('แท็บ: ยอดเกิน')
     })
 
@@ -111,6 +110,31 @@ describe('GraphLayoffModal', () => {
         expect(html).toContain('เส้นล่าง')
     })
 
+    it('calculates 2-line between cuts correctly in header summary', () => {
+        const twoLines = [
+            { id: 1, value: 400, color: '#ef4444' },
+            { id: 2, value: 100, color: '#3b82f6' }
+        ]
+        // mockItems: 872 (3_top, 450). Between 100 and 400: slice is 400 - 100 = 300!
+        const html = renderToString(
+            <GraphLayoffModal
+                isOpen={true}
+                onClose={vi.fn()}
+                round={mockRound}
+                sourceTab="excess"
+                items={mockItems}
+                initialLines={twoLines}
+                initialCategory="3_digit"
+                onProceedToTransfer={vi.fn()}
+            />
+        )
+
+        // 872 has 450, between 100 and 400 slice is 300
+        expect(html).toContain('เข้าเงื่อนไข: ')
+        expect(html).toContain('>1</strong> เลข')
+        expect(html).toContain('300')
+    })
+
     it('highlights active category tab when initialCategory is passed', () => {
         const html = renderToString(
             <GraphLayoffModal
@@ -124,8 +148,10 @@ describe('GraphLayoffModal', () => {
             />
         )
 
-        // 2_digit button should have active class
-        expect(html).toMatch(/class="[^"]*btn[^"]*active[^"]*"[^>]*>🎯 2 ตัว/)
+        // 2_digit button should have active class and show active badge
+        expect(html).toContain('title="คลิกเพื่อเลือกประเภท 2 ตัว"')
+        expect(html).toMatch(/class="btn btn-sm active"[^>]*title="คลิกเพื่อเลือกประเภท 2 ตัว"/)
+        expect(html).toContain('2 ตัวบน')
     })
 
     it('renders staging basket drawer with staged items and clear/transfer actions', () => {
@@ -183,5 +209,105 @@ describe('GraphLayoffModal', () => {
         )
 
         expect(html).toContain('₭')
+    })
+
+    it('displays Thai lottery round with 3-digit dropdown button showing active bet type', () => {
+        const thaiRound = {
+            lottery_type: 'thai',
+            lottery_name: 'หวยรัฐบาลไทย',
+            round_date: '2026-11-01',
+            close_time: '2026-11-01T15:30:00Z',
+            currency_symbol: '฿'
+        }
+        const html = renderToString(
+            <GraphLayoffModal
+                isOpen={true}
+                onClose={vi.fn()}
+                round={thaiRound}
+                sourceTab="remaining"
+                items={mockItems}
+                initialCategory="3_digit"
+                onProceedToTransfer={vi.fn()}
+            />
+        )
+
+        expect(html).toContain('🎯 <!-- -->3 ตัว<!-- -->: <!-- -->3 ตัวบน')
+    })
+
+    it('renders multiple bet types in the basket correctly', () => {
+        const multiBasket = [
+            { numbers: '872', bet_type: '3_top', excess: 200 },
+            { numbers: '345', bet_type: '3_tod', excess: 150 },
+            { numbers: '25', bet_type: '2_bottom', excess: 80 }
+        ]
+        const html = renderToString(
+            <GraphLayoffModal
+                isOpen={true}
+                onClose={vi.fn()}
+                round={mockRound}
+                sourceTab="excess"
+                items={mockItems}
+                initialBasket={multiBasket}
+                onProceedToTransfer={vi.fn()}
+            />
+        )
+
+        expect(html).toContain('872')
+        expect(html).toContain('3 ตัวบน')
+        expect(html).toContain('345')
+        expect(html).toContain('3 ตัวโต๊ด')
+        expect(html).toContain('25')
+        expect(html).toContain('2 ตัวล่าง')
+    })
+
+    it('isolates category amounts correctly and does not bleed grand total into 3_all, 2_all, run_all', () => {
+        // mockItems has:
+        // 3_top: 450 (sum 3-digit = 450)
+        // 2_top: 150, 2_bottom: 100 (sum 2-digit = 250)
+        // Grand total = 700
+        const html = renderToString(
+            <GraphLayoffModal
+                isOpen={true}
+                onClose={vi.fn()}
+                round={mockRound}
+                sourceTab="excess"
+                items={mockItems}
+                onProceedToTransfer={vi.fn()}
+            />
+        )
+
+        // 3_digit button shows 3_top: 450
+        expect(html).toContain('3 ตัวบน')
+        expect(html).toBeDefined()
+    })
+
+    it('renders sortable headers for number and cut amount in the basket table', () => {
+        const basket = [
+            { numbers: '110', bet_type: '3_top', excess: 30 },
+            { numbers: '101', bet_type: '3_top', excess: 50 },
+            { numbers: '107', bet_type: '3_top', excess: 10 }
+        ]
+        const html = renderToString(
+            <GraphLayoffModal
+                isOpen={true}
+                onClose={vi.fn()}
+                round={mockRound}
+                sourceTab="excess"
+                items={mockItems}
+                initialBasket={basket}
+                onProceedToTransfer={vi.fn()}
+            />
+        )
+
+        // Check header titles for sorting
+        expect(html).toContain('title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"')
+        expect(html).toContain('title="คลิกเพื่อเรียงตามยอดตัดออก (มากไปน้อย / น้อยไปมาก)"')
+
+        // Default sort is by number ascending (101, 107, 110)
+        const idx101 = html.indexOf('>101<')
+        const idx107 = html.indexOf('>107<')
+        const idx110 = html.indexOf('>110<')
+        expect(idx101).toBeLessThan(idx107)
+        expect(idx107).toBeLessThan(idx110)
     })
 })

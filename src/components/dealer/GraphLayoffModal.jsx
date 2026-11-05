@@ -14,13 +14,39 @@ import {
 } from 'react-icons/fi'
 import {
     getNumberDomainForCategory,
+    mapBetTypeToCategory,
     groupItemsByNumber,
     evaluateLineCut,
     calculateGraphCuts,
     aggregateStagedLayoffItems,
-    getAvailableItemsAfterStaging
+    getAvailableItemsAfterStaging,
+    getGraphBetTypesByCategory,
+    isBetTypeMatchingFilter,
+    sortBasketItems
 } from '../../utils/graphLayoffCalculator'
-import { getRoundCloseDate, formatThaiDate } from '../../utils/crossRoundOffsetCalculator'
+
+const BET_TYPE_DISPLAY_MAP = {
+    '3_top': '3 ตัวบน',
+    '3_straight': '3 ตัวตรง',
+    '3_tod': '3 ตัวโต๊ด',
+    '3_bottom': '3 ตัวล่าง',
+    '3_front': '3 ตัวหน้า',
+    '2_top': '2 ตัวบน',
+    '2_bottom': '2 ตัวล่าง',
+    '2_front': '2 ตัวหน้า',
+    '2_center': '2 ตัวถ่าง',
+    '2_spread': '2 ตัวถ่าง',
+    '2_run': '2 ตัวลอย',
+    'run_top': 'ลอยบน',
+    'run_bottom': 'ลอยล่าง',
+    'front_top_1': 'ปักหน้าบน',
+    'middle_top_1': 'ปักกลางบน',
+    'back_top_1': 'ปักหลังบน',
+    'front_bottom_1': 'ปักหน้าล่าง',
+    'back_bottom_1': 'ปักหลังล่าง',
+    'pak_top': 'ปักบน',
+    'pak_bottom': 'ปักล่าง'
+}
 
 export default function GraphLayoffModal({
     isOpen = false,
@@ -34,8 +60,49 @@ export default function GraphLayoffModal({
     onProceedToTransfer = () => {}
 }) {
 
-    // 1. Number Category Tab ('3_digit' | '2_digit' | 'run')
+    // 1. Number Category Tab ('3_digit' | '2_digit' | 'run') and Specific Bet Type
     const [activeCategory, setActiveCategory] = useState(initialCategory || '3_digit')
+    const [selectedBetTypeByCategory, setSelectedBetTypeByCategory] = useState({
+        '3_digit': '3_top',
+        '2_digit': '2_top',
+        'run': 'run_top'
+    })
+    const [openDropdownCategory, setOpenDropdownCategory] = useState(null)
+    const dropdownContainerRef = useRef(null)
+
+    // Bet type options for each category
+    const betTypeOptionsByCategory = useMemo(() => {
+        return {
+            '3_digit': getGraphBetTypesByCategory('3_digit', round?.lottery_type, items),
+            '2_digit': getGraphBetTypesByCategory('2_digit', round?.lottery_type, items),
+            'run': getGraphBetTypesByCategory('run', round?.lottery_type, items)
+        }
+    }, [round?.lottery_type, items])
+
+    const activeBetType = selectedBetTypeByCategory[activeCategory] || '3_top'
+
+    // Close dropdown on outside click or escape
+    useEffect(() => {
+        if (!openDropdownCategory) return
+        function handleOutsideClick(e) {
+            if (dropdownContainerRef.current && !dropdownContainerRef.current.contains(e.target)) {
+                setOpenDropdownCategory(null)
+            }
+        }
+        function handleKeyDown(e) {
+            if (e.key === 'Escape') {
+                setOpenDropdownCategory(null)
+            }
+        }
+        document.addEventListener('mousedown', handleOutsideClick)
+        document.addEventListener('touchstart', handleOutsideClick)
+        document.addEventListener('keydown', handleKeyDown)
+        return () => {
+            document.removeEventListener('mousedown', handleOutsideClick)
+            document.removeEventListener('touchstart', handleOutsideClick)
+            document.removeEventListener('keydown', handleKeyDown)
+        }
+    }, [openDropdownCategory])
 
     // 2. Lines State (Up to 2 lines)
     // Default initial line: 1 line at 500
@@ -56,6 +123,8 @@ export default function GraphLayoffModal({
     // 4. Staging Basket
     const [stagedBasket, setStagedBasket] = useState(initialBasket || [])
     const [isBasketExpanded, setIsBasketExpanded] = useState((initialBasket && initialBasket.length > 0) ? true : false)
+    const [basketSortBy, setBasketSortBy] = useState('number') // 'number' | 'amount'
+    const [basketSortOrder, setBasketSortOrder] = useState('asc') // 'asc' | 'desc'
 
     // 5. Tooltip & Cursor tracking
     const [hoveredNumberInfo, setHoveredNumberInfo] = useState(null)
@@ -75,11 +144,12 @@ export default function GraphLayoffModal({
     const containerRef = useRef(null)
 
     const currencySymbol = round?.currency_symbol || '฿'
-    const roundDateStr = getRoundCloseDate(round) || round?.round_date || ''
-    const formattedDate = roundDateStr ? formatThaiDate(roundDateStr) : ''
 
     // 1. Original buckets and max original amount for stable Y-axis scaling
-    const originalBuckets = useMemo(() => groupItemsByNumber(items, activeCategory), [items, activeCategory])
+    const originalBuckets = useMemo(() => {
+        return groupItemsByNumber(items, activeCategory, activeBetType)
+    }, [items, activeCategory, activeBetType])
+
     const maxOriginalAmount = useMemo(() => {
         let max = 0
         Object.values(originalBuckets).forEach(b => {
@@ -93,9 +163,33 @@ export default function GraphLayoffModal({
         return getAvailableItemsAfterStaging(items, stagedBasket)
     }, [items, stagedBasket])
 
+    // Fast lookup for amount per bet type to display in dropdown options
+    const amountByBetType = useMemo(() => {
+        const map = {}
+        if (!Array.isArray(availableItems)) return map
+        availableItems.forEach(item => {
+            if (!item || !item.bet_type) return
+            const amt = Number(item.excess ?? item.remainingAmount ?? item.totalAmount ?? 0)
+            if (amt <= 0) return
+
+            const itemCategory = mapBetTypeToCategory(item.bet_type)
+            if (!itemCategory) return
+
+            const opts = betTypeOptionsByCategory[itemCategory] || []
+            opts.forEach(opt => {
+                if (isBetTypeMatchingFilter(item.bet_type, opt.id)) {
+                    map[opt.id] = (map[opt.id] || 0) + amt
+                }
+            })
+        })
+        return map
+    }, [availableItems, betTypeOptionsByCategory])
+
     // 3. Domain & Active Buckets after staging deduction
     const domain = useMemo(() => getNumberDomainForCategory(activeCategory), [activeCategory])
-    const buckets = useMemo(() => groupItemsByNumber(availableItems, activeCategory), [availableItems, activeCategory])
+    const buckets = useMemo(() => {
+        return groupItemsByNumber(availableItems, activeCategory, activeBetType)
+    }, [availableItems, activeCategory, activeBetType])
 
     // Determine upper/lower/single lines
     const sortedLines = useMemo(() => {
@@ -177,9 +271,27 @@ export default function GraphLayoffModal({
         setIsBasketExpanded(true)
     }, [cutSummary])
 
-    // Remove single item from basket
-    const handleRemoveBasketItem = useCallback((idxToRemove) => {
-        setStagedBasket(prev => prev.filter((_, idx) => idx !== idxToRemove))
+    // Sort items in Staging Basket
+    const sortedBasketItems = useMemo(() => {
+        return sortBasketItems(stagedBasket, basketSortBy, basketSortOrder)
+    }, [stagedBasket, basketSortBy, basketSortOrder])
+
+    // Toggle sorting column or direction
+    const handleToggleBasketSort = useCallback((colKey) => {
+        if (basketSortBy === colKey) {
+            setBasketSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+        } else {
+            setBasketSortBy(colKey)
+            setBasketSortOrder(colKey === 'number' ? 'asc' : 'desc')
+        }
+    }, [basketSortBy])
+
+    // Remove single item from basket by identity
+    const handleRemoveBasketItem = useCallback((itemToRemove) => {
+        if (!itemToRemove) return
+        setStagedBasket(prev => prev.filter(item => {
+            return !(item.bet_type === itemToRemove.bet_type && item.numbers === itemToRemove.numbers)
+        }))
     }, [])
 
     // Clear entire basket
@@ -306,8 +418,13 @@ export default function GraphLayoffModal({
             const amt = bucket?.totalAmount || 0
             if (amt <= 0) return
 
+            const origAmt = originalBuckets[numStr]?.totalAmount ?? amt
+            const stagedAmt = Math.max(0, origAmt - amt)
+
             const evalRes = evaluateLineCut({
                 amount: amt,
+                originalAmount: origAmt,
+                stagedAmount: stagedAmt,
                 lineCount: lines.length,
                 singleLine: singleLineVal,
                 upperLine: upperLineVal,
@@ -373,6 +490,7 @@ export default function GraphLayoffModal({
     }, [
         domain,
         buckets,
+        originalBuckets,
         lines,
         selectedLineId,
         draggingLineId,
@@ -458,6 +576,8 @@ export default function GraphLayoffModal({
 
                 const evalRes = evaluateLineCut({
                     amount: amt,
+                    originalAmount: origAmt,
+                    stagedAmount: stagedAmt,
                     lineCount: lines.length,
                     singleLine: singleLineVal,
                     upperLine: upperLineVal,
@@ -474,8 +594,10 @@ export default function GraphLayoffModal({
                     isMatched: evalRes.isMatched,
                     cutAmount: evalRes.cutAmount,
                     retainedAmount: evalRes.retainedAmount,
-                    x: e.clientX,
-                    y: e.clientY
+                    x: relX,
+                    y: relY,
+                    canvasW: canvas.clientWidth || 800,
+                    canvasH: canvas.clientHeight || 420
                 })
                 return
             }
@@ -574,24 +696,21 @@ export default function GraphLayoffModal({
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         backgroundColor: '#1e293b',
-                        flexWrap: 'wrap',
-                        gap: '0.5rem'
+                        flexWrap: 'nowrap',
+                        gap: '0.75rem'
                     }}
                 >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                        <h3 style={{ margin: 0, fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <FiBarChart2 style={{ color: '#f59e0b' }} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                        <h3 style={{
+                            margin: 0,
+                            fontSize: '1.15rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            whiteSpace: 'nowrap'
+                        }}>
+                            <FiBarChart2 style={{ color: '#f59e0b', flexShrink: 0 }} />
                             <span>ตัดยอดตีออกจากกราฟ</span>
-                            {round?.lottery_name && (
-                                <span style={{ color: '#94a3b8', fontSize: '0.95rem' }}>
-                                    - {round.lottery_name}
-                                </span>
-                            )}
-                            {formattedDate && (
-                                <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
-                                    ({formattedDate})
-                                </span>
-                            )}
                         </h3>
                         <span
                             style={{
@@ -600,72 +719,168 @@ export default function GraphLayoffModal({
                                 borderRadius: '4px',
                                 backgroundColor: sourceTab === 'remaining' ? '#0284c7' : '#e11d48',
                                 color: '#ffffff',
-                                fontWeight: 600
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0
                             }}
                         >
                             {sourceTab === 'remaining' ? 'แท็บ: ยอดเหลือ' : 'แท็บ: ยอดเกิน'}
                         </span>
                     </div>
 
-                    {/* Category Tabs: 3 ตัว / 2 ตัว / เลขวิ่ง */}
-                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                    {/* Category Dropdowns: 3 ตัว / 2 ตัว / 1 ตัว (Permanently right-anchored) */}
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
                         <div
+                            ref={dropdownContainerRef}
                             style={{
                                 display: 'flex',
                                 backgroundColor: '#0f172a',
                                 padding: '2px',
                                 borderRadius: '6px',
-                                border: '1px solid #334155'
+                                border: '1px solid #334155',
+                                gap: '2px'
                             }}
                         >
-                            <button
-                                type="button"
-                                className={`btn btn-sm ${activeCategory === '3_digit' ? 'active' : ''}`}
-                                onClick={() => setActiveCategory('3_digit')}
-                                style={{
-                                    backgroundColor: activeCategory === '3_digit' ? '#3b82f6' : 'transparent',
-                                    color: activeCategory === '3_digit' ? '#ffffff' : '#94a3b8',
-                                    border: 'none',
-                                    padding: '0.3rem 0.75rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                🎯 3 ตัว (000-999)
-                            </button>
-                            <button
-                                type="button"
-                                className={`btn btn-sm ${activeCategory === '2_digit' ? 'active' : ''}`}
-                                onClick={() => setActiveCategory('2_digit')}
-                                style={{
-                                    backgroundColor: activeCategory === '2_digit' ? '#3b82f6' : 'transparent',
-                                    color: activeCategory === '2_digit' ? '#ffffff' : '#94a3b8',
-                                    border: 'none',
-                                    padding: '0.3rem 0.75rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                🎯 2 ตัว (00-99)
-                            </button>
-                            <button
-                                type="button"
-                                className={`btn btn-sm ${activeCategory === 'run' ? 'active' : ''}`}
-                                onClick={() => setActiveCategory('run')}
-                                style={{
-                                    backgroundColor: activeCategory === 'run' ? '#3b82f6' : 'transparent',
-                                    color: activeCategory === 'run' ? '#ffffff' : '#94a3b8',
-                                    border: 'none',
-                                    padding: '0.3rem 0.75rem',
-                                    borderRadius: '4px',
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                🎯 เลขวิ่ง (0-9)
-                            </button>
+                            {[
+                                { key: '3_digit', label: '3 ตัว', range: '(000-999)' },
+                                { key: '2_digit', label: '2 ตัว', range: '(00-99)' },
+                                { key: 'run', label: '1 ตัว', range: '(0-9)' }
+                            ].map(cat => {
+                                const isActiveCategory = activeCategory === cat.key
+                                const isOpen = openDropdownCategory === cat.key
+                                const selectedId = selectedBetTypeByCategory[cat.key]
+                                const selectedOpt = betTypeOptionsByCategory[cat.key]?.find(o => o.id === selectedId) || betTypeOptionsByCategory[cat.key]?.[0]
+                                const displayLabel = selectedOpt?.shortLabel || selectedOpt?.label || cat.label
+
+                                return (
+                                    <div key={cat.key} style={{ position: 'relative' }}>
+                                        <button
+                                            type="button"
+                                            className={`btn btn-sm ${isActiveCategory ? 'active' : ''}`}
+                                            onClick={() => {
+                                                setActiveCategory(cat.key)
+                                                setOpenDropdownCategory(prev => prev === cat.key ? null : cat.key)
+                                            }}
+                                            style={{
+                                                backgroundColor: isActiveCategory ? '#3b82f6' : 'transparent',
+                                                color: isActiveCategory ? '#ffffff' : '#94a3b8',
+                                                border: 'none',
+                                                padding: '0.3rem 0.65rem',
+                                                borderRadius: '4px',
+                                                fontSize: '0.825rem',
+                                                fontWeight: isActiveCategory ? 600 : 400,
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.35rem',
+                                                transition: 'all 0.15s ease'
+                                            }}
+                                            title={`คลิกเพื่อเลือกประเภท ${cat.label}`}
+                                        >
+                                            <span>
+                                                {isActiveCategory ? '🎯 ' : ''}{cat.label}: {displayLabel}
+                                            </span>
+                                            {isOpen ? <FiChevronUp size={13} /> : <FiChevronDown size={13} />}
+                                        </button>
+
+                                        {isOpen && (
+                                            <div
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: 'calc(100% + 6px)',
+                                                    right: cat.key === 'run' ? 0 : 'auto',
+                                                    left: cat.key === 'run' ? 'auto' : 0,
+                                                    minWidth: '230px',
+                                                    backgroundColor: '#1e293b',
+                                                    border: '1px solid #475569',
+                                                    borderRadius: '8px',
+                                                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5)',
+                                                    zIndex: 10005,
+                                                    padding: '0.35rem 0',
+                                                    overflow: 'hidden'
+                                                }}
+                                            >
+                                                <div
+                                                    style={{
+                                                        padding: '0.35rem 0.75rem',
+                                                        fontSize: '0.72rem',
+                                                        color: '#94a3b8',
+                                                        borderBottom: '1px solid #334155',
+                                                        fontWeight: 600,
+                                                        letterSpacing: '0.02em',
+                                                        backgroundColor: '#0f172a'
+                                                    }}
+                                                >
+                                                    ประเภท{cat.label} {cat.range}
+                                                </div>
+                                                <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                                                    {betTypeOptionsByCategory[cat.key]?.map(opt => {
+                                                        const isSelected = selectedId === opt.id
+                                                        const amt = amountByBetType[opt.id] || 0
+                                                        return (
+                                                            <button
+                                                                key={opt.id}
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    setSelectedBetTypeByCategory(prev => ({ ...prev, [cat.key]: opt.id }))
+                                                                    setActiveCategory(cat.key)
+                                                                    setOpenDropdownCategory(null)
+                                                                }}
+                                                                style={{
+                                                                    width: '100%',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'space-between',
+                                                                    padding: '0.45rem 0.75rem',
+                                                                    background: isSelected ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+                                                                    color: isSelected ? '#60a5fa' : '#f8fafc',
+                                                                    border: 'none',
+                                                                    cursor: 'pointer',
+                                                                    textAlign: 'left',
+                                                                    fontSize: '0.825rem',
+                                                                    transition: 'background-color 0.12s ease'
+                                                                }}
+                                                                onMouseEnter={(e) => {
+                                                                    if (!isSelected) e.currentTarget.style.backgroundColor = '#334155'
+                                                                }}
+                                                                onMouseLeave={(e) => {
+                                                                    if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'
+                                                                }}
+                                                            >
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                                                                    <span style={{
+                                                                        width: '14px',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        color: isSelected ? '#3b82f6' : 'transparent',
+                                                                        fontWeight: 'bold',
+                                                                        fontSize: '0.85rem'
+                                                                    }}>
+                                                                        ✓
+                                                                    </span>
+                                                                    <span style={{ fontWeight: isSelected ? 600 : 400 }}>
+                                                                        {opt.label}
+                                                                    </span>
+                                                                </div>
+                                                                <span style={{
+                                                                    fontSize: '0.75rem',
+                                                                    color: amt > 0 ? '#10b981' : '#64748b',
+                                                                    fontWeight: amt > 0 ? 600 : 400,
+                                                                    marginLeft: '0.65rem'
+                                                                }}>
+                                                                    {amt > 0 ? `${currencySymbol}${amt.toLocaleString()}` : `${currencySymbol}0`}
+                                                                </span>
+                                                            </button>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })}
                         </div>
 
                         <button
@@ -977,23 +1192,37 @@ export default function GraphLayoffModal({
                         onPointerMove={handlePointerMove}
                         onPointerUp={handlePointerUp}
                         onPointerCancel={handlePointerUp}
+                        onPointerLeave={() => setHoveredNumberInfo(null)}
                         onDoubleClick={handleDoubleClick}
                     />
 
-                    {/* Floating Tooltip */}
+                    {/* Floating Tooltip (Confined strictly inside chart area) */}
                     {hoveredNumberInfo && (
                         <div
                             style={{
-                                position: 'fixed',
-                                left: Math.min(hoveredNumberInfo.x + 12, window.innerWidth - 180),
-                                top: Math.max(10, hoveredNumberInfo.y - 80),
+                                position: 'absolute',
+                                left: Math.max(
+                                    10,
+                                    (hoveredNumberInfo.x > (hoveredNumberInfo.canvasW || 800) - 200)
+                                        ? hoveredNumberInfo.x - 195
+                                        : hoveredNumberInfo.x + 14
+                                ),
+                                top: Math.max(
+                                    8,
+                                    Math.min(
+                                        (hoveredNumberInfo.canvasH || 420) - 95,
+                                        hoveredNumberInfo.y < 100
+                                            ? hoveredNumberInfo.y + 18
+                                            : hoveredNumberInfo.y - 88
+                                    )
+                                ),
                                 backgroundColor: '#1e293b',
                                 border: '1px solid #475569',
                                 borderRadius: '6px',
                                 padding: '0.4rem 0.65rem',
                                 fontSize: '0.75rem',
                                 pointerEvents: 'none',
-                                zIndex: 10001,
+                                zIndex: 100,
                                 boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)'
                             }}
                         >
@@ -1132,20 +1361,47 @@ export default function GraphLayoffModal({
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.825rem' }}>
                                     <thead>
                                         <tr style={{ color: '#94a3b8', borderBottom: '1px solid #334155', textAlign: 'left' }}>
-                                            <th style={{ padding: '0.35rem 0.5rem' }}>เลข</th>
+                                            <th
+                                                onClick={() => handleToggleBasketSort('number')}
+                                                style={{ padding: '0.35rem 0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                                                title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"
+                                            >
+                                                <span style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.25rem',
+                                                    color: basketSortBy === 'number' ? '#f59e0b' : 'inherit'
+                                                }}>
+                                                    เลข {basketSortBy === 'number' ? (basketSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                </span>
+                                            </th>
                                             <th style={{ padding: '0.35rem 0.5rem' }}>ประเภท</th>
-                                            <th style={{ padding: '0.35rem 0.5rem', textAlign: 'right' }}>ยอดตัดออก</th>
+                                            <th
+                                                onClick={() => handleToggleBasketSort('amount')}
+                                                style={{ padding: '0.35rem 0.5rem', textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+                                                title="คลิกเพื่อเรียงตามยอดตัดออก (มากไปน้อย / น้อยไปมาก)"
+                                            >
+                                                <span style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'flex-end',
+                                                    gap: '0.25rem',
+                                                    color: basketSortBy === 'amount' ? '#f59e0b' : 'inherit'
+                                                }}>
+                                                    ยอดตัดออก {basketSortBy === 'amount' ? (basketSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                </span>
+                                            </th>
                                             <th style={{ padding: '0.35rem 0.5rem', textAlign: 'center', width: '50px' }}>จัดการ</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {stagedBasket.map((item, idx) => (
+                                        {sortedBasketItems.map((item, idx) => (
                                             <tr key={`${item.bet_type}-${item.numbers}-${idx}`} style={{ borderBottom: '1px solid #243247' }}>
                                                 <td style={{ padding: '0.35rem 0.5rem', fontWeight: 'bold', color: '#f59e0b' }}>
                                                     {item.numbers}
                                                 </td>
                                                 <td style={{ padding: '0.35rem 0.5rem', color: '#94a3b8' }}>
-                                                    {item.display_bet_type || item.bet_type}
+                                                    {item.display_bet_type || BET_TYPE_DISPLAY_MAP[item.bet_type] || item.bet_type}
                                                 </td>
                                                 <td style={{ padding: '0.35rem 0.5rem', textAlign: 'right', fontWeight: 600, color: '#10b981' }}>
                                                     {currencySymbol}{(Number(item.excess) || 0).toLocaleString()}
@@ -1153,7 +1409,7 @@ export default function GraphLayoffModal({
                                                 <td style={{ padding: '0.35rem 0.5rem', textAlign: 'center' }}>
                                                     <button
                                                         type="button"
-                                                        onClick={() => handleRemoveBasketItem(idx)}
+                                                        onClick={() => handleRemoveBasketItem(item)}
                                                         style={{
                                                             background: 'none',
                                                             border: 'none',

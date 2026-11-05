@@ -6,7 +6,10 @@ import {
     evaluateLineCut,
     calculateGraphCuts,
     aggregateStagedLayoffItems,
-    getAvailableItemsAfterStaging
+    getAvailableItemsAfterStaging,
+    getGraphBetTypesByCategory,
+    isBetTypeMatchingFilter,
+    sortBasketItems
 } from '../graphLayoffCalculator'
 
 describe('graphLayoffCalculator', () => {
@@ -52,6 +55,79 @@ describe('graphLayoffCalculator', () => {
         })
     })
 
+    describe('getGraphBetTypesByCategory', () => {
+        it('returns 3-digit bet types including 3_bottom for thai lottery', () => {
+            const types = getGraphBetTypesByCategory('3_digit', 'thai')
+            expect(types.map(t => t.id)).toEqual(['3_top', '3_tod', '3_bottom', '3_all'])
+            expect(types.find(t => t.id === '3_top').label).toContain('3 ตัวบน')
+        })
+
+        it('omits 3_bottom for lao lottery if no 3_bottom items exist', () => {
+            const types = getGraphBetTypesByCategory('3_digit', 'lao', [])
+            expect(types.map(t => t.id)).toEqual(['3_top', '3_tod', '3_all'])
+        })
+
+        it('includes 3_bottom for lao lottery if items contain 3_bottom', () => {
+            const items = [{ bet_type: '3_bottom', numbers: '123' }]
+            const types = getGraphBetTypesByCategory('3_digit', 'lao', items)
+            expect(types.map(t => t.id)).toContain('3_bottom')
+        })
+
+        it('returns all 5 2-digit bet types plus all option', () => {
+            const types = getGraphBetTypesByCategory('2_digit', 'thai')
+            expect(types.map(t => t.id)).toEqual(['2_top', '2_front', '2_center', '2_bottom', '2_run', '2_all'])
+        })
+
+        it('returns all 7 1-digit bet types plus all option', () => {
+            const types = getGraphBetTypesByCategory('run', 'thai')
+            expect(types.map(t => t.id)).toEqual([
+                'run_top',
+                'run_bottom',
+                'front_top_1',
+                'middle_top_1',
+                'back_top_1',
+                'front_bottom_1',
+                'back_bottom_1',
+                'run_all'
+            ])
+        })
+    })
+
+    describe('isBetTypeMatchingFilter', () => {
+        it('matches canonical and aliases', () => {
+            expect(isBetTypeMatchingFilter('3_top', '3_top')).toBe(true)
+            expect(isBetTypeMatchingFilter('3_straight', '3_top')).toBe(true)
+            expect(isBetTypeMatchingFilter('3_tod', '3_top')).toBe(false)
+            expect(isBetTypeMatchingFilter('2_spread', '2_center')).toBe(true)
+            expect(isBetTypeMatchingFilter('2_tang', '2_center')).toBe(true)
+            expect(isBetTypeMatchingFilter('2_top_rev', '2_top')).toBe(true)
+            expect(isBetTypeMatchingFilter('1_top', 'run_top')).toBe(true)
+        })
+
+        it('matches category all options strictly by category', () => {
+            // 3_all matches 3-digit only
+            expect(isBetTypeMatchingFilter('3_top', '3_all')).toBe(true)
+            expect(isBetTypeMatchingFilter('3_tod', '3_all')).toBe(true)
+            expect(isBetTypeMatchingFilter('2_top', '3_all')).toBe(false)
+            expect(isBetTypeMatchingFilter('run_top', '3_all')).toBe(false)
+
+            // 2_all matches 2-digit only
+            expect(isBetTypeMatchingFilter('2_top', '2_all')).toBe(true)
+            expect(isBetTypeMatchingFilter('2_bottom', '2_all')).toBe(true)
+            expect(isBetTypeMatchingFilter('3_top', '2_all')).toBe(false)
+            expect(isBetTypeMatchingFilter('run_top', '2_all')).toBe(false)
+
+            // run_all matches run only
+            expect(isBetTypeMatchingFilter('run_top', 'run_all')).toBe(true)
+            expect(isBetTypeMatchingFilter('front_top_1', 'run_all')).toBe(true)
+            expect(isBetTypeMatchingFilter('2_top', 'run_all')).toBe(false)
+            expect(isBetTypeMatchingFilter('3_top', 'run_all')).toBe(false)
+
+            // null matches all
+            expect(isBetTypeMatchingFilter('2_bottom', null)).toBe(true)
+        })
+    })
+
     describe('groupItemsByNumber', () => {
         it('groups and sums items with identical numbers in the same category', () => {
             const items = [
@@ -66,6 +142,28 @@ describe('graphLayoffCalculator', () => {
             expect(grouped['25'].items).toHaveLength(2)
             expect(grouped['99'].totalAmount).toBe(200)
             expect(grouped['123']).toBeUndefined()
+        })
+
+        it('filters by specific bet type within a category when filterBetType is specified', () => {
+            const items = [
+                { numbers: '123', bet_type: '3_top', excess: 300 },
+                { numbers: '123', bet_type: '3_tod', excess: 100 },
+                { numbers: '456', bet_type: '3_tod', excess: 200 }
+            ]
+            // Filter only 3_top
+            const topGrouped = groupItemsByNumber(items, '3_digit', '3_top')
+            expect(topGrouped['123'].totalAmount).toBe(300)
+            expect(topGrouped['456']).toBeUndefined()
+
+            // Filter only 3_tod
+            const todGrouped = groupItemsByNumber(items, '3_digit', '3_tod')
+            expect(todGrouped['123'].totalAmount).toBe(100)
+            expect(todGrouped['456'].totalAmount).toBe(200)
+
+            // Filter 3_all
+            const allGrouped = groupItemsByNumber(items, '3_digit', '3_all')
+            expect(allGrouped['123'].totalAmount).toBe(400)
+            expect(allGrouped['456'].totalAmount).toBe(200)
         })
     })
 
@@ -127,7 +225,7 @@ describe('graphLayoffCalculator', () => {
     })
 
     describe('evaluateLineCut (2 lines)', () => {
-        it('cuts between lines with difference mode', () => {
+        it('cuts between lines with difference mode when amount is within range', () => {
             // lower = 100, upper = 400, amount = 250 -> cut (250 - 100) = 150
             const res = evaluateLineCut({
                 amount: 250,
@@ -142,56 +240,179 @@ describe('graphLayoffCalculator', () => {
             expect(res.retainedAmount).toBe(100)
         })
 
-        it('cuts between lines with full amount mode', () => {
+        it('cuts slice between lines when amount exceeds upper line (User scenario: 011=100, upper=80, lower=60)', () => {
+            // 011 = 100, upper = 80, lower = 60
+            // Slice between 60 and 80 is 20. Cut = 20, Retained = 80 (60 bottom + 20 top)
             const res = evaluateLineCut({
-                amount: 250,
+                amount: 100,
                 lineCount: 2,
-                lowerLine: 100,
-                upperLine: 400,
+                lowerLine: 60,
+                upperLine: 80,
+                cutMode: 'between',
+                amountMode: 'difference'
+            })
+            expect(res.isMatched).toBe(true)
+            expect(res.cutAmount).toBe(20)
+            expect(res.retainedAmount).toBe(80)
+        })
+
+        it('does not cut when amount is below lower line in between mode', () => {
+            const res = evaluateLineCut({
+                amount: 50,
+                lineCount: 2,
+                lowerLine: 60,
+                upperLine: 80,
+                cutMode: 'between',
+                amountMode: 'difference'
+            })
+            expect(res.isMatched).toBe(false)
+            expect(res.cutAmount).toBe(0)
+            expect(res.retainedAmount).toBe(50)
+        })
+
+        it('cuts between lines with full amount mode only when amount is within range', () => {
+            const resWithin = evaluateLineCut({
+                amount: 70,
+                lineCount: 2,
+                lowerLine: 60,
+                upperLine: 80,
                 cutMode: 'between',
                 amountMode: 'full'
             })
-            expect(res.isMatched).toBe(true)
-            expect(res.cutAmount).toBe(250)
-            expect(res.retainedAmount).toBe(0)
+            expect(resWithin.isMatched).toBe(true)
+            expect(resWithin.cutAmount).toBe(70)
+            expect(resWithin.retainedAmount).toBe(0)
+
+            const resExceed = evaluateLineCut({
+                amount: 100,
+                lineCount: 2,
+                lowerLine: 60,
+                upperLine: 80,
+                cutMode: 'between',
+                amountMode: 'full'
+            })
+            expect(resExceed.isMatched).toBe(false)
+            expect(resExceed.cutAmount).toBe(0)
+            expect(resExceed.retainedAmount).toBe(100)
         })
 
-        it('cuts outside lines (both above upper and below lower)', () => {
-            // Case A: above upper (500 > 400)
-            const resA = evaluateLineCut({
-                amount: 500,
+        it('cuts outside lines (both above upper and below lower) in difference mode (User scenario: 011=100, upper=80, lower=60)', () => {
+            // 011 = 100, upper = 80, lower = 60
+            // Cut above 80 = 20. Cut below 60 = 60. Total cut = 80. Retained = 20.
+            const res = evaluateLineCut({
+                amount: 100,
                 lineCount: 2,
-                lowerLine: 100,
-                upperLine: 400,
+                lowerLine: 60,
+                upperLine: 80,
                 cutMode: 'outside',
                 amountMode: 'difference'
             })
-            expect(resA.isMatched).toBe(true)
-            expect(resA.cutAmount).toBe(100) // 500 - 400
+            expect(res.isMatched).toBe(true)
+            expect(res.cutAmount).toBe(80)
+            expect(res.retainedAmount).toBe(20)
+        })
 
-            // Case B: below lower (80 < 100)
-            const resB = evaluateLineCut({
-                amount: 80,
+        it('cuts outside lines when amount is below lower line in difference mode', () => {
+            // amount = 50, lower = 60, upper = 80 -> entire 50 is below 60
+            const res = evaluateLineCut({
+                amount: 50,
                 lineCount: 2,
-                lowerLine: 100,
-                upperLine: 400,
+                lowerLine: 60,
+                upperLine: 80,
+                cutMode: 'outside',
+                amountMode: 'difference'
+            })
+            expect(res.isMatched).toBe(true)
+            expect(res.cutAmount).toBe(50)
+            expect(res.retainedAmount).toBe(0)
+        })
+
+        it('cuts outside lines when amount is between lines in difference mode (cuts portion below lower)', () => {
+            // amount = 70, lower = 60, upper = 80 -> portion below 60 is 60, portion above 80 is 0. Cut = 60, Retained = 10.
+            const res = evaluateLineCut({
+                amount: 70,
+                lineCount: 2,
+                lowerLine: 60,
+                upperLine: 80,
+                cutMode: 'outside',
+                amountMode: 'difference'
+            })
+            expect(res.isMatched).toBe(true)
+            expect(res.cutAmount).toBe(60)
+            expect(res.retainedAmount).toBe(10)
+        })
+
+        it('cuts outside lines with full amount mode', () => {
+            // Case A: above upper (100 > 80)
+            const resA = evaluateLineCut({
+                amount: 100,
+                lineCount: 2,
+                lowerLine: 60,
+                upperLine: 80,
+                cutMode: 'outside',
+                amountMode: 'full'
+            })
+            expect(resA.isMatched).toBe(true)
+            expect(resA.cutAmount).toBe(100)
+            expect(resA.retainedAmount).toBe(0)
+
+            // Case B: below lower (50 < 60)
+            const resB = evaluateLineCut({
+                amount: 50,
+                lineCount: 2,
+                lowerLine: 60,
+                upperLine: 80,
                 cutMode: 'outside',
                 amountMode: 'full'
             })
             expect(resB.isMatched).toBe(true)
-            expect(resB.cutAmount).toBe(80)
+            expect(resB.cutAmount).toBe(50)
+            expect(resB.retainedAmount).toBe(0)
 
-            // Case C: between lines (250) -> not matched
+            // Case C: within range (70 in [60, 80]) -> not matched in full mode
             const resC = evaluateLineCut({
-                amount: 250,
+                amount: 70,
                 lineCount: 2,
-                lowerLine: 100,
-                upperLine: 400,
+                lowerLine: 60,
+                upperLine: 80,
                 cutMode: 'outside',
-                amountMode: 'difference'
+                amountMode: 'full'
             })
             expect(resC.isMatched).toBe(false)
             expect(resC.cutAmount).toBe(0)
+            expect(resC.retainedAmount).toBe(70)
+        })
+
+        it('correctly handles staged amounts to prevent double cutting at the same lines', () => {
+            // User cut 20 in between mode (orig 100, staged 20, remaining 80)
+            const resBetween = evaluateLineCut({
+                amount: 80,
+                originalAmount: 100,
+                stagedAmount: 20,
+                lineCount: 2,
+                lowerLine: 60,
+                upperLine: 80,
+                cutMode: 'between',
+                amountMode: 'difference'
+            })
+            expect(resBetween.isMatched).toBe(false)
+            expect(resBetween.cutAmount).toBe(0)
+            expect(resBetween.retainedAmount).toBe(80)
+
+            // User cut 80 in outside mode (orig 100, staged 80, remaining 20)
+            const resOutside = evaluateLineCut({
+                amount: 20,
+                originalAmount: 100,
+                stagedAmount: 80,
+                lineCount: 2,
+                lowerLine: 60,
+                upperLine: 80,
+                cutMode: 'outside',
+                amountMode: 'difference'
+            })
+            expect(resOutside.isMatched).toBe(false)
+            expect(resOutside.cutAmount).toBe(0)
+            expect(resOutside.retainedAmount).toBe(20)
         })
     })
 
@@ -334,6 +555,67 @@ describe('graphLayoffCalculator', () => {
             expect(cut2.matchedNumbersCount).toBe(0)
             expect(cut2.totalCutAmount).toBe(0)
             expect(cut2.cutItems).toHaveLength(0)
+        })
+    })
+
+    describe('sortBasketItems', () => {
+        const testBasket = [
+            { numbers: '110', bet_type: '3_top', excess: 30 },
+            { numbers: '101', bet_type: '3_top', excess: 30 },
+            { numbers: '107', bet_type: '3_top', excess: 10 },
+            { numbers: '103', bet_type: '3_top', excess: 50 },
+            { numbers: '111', bet_type: '3_top', excess: 20 }
+        ]
+
+        it('sorts by numbers ascending by default', () => {
+            const sorted = sortBasketItems(testBasket, 'number', 'asc')
+            expect(sorted.map(i => i.numbers)).toEqual(['101', '103', '107', '110', '111'])
+        })
+
+        it('sorts by numbers descending', () => {
+            const sorted = sortBasketItems(testBasket, 'number', 'desc')
+            expect(sorted.map(i => i.numbers)).toEqual(['111', '110', '107', '103', '101'])
+        })
+
+        it('sorts by cut amount (excess) descending', () => {
+            const sorted = sortBasketItems(testBasket, 'amount', 'desc')
+            // excess: 50 (103), 30 (101), 30 (110), 20 (111), 10 (107)
+            expect(sorted.map(i => `${i.numbers}:${i.excess}`)).toEqual([
+                '103:50',
+                '101:30',
+                '110:30',
+                '111:20',
+                '107:10'
+            ])
+        })
+
+        it('sorts by cut amount (excess) ascending', () => {
+            const sorted = sortBasketItems(testBasket, 'amount', 'asc')
+            // excess: 10 (107), 20 (111), 30 (101), 30 (110), 50 (103)
+            expect(sorted.map(i => `${i.numbers}:${i.excess}`)).toEqual([
+                '107:10',
+                '111:20',
+                '101:30',
+                '110:30',
+                '103:50'
+            ])
+        })
+
+        it('handles empty or single item arrays safely', () => {
+            expect(sortBasketItems([])).toEqual([])
+            expect(sortBasketItems(null)).toEqual([])
+            expect(sortBasketItems([{ numbers: '99', excess: 10 }])).toEqual([{ numbers: '99', excess: 10 }])
+        })
+
+        it('handles mixed digit lengths in numeric order', () => {
+            const mixed = [
+                { numbers: '100', excess: 10 },
+                { numbers: '05', excess: 10 },
+                { numbers: '9', excess: 10 },
+                { numbers: '25', excess: 10 }
+            ]
+            const sorted = sortBasketItems(mixed, 'number', 'asc')
+            expect(sorted.map(i => i.numbers)).toEqual(['9', '05', '25', '100'])
         })
     })
 })
