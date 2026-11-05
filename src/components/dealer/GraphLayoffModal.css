@@ -63,7 +63,7 @@
     align-items: center;
     flex-shrink: 0;
     margin-left: auto;
-    margin-right: 2.75rem;
+    margin-right: 0.75rem;
 }
 
 .graph-category-tabs-container {
@@ -80,22 +80,20 @@
 }
 
 .graph-modal-close-btn {
-    position: absolute;
-    top: 50%;
-    right: 0.85rem;
-    transform: translateY(-50%);
-    background: transparent;
-    border: none;
-    color: #94a3b8;
-    cursor: pointer;
-    font-size: 1.35rem;
-    padding: 0.25rem;
-    display: flex !important;
+    width: 32px;
+    height: 32px;
+    display: flex;
     align-items: center;
     justify-content: center;
+    border: none;
+    background: transparent;
+    color: #94a3b8;
     border-radius: 6px;
-    transition: color 0.15s ease, background-color 0.15s ease;
-    z-index: 10;
+    cursor: pointer;
+    font-size: 1.35rem;
+    padding: 0;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
 }
 
 .graph-modal-close-btn:hover {
@@ -104,7 +102,7 @@
 }
 
 .graph-mobile-close {
-    display: flex !important;
+    display: none !important;
 }
 
 .graph-desktop-close {
@@ -241,8 +239,10 @@
 
     .graph-modal-title-row {
         width: 100%;
-        justify-content: space-between;
-        padding-right: 2.25rem !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        padding-right: 0 !important;
     }
 
     .graph-modal-title {
@@ -255,11 +255,12 @@
         margin-right: 0 !important;
     }
 
-    .graph-modal-close-btn {
-        top: 0.45rem;
-        right: 0.5rem;
-        transform: none;
-        font-size: 1.25rem;
+    .graph-mobile-close {
+        display: flex !important;
+    }
+
+    .graph-desktop-close {
+        display: none !important;
     }
 
     .graph-category-tabs-container {

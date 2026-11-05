@@ -725,6 +725,16 @@ export default function GraphLayoffModal({
                                 {sourceTab === 'remaining' ? 'แท็บ: ยอดเหลือ' : 'แท็บ: ยอดเกิน'}
                             </span>
                         </div>
+
+                        {/* Mobile close button: sits on the right of title row on mobile */}
+                        <button
+                            type="button"
+                            className="modal-close graph-modal-close-btn graph-mobile-close"
+                            onClick={onClose}
+                            title="ปิด"
+                        >
+                            <FiX />
+                        </button>
                     </div>
 
                     {/* Category Dropdowns: 3 ตัว / 2 ตัว / 1 ตัว (Permanently right-anchored) */}
@@ -885,10 +895,10 @@ export default function GraphLayoffModal({
                         </div>
                     </div>
 
-                    {/* Modal Close Button (Positioned at far right corner) */}
+                    {/* Desktop Close Button (Sits at far right corner of header on desktop) */}
                     <button
                         type="button"
-                        className="modal-close graph-modal-close-btn graph-desktop-close graph-mobile-close"
+                        className="modal-close graph-modal-close-btn graph-desktop-close"
                         onClick={onClose}
                         title="ปิด"
                     >
