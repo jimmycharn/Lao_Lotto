@@ -49,6 +49,20 @@ describe('GraphLayoffModal', () => {
         expect(html).toContain('2 ตัว')
         expect(html).toContain('1 ตัว')
         expect(html).toContain('แท็บ: ยอดเกิน')
+
+        // Responsive class structure
+        expect(html).toContain('graph-modal-header')
+        expect(html).toContain('graph-modal-title-row')
+        expect(html).toContain('graph-category-tabs-row')
+        expect(html).toContain('graph-mobile-close')
+        expect(html).toContain('graph-desktop-close')
+        expect(html).toContain('graph-toolbar')
+        expect(html).toContain('graph-toolbar-lines')
+        expect(html).toContain('graph-toolbar-modes')
+        expect(html).toContain('graph-toolbar-action')
+        expect(html).toContain('graph-chart-container')
+        expect(html).toContain('graph-basket-drawer')
+        expect(html).toContain('graph-basket-header')
     })
 
     it('renders source badge for remaining tab', () => {
@@ -170,6 +184,7 @@ describe('GraphLayoffModal', () => {
         )
 
         expect(html).toContain('ตะกร้าพักยอดตีออก')
+        expect(html).toContain('graph-basket-table-wrapper')
         expect(html).toContain('872')
         expect(html).toContain('3 ตัวบน')
         expect(html).toContain('ล้างตะกร้า')

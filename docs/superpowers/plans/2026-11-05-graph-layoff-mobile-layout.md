@@ -39,24 +39,24 @@
   - `.graph-basket-header`
   - `.graph-basket-table-wrapper`
 
-- [ ] **Step 1: Write the failing test for responsive CSS classes**
+- [x] **Step 1: Write the failing test for responsive CSS classes**
 Add a test in `src/components/dealer/__tests__/GraphLayoffModal.test.jsx` expecting `graph-modal-title-row` and `graph-toolbar` classes on the rendered modal.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 Run: `npm.cmd test -- src/components/dealer/__tests__/GraphLayoffModal.test.jsx`
 Expected: FAIL with missing class `graph-modal-title-row`.
 
-- [ ] **Step 3: Create `GraphLayoffModal.css`**
+- [x] **Step 3: Create `GraphLayoffModal.css`**
 Write clean, modern responsive CSS with desktop base styles and mobile overrides (`@media (max-width: 768px)` and `@media (max-width: 480px)`).
 
-- [ ] **Step 4: Import CSS in `GraphLayoffModal.jsx`**
+- [x] **Step 4: Import CSS in `GraphLayoffModal.jsx`**
 Add `import './GraphLayoffModal.css'` and apply classes to container and header elements.
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 Run: `npm.cmd test -- src/components/dealer/__tests__/GraphLayoffModal.test.jsx`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 ```bash
 git add src/components/dealer/GraphLayoffModal.css src/components/dealer/GraphLayoffModal.jsx src/components/dealer/__tests__/GraphLayoffModal.test.jsx
 git commit -m "feat(layoff): add responsive stylesheet GraphLayoffModal.css"
@@ -79,26 +79,26 @@ git commit -m "feat(layoff): add responsive stylesheet GraphLayoffModal.css"
   - Touch hit threshold `hitDistance = (e.pointerType === 'touch' || ('ontouchstart' in window)) ? 24 : 14` for dragging price lines.
   - Mobile bottom sheet with sticky footer and smooth drawer scroll.
 
-- [ ] **Step 1: Write tests for mobile header structure and touch threshold**
+- [x] **Step 1: Write tests for mobile header structure and touch threshold**
 In `GraphLayoffModal.test.jsx`, add tests verifying:
 - Header contains title row and category tab bar row.
 - Cut button is rendered in the action group.
 
-- [ ] **Step 2: Run test to verify failure or baseline**
+- [x] **Step 2: Run test to verify failure or baseline**
 Run: `npm.cmd test -- src/components/dealer/__tests__/GraphLayoffModal.test.jsx`
 
-- [ ] **Step 3: Update `GraphLayoffModal.jsx` layout & pointer handlers**
+- [x] **Step 3: Update `GraphLayoffModal.jsx` layout & pointer handlers**
 Refactor JSX structure:
 1. Header: wrap title + close in `.graph-modal-title-row`, wrap categories in `.graph-category-tabs-row`.
 2. Toolbar: wrap line controls in `.graph-toolbar-lines`, wrap mode pills in `.graph-toolbar-modes`, wrap summary + cut button in `.graph-toolbar-action`.
 3. In `handlePointerDown` and `handlePointerMove`: use dynamic `hitDistance = (e.pointerType === 'touch' || ('ontouchstart' in window)) ? 24 : 14`.
 4. Bottom Drawer: wrap in `.graph-basket-drawer` with `.graph-basket-header` and `.graph-basket-table-wrapper`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 Run: `npm.cmd test -- src/components/dealer/__tests__/GraphLayoffModal.test.jsx`
 Expected: PASS all 15+ tests.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add src/components/dealer/GraphLayoffModal.jsx src/components/dealer/GraphLayoffModal.css src/components/dealer/__tests__/GraphLayoffModal.test.jsx
 git commit -m "feat(layoff): implement stacked mobile toolbar and touch ergonomics"
@@ -111,23 +111,23 @@ git commit -m "feat(layoff): implement stacked mobile toolbar and touch ergonomi
 **Files:**
 - Test: All test suites (`src/utils/__tests__/graphLayoffCalculator.test.js`, `src/components/dealer/__tests__/GraphLayoffModal.test.jsx`)
 
-- [ ] **Step 1: Run focused vitest on affected files**
+- [x] **Step 1: Run focused vitest on affected files**
 Run: `npm.cmd test -- src/utils/__tests__/graphLayoffCalculator.test.js src/components/dealer/__tests__/GraphLayoffModal.test.jsx`
 Expected: PASS.
 
-- [ ] **Step 2: Run ESLint on modified files**
+- [x] **Step 2: Run ESLint on modified files**
 Run: `npx.cmd eslint src/components/dealer/GraphLayoffModal.jsx`
 Expected: 0 errors, 0 warnings.
 
-- [ ] **Step 3: Run full test suite**
+- [x] **Step 3: Run full test suite**
 Run: `npm.cmd test`
 Expected: All 52 test files (890+ tests) pass.
 
-- [ ] **Step 4: Run Vite build**
+- [x] **Step 4: Run Vite build**
 Run: `npm.cmd run build`
 Expected: Build succeeds with 0 errors.
 
-- [ ] **Step 5: Commit plan completion**
+- [x] **Step 5: Commit plan completion**
 ```bash
 git commit --allow-empty -m "chore(layoff): verify mobile layout implementation"
 ```

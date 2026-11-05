@@ -91,3 +91,4 @@ On screens $\le 768$px, the toolbar is organized into 3 logical, compact rows:
 3. Add enlarged touch hit detection threshold (`hitDistance = e.pointerType === 'touch' ? 22 : 14`) for line dragging.
 4. Update unit tests in `src/components/dealer/__tests__/GraphLayoffModal.test.jsx` to verify responsive class structure and functionality.
 5. Run Vitest, ESLint, and Vite build to confirm zero regressions.
+

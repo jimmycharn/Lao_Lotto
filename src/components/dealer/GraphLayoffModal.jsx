@@ -24,6 +24,7 @@ import {
     isBetTypeMatchingFilter,
     sortBasketItems
 } from '../../utils/graphLayoffCalculator'
+import './GraphLayoffModal.css'
 
 const BET_TYPE_DISPLAY_MAP = {
     '3_top': '3 ตัวบน',
@@ -512,10 +513,12 @@ export default function GraphLayoffModal({
         const relY = e.clientY - rect.top
         const { getY } = getPlotGeometry(canvas)
 
-        // Find if near any line (15px threshold)
+        // Find if near any line (24px threshold for touch, 15px for mouse)
+        const isTouch = e.pointerType === 'touch' || (typeof window !== 'undefined' && 'ontouchstart' in window)
+        const hitDistance = isTouch ? 24 : 15
         const hitLine = lines.find(line => {
             const lineY = getY(line.value)
-            return Math.abs(relY - lineY) <= 15
+            return Math.abs(relY - lineY) <= hitDistance
         })
 
         if (hitLine) {
@@ -553,9 +556,11 @@ export default function GraphLayoffModal({
         }
 
         // Check if cursor is hovering near a line
+        const isTouch = e.pointerType === 'touch' || (typeof window !== 'undefined' && 'ontouchstart' in window)
+        const hoverDistance = isTouch ? 24 : 12
         const nearLine = lines.some(line => {
             const lineY = getY(line.value)
-            return Math.abs(relY - lineY) <= 12
+            return Math.abs(relY - lineY) <= hoverDistance
         })
 
         if (nearLine) {
@@ -653,7 +658,7 @@ export default function GraphLayoffModal({
 
     return (
         <div
-            className="modal-overlay"
+            className="modal-overlay graph-layoff-overlay"
             style={{
                 position: 'fixed',
                 top: 0,
@@ -689,6 +694,7 @@ export default function GraphLayoffModal({
             >
                 {/* Header */}
                 <div
+                    className="graph-modal-header"
                     style={{
                         padding: '0.75rem 1.25rem',
                         borderBottom: '1px solid #334155',
@@ -700,38 +706,58 @@ export default function GraphLayoffModal({
                         gap: '0.75rem'
                     }}
                 >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
-                        <h3 style={{
-                            margin: 0,
-                            fontSize: '1.15rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            whiteSpace: 'nowrap'
-                        }}>
-                            <FiBarChart2 style={{ color: '#f59e0b', flexShrink: 0 }} />
-                            <span>ตัดยอดตีออกจากกราฟ</span>
-                        </h3>
-                        <span
+                    <div className="graph-modal-title-row" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                            <h3 className="graph-modal-title" style={{
+                                margin: 0,
+                                fontSize: '1.15rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                whiteSpace: 'nowrap'
+                            }}>
+                                <FiBarChart2 style={{ color: '#f59e0b', flexShrink: 0 }} />
+                                <span>ตัดยอดตีออกจากกราฟ</span>
+                            </h3>
+                            <span
+                                style={{
+                                    fontSize: '0.75rem',
+                                    padding: '0.2rem 0.5rem',
+                                    borderRadius: '4px',
+                                    backgroundColor: sourceTab === 'remaining' ? '#0284c7' : '#e11d48',
+                                    color: '#ffffff',
+                                    fontWeight: 600,
+                                    whiteSpace: 'nowrap',
+                                    flexShrink: 0
+                                }}
+                            >
+                                {sourceTab === 'remaining' ? 'แท็บ: ยอดเหลือ' : 'แท็บ: ยอดเกิน'}
+                            </span>
+                        </div>
+                        {/* Mobile-only close button */}
+                        <button
+                            type="button"
+                            className="modal-close graph-mobile-close"
+                            onClick={onClose}
                             style={{
-                                fontSize: '0.75rem',
-                                padding: '0.2rem 0.5rem',
-                                borderRadius: '4px',
-                                backgroundColor: sourceTab === 'remaining' ? '#0284c7' : '#e11d48',
-                                color: '#ffffff',
-                                fontWeight: 600,
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#94a3b8',
+                                cursor: 'pointer',
+                                fontSize: '1.25rem',
+                                padding: '0.25rem'
                             }}
+                            title="ปิด"
                         >
-                            {sourceTab === 'remaining' ? 'แท็บ: ยอดเหลือ' : 'แท็บ: ยอดเกิน'}
-                        </span>
+                            <FiX />
+                        </button>
                     </div>
 
                     {/* Category Dropdowns: 3 ตัว / 2 ตัว / 1 ตัว (Permanently right-anchored) */}
-                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
+                    <div className="graph-category-tabs-row" style={{ display: 'flex', gap: '0.35rem', alignItems: 'center', flexShrink: 0, marginLeft: 'auto' }}>
                         <div
                             ref={dropdownContainerRef}
+                            className="graph-category-tabs-container"
                             style={{
                                 display: 'flex',
                                 backgroundColor: '#0f172a',
@@ -753,7 +779,7 @@ export default function GraphLayoffModal({
                                 const displayLabel = selectedOpt?.shortLabel || selectedOpt?.label || cat.label
 
                                 return (
-                                    <div key={cat.key} style={{ position: 'relative' }}>
+                                    <div key={cat.key} className="graph-category-tab-wrapper" style={{ position: 'relative' }}>
                                         <button
                                             type="button"
                                             className={`btn btn-sm ${isActiveCategory ? 'active' : ''}`}
@@ -785,6 +811,7 @@ export default function GraphLayoffModal({
 
                                         {isOpen && (
                                             <div
+                                                className="graph-category-dropdown"
                                                 style={{
                                                     position: 'absolute',
                                                     top: 'calc(100% + 6px)',
@@ -885,7 +912,7 @@ export default function GraphLayoffModal({
 
                         <button
                             type="button"
-                            className="modal-close"
+                            className="modal-close graph-desktop-close"
                             onClick={onClose}
                             style={{
                                 background: 'transparent',
@@ -905,6 +932,7 @@ export default function GraphLayoffModal({
 
                 {/* Control Toolbar */}
                 <div
+                    className="graph-toolbar"
                     style={{
                         padding: '0.65rem 1.25rem',
                         backgroundColor: '#1e293b',
@@ -917,7 +945,7 @@ export default function GraphLayoffModal({
                     }}
                 >
                     {/* Left Group: Line Controls & Line Badges */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <div className="graph-toolbar-lines" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                         <button
                             type="button"
                             className="btn btn-sm btn-outline"
@@ -948,6 +976,7 @@ export default function GraphLayoffModal({
                             return (
                                 <div
                                     key={line.id}
+                                    className="line-pill"
                                     onClick={() => setSelectedLineId(line.id)}
                                     style={{
                                         display: 'flex',
@@ -1016,7 +1045,7 @@ export default function GraphLayoffModal({
                     </div>
 
                     {/* Middle Group: Cut Mode & Amount Mode Selector */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <div className="graph-toolbar-modes" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                         {/* Cut Mode */}
                         <div style={{ display: 'flex', backgroundColor: '#0f172a', borderRadius: '6px', padding: '2px', border: '1px solid #334155' }}>
                             {lines.length === 0 ? (
@@ -1135,8 +1164,8 @@ export default function GraphLayoffModal({
                     </div>
 
                     {/* Right Group: Impact Summary & Stage Button */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                        <div style={{ fontSize: '0.85rem', textAlign: 'right' }}>
+                    <div className="graph-toolbar-action" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                        <div className="impact-text" style={{ fontSize: '0.85rem', textAlign: 'right' }}>
                             <span style={{ color: '#94a3b8' }}>เข้าเงื่อนไข: </span>
                             <strong style={{ color: '#f59e0b' }}>{cutSummary.matchedNumbersCount}</strong> เลข
                             <span style={{ margin: '0 0.35rem', color: '#475569' }}>|</span>
@@ -1172,6 +1201,7 @@ export default function GraphLayoffModal({
                 {/* Canvas Chart Area */}
                 <div
                     ref={containerRef}
+                    className="graph-chart-container"
                     style={{
                         flex: 1,
                         position: 'relative',
@@ -1253,6 +1283,7 @@ export default function GraphLayoffModal({
 
                 {/* Staging Basket Drawer (ตะกร้าพักยอดตีออก) */}
                 <div
+                    className="graph-basket-drawer"
                     style={{
                         backgroundColor: '#1e293b',
                         borderTop: '1px solid #334155',
@@ -1265,6 +1296,7 @@ export default function GraphLayoffModal({
                 >
                     {/* Drawer Header Bar */}
                     <div
+                        className="graph-basket-header"
                         style={{
                             padding: '0.5rem 1.25rem',
                             display: 'flex',
@@ -1276,7 +1308,7 @@ export default function GraphLayoffModal({
                         }}
                         onClick={() => setIsBasketExpanded(prev => !prev)}
                     >
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div className="graph-basket-header-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                             <span style={{ fontSize: '1rem' }}>🛒</span>
                             <strong style={{ fontSize: '0.9rem' }}>
                                 ตะกร้าพักยอดตีออก ({stagedBasket.length} รายการ)
@@ -1352,7 +1384,7 @@ export default function GraphLayoffModal({
 
                     {/* Staged Items List Table */}
                     {isBasketExpanded && (
-                        <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 1.25rem' }}>
+                        <div className="graph-basket-table-wrapper" style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 1.25rem' }}>
                             {stagedBasket.length === 0 ? (
                                 <div style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center', padding: '1rem 0' }}>
                                     ยังไม่มีรายการในตะกร้า (ปรับเส้นราคาแล้วกด &quot;ตัดยอดเข้าตะกร้า&quot;)
