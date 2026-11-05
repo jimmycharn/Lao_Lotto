@@ -708,7 +708,7 @@ export default function GraphLayoffModal({
                                 whiteSpace: 'nowrap'
                             }}>
                                 <FiBarChart2 style={{ color: '#f59e0b', flexShrink: 0 }} />
-                                <span>ตัดยอดตีออกจากกราฟ</span>
+                                <span>ตัดยอดจากกราฟ</span>
                             </h3>
                             <span
                                 style={{
@@ -725,23 +725,6 @@ export default function GraphLayoffModal({
                                 {sourceTab === 'remaining' ? 'แท็บ: ยอดเหลือ' : 'แท็บ: ยอดเกิน'}
                             </span>
                         </div>
-                        {/* Mobile-only close button */}
-                        <button
-                            type="button"
-                            className="modal-close graph-mobile-close"
-                            onClick={onClose}
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#94a3b8',
-                                cursor: 'pointer',
-                                fontSize: '1.25rem',
-                                padding: '0.25rem'
-                            }}
-                            title="ปิด"
-                        >
-                            <FiX />
-                        </button>
                     </div>
 
                     {/* Category Dropdowns: 3 ตัว / 2 ตัว / 1 ตัว (Permanently right-anchored) */}
@@ -900,25 +883,17 @@ export default function GraphLayoffModal({
                                 )
                             })}
                         </div>
-
-                        <button
-                            type="button"
-                            className="modal-close graph-desktop-close"
-                            onClick={onClose}
-                            style={{
-                                background: 'transparent',
-                                border: 'none',
-                                color: '#94a3b8',
-                                cursor: 'pointer',
-                                fontSize: '1.25rem',
-                                marginLeft: '0.5rem',
-                                padding: '0.25rem'
-                            }}
-                            title="ปิด"
-                        >
-                            <FiX />
-                        </button>
                     </div>
+
+                    {/* Modal Close Button (Positioned at far right corner) */}
+                    <button
+                        type="button"
+                        className="modal-close graph-modal-close-btn graph-desktop-close graph-mobile-close"
+                        onClick={onClose}
+                        title="ปิด"
+                    >
+                        <FiX />
+                    </button>
                 </div>
 
                 {/* Control Toolbar */}
@@ -1156,10 +1131,9 @@ export default function GraphLayoffModal({
                     {/* Right Group: Impact Summary & Stage Button */}
                     <div className="graph-toolbar-action" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                         <div className="impact-text" style={{ fontSize: '0.85rem', textAlign: 'right' }}>
-                            <span style={{ color: '#94a3b8' }}>เข้าเงื่อนไข: </span>
                             <strong style={{ color: '#f59e0b' }}>{cutSummary.matchedNumbersCount}</strong> เลข
                             <span style={{ margin: '0 0.35rem', color: '#475569' }}>|</span>
-                            <span style={{ color: '#94a3b8' }}>ยอดตัดรวม: </span>
+                            <span style={{ color: '#94a3b8' }}>ยอดรวม: </span>
                             <strong style={{ color: '#10b981' }}>{currencySymbol}{cutSummary.totalCutAmount.toLocaleString()}</strong>
                         </div>
 

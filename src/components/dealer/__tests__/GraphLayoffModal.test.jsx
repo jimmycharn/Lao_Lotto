@@ -44,7 +44,7 @@ describe('GraphLayoffModal', () => {
             />
         )
 
-        expect(html).toContain('ตัดยอดตีออกจากกราฟ')
+        expect(html).toContain('ตัดยอดจากกราฟ')
         expect(html).toContain('3 ตัว')
         expect(html).toContain('2 ตัว')
         expect(html).toContain('1 ตัว')
@@ -144,7 +144,7 @@ describe('GraphLayoffModal', () => {
         )
 
         // 872 has 450, between 100 and 400 slice is 300
-        expect(html).toContain('เข้าเงื่อนไข: ')
+        expect(html).toContain('ยอดรวม: ')
         expect(html).toContain('>1</strong> เลข')
         expect(html).toContain('300')
     })
@@ -203,8 +203,8 @@ describe('GraphLayoffModal', () => {
             />
         )
 
-        expect(html).toContain('ตัดยอดตีออกจากกราฟ')
-        expect(html).toContain('เข้าเงื่อนไข:')
+        expect(html).toContain('ตัดยอดจากกราฟ')
+        expect(html).toContain('ยอดรวม:')
     })
 
     it('respects round currency symbol', () => {
