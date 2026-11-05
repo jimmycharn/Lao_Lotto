@@ -670,8 +670,7 @@ export default function GraphLayoffModal({
                 backdropFilter: 'blur(5px)',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                padding: '0.5rem'
+                justifyContent: 'center'
             }}
             onClick={onClose}
         >
@@ -681,28 +680,20 @@ export default function GraphLayoffModal({
                 style={{
                     backgroundColor: 'var(--color-bg-primary, #0f172a)',
                     color: 'var(--color-text-main, #f8fafc)',
-                    borderRadius: '12px',
-                    width: '100%',
-                    maxWidth: '1200px',
-                    height: '92vh',
                     display: 'flex',
                     flexDirection: 'column',
-                    overflow: 'hidden',
-                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                    border: '1px solid var(--color-border, #334155)'
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
                 }}
             >
                 {/* Header */}
                 <div
                     className="graph-modal-header"
                     style={{
-                        padding: '0.75rem 1.25rem',
                         borderBottom: '1px solid #334155',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         backgroundColor: '#1e293b',
-                        flexWrap: 'nowrap',
                         gap: '0.75rem'
                     }}
                 >
@@ -934,7 +925,6 @@ export default function GraphLayoffModal({
                 <div
                     className="graph-toolbar"
                     style={{
-                        padding: '0.65rem 1.25rem',
                         backgroundColor: '#1e293b',
                         borderBottom: '1px solid #334155',
                         display: 'flex',
@@ -1203,7 +1193,6 @@ export default function GraphLayoffModal({
                     ref={containerRef}
                     className="graph-chart-container"
                     style={{
-                        flex: 1,
                         position: 'relative',
                         backgroundColor: '#0f172a',
                         overflow: 'hidden',
@@ -1283,57 +1272,76 @@ export default function GraphLayoffModal({
 
                 {/* Staging Basket Drawer (ตะกร้าพักยอดตีออก) */}
                 <div
-                    className="graph-basket-drawer"
+                    className={`graph-basket-drawer ${isBasketExpanded ? 'expanded' : 'collapsed'}`}
                     style={{
                         backgroundColor: '#1e293b',
                         borderTop: '1px solid #334155',
                         display: 'flex',
                         flexDirection: 'column',
-                        transition: 'max-height 0.2s ease-in-out',
-                        maxHeight: isBasketExpanded ? '280px' : '48px',
-                        overflow: 'hidden'
+                        transition: 'max-height 0.2s ease-in-out'
                     }}
                 >
                     {/* Drawer Header Bar */}
                     <div
                         className="graph-basket-header"
                         style={{
-                            padding: '0.5rem 1.25rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            backgroundColor: '#0f172a',
                             borderBottom: isBasketExpanded ? '1px solid #334155' : 'none',
                             cursor: 'pointer'
                         }}
                         onClick={() => setIsBasketExpanded(prev => !prev)}
                     >
-                        <div className="graph-basket-header-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span style={{ fontSize: '1rem' }}>🛒</span>
-                            <strong style={{ fontSize: '0.9rem' }}>
-                                ตะกร้าพักยอดตีออก ({stagedBasket.length} รายการ)
-                            </strong>
-                            <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.9rem' }}>
-                                รวม: {currencySymbol}{totalStagedAmount.toLocaleString()}
-                            </span>
+                        <div className="graph-basket-header-top">
+                            <div className="graph-basket-header-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span style={{ fontSize: '1rem' }}>🛒</span>
+                                <strong style={{ fontSize: '0.9rem' }}>
+                                    ตะกร้าพักยอดตีออก ({stagedBasket.length} รายการ)
+                                </strong>
+                                <span style={{ color: '#10b981', fontWeight: 600, fontSize: '0.9rem' }}>
+                                    รวม: {currencySymbol}{totalStagedAmount.toLocaleString()}
+                                </span>
+                            </div>
+
+                            <button
+                                type="button"
+                                className="graph-basket-toggle-btn"
+                                onClick={(e) => {
+                                    e.stopPropagation()
+                                    setIsBasketExpanded(prev => !prev)
+                                }}
+                                style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    color: '#94a3b8',
+                                    cursor: 'pointer',
+                                    fontSize: '1.15rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    padding: '0.2rem'
+                                }}
+                                title={isBasketExpanded ? 'ย่อตะกร้า' : 'ขยายตะกร้า'}
+                            >
+                                {isBasketExpanded ? <FiChevronDown /> : <FiChevronUp />}
+                            </button>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }} onClick={e => e.stopPropagation()}>
+                        <div className="graph-basket-header-actions" onClick={e => e.stopPropagation()}>
                             {stagedBasket.length > 0 && (
                                 <button
                                     type="button"
+                                    className="btn-clear-basket"
                                     onClick={handleClearBasket}
                                     style={{
                                         background: 'none',
                                         border: '1px solid #475569',
                                         color: '#ef4444',
                                         borderRadius: '4px',
-                                        padding: '0.2rem 0.5rem',
+                                        padding: '0.25rem 0.55rem',
                                         fontSize: '0.75rem',
                                         cursor: 'pointer',
                                         display: 'flex',
                                         alignItems: 'center',
-                                        gap: '0.25rem'
+                                        gap: '0.25rem',
+                                        whiteSpace: 'nowrap'
                                     }}
                                     title="ล้างรายการทั้งหมดในตะกร้า"
                                 >
@@ -1343,48 +1351,32 @@ export default function GraphLayoffModal({
 
                             <button
                                 type="button"
-                                className="btn btn-sm"
+                                className="btn btn-sm btn-transfer"
                                 onClick={() => onProceedToTransfer(stagedBasket)}
                                 disabled={stagedBasket.length === 0}
                                 style={{
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '0.35rem',
-                                    padding: '0.3rem 0.75rem',
+                                    padding: '0.35rem 0.75rem',
                                     borderRadius: '6px',
                                     backgroundColor: stagedBasket.length > 0 ? '#3b82f6' : '#334155',
                                     color: '#ffffff',
                                     border: 'none',
                                     fontWeight: 600,
                                     fontSize: '0.85rem',
-                                    cursor: stagedBasket.length > 0 ? 'pointer' : 'not-allowed'
+                                    cursor: stagedBasket.length > 0 ? 'pointer' : 'not-allowed',
+                                    whiteSpace: 'nowrap'
                                 }}
                             >
                                 <FiSend /> ดำเนินการส่งตีออก ({stagedBasket.length} รายการ)
-                            </button>
-
-                            <button
-                                type="button"
-                                onClick={() => setIsBasketExpanded(prev => !prev)}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#94a3b8',
-                                    cursor: 'pointer',
-                                    fontSize: '1rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    padding: '0.2rem'
-                                }}
-                            >
-                                {isBasketExpanded ? <FiChevronDown /> : <FiChevronUp />}
                             </button>
                         </div>
                     </div>
 
                     {/* Staged Items List Table */}
                     {isBasketExpanded && (
-                        <div className="graph-basket-table-wrapper" style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 1.25rem' }}>
+                        <div className="graph-basket-table-wrapper">
                             {stagedBasket.length === 0 ? (
                                 <div style={{ color: '#94a3b8', fontSize: '0.85rem', textAlign: 'center', padding: '1rem 0' }}>
                                     ยังไม่มีรายการในตะกร้า (ปรับเส้นราคาแล้วกด &quot;ตัดยอดเข้าตะกร้า&quot;)

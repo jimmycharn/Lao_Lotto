@@ -129,7 +129,7 @@
     min-height: 200px;
 }
 
-/* 5. Staging Basket Drawer (Bottom Sheet) */
+/* 5. Staging Basket Drawer */
 .graph-basket-drawer {
     background-color: #1e293b;
     border-top: 1px solid #334155;
@@ -137,6 +137,14 @@
     flex-direction: column;
     transition: max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
+}
+
+.graph-basket-drawer.expanded {
+    max-height: 280px;
+}
+
+.graph-basket-drawer.collapsed {
+    max-height: 48px;
 }
 
 .graph-basket-header {
@@ -147,6 +155,25 @@
     background-color: #0f172a;
     cursor: pointer;
     user-select: none;
+    gap: 0.75rem;
+}
+
+.graph-basket-header-top {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.graph-basket-header-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.graph-basket-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
 }
 
 .graph-basket-table-wrapper {
@@ -159,23 +186,32 @@
 /* 6. Mobile & Tablet Responsive Media Queries */
 @media (max-width: 768px) {
     .graph-layoff-overlay {
-        padding: 0;
+        padding: 0 !important;
     }
 
     .graph-layoff-modal {
-        width: 100vw;
-        max-width: 100vw;
-        height: 100vh;
-        height: 100dvh;
-        border-radius: 0;
-        border: none;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        min-width: 100vw !important;
+        height: 100vh !important;
+        height: 100dvh !important;
+        border-radius: 0 !important;
+        border: none !important;
+        margin: 0 !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
     }
 
     .graph-modal-header {
         flex-direction: column;
         align-items: stretch;
-        padding: 0.5rem 0.75rem;
-        gap: 0.45rem;
+        padding: 0.45rem 0.5rem !important;
+        gap: 0.35rem;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background-color: #1e293b;
     }
 
     .graph-modal-title-row {
@@ -184,7 +220,7 @@
     }
 
     .graph-modal-title {
-        font-size: 1rem;
+        font-size: 0.95rem;
     }
 
     .graph-category-tabs-row {
@@ -220,8 +256,8 @@
     .graph-toolbar {
         flex-direction: column;
         align-items: stretch;
-        padding: 0.45rem 0.75rem;
-        gap: 0.45rem;
+        padding: 0.45rem 0.5rem !important;
+        gap: 0.35rem;
     }
 
     .graph-toolbar-lines {
@@ -262,21 +298,73 @@
         font-size: 0.85rem !important;
     }
 
+    /* Mobile Chart Container */
     .graph-chart-container {
-        min-height: 180px;
+        flex: 0 0 auto !important;
+        height: 220px !important;
+        min-height: 220px !important;
+        max-height: 240px !important;
     }
 
     /* Basket Mobile Adjustments */
+    .graph-basket-drawer {
+        flex-shrink: 0 !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .graph-basket-drawer.expanded,
+    .graph-basket-drawer.collapsed {
+        max-height: none !important;
+    }
+
     .graph-basket-header {
-        padding: 0.45rem 0.75rem;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        padding: 0.45rem 0.5rem !important;
+        gap: 0.35rem !important;
+    }
+
+    .graph-basket-header-top {
+        width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
     }
 
     .graph-basket-header-title {
+        font-size: 0.825rem !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.35rem !important;
+        white-space: nowrap !important;
+    }
+
+    .graph-basket-header-actions {
+        width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.35rem !important;
+    }
+
+    .graph-basket-header-actions .btn-transfer {
+        flex: 1 !important;
+        justify-content: center !important;
         font-size: 0.8rem !important;
+        padding: 0.35rem 0.5rem !important;
+    }
+
+    .graph-basket-header-actions .btn-clear-basket {
+        flex-shrink: 0 !important;
+        font-size: 0.75rem !important;
+        padding: 0.35rem 0.5rem !important;
     }
 
     .graph-basket-table-wrapper {
-        padding: 0.25rem 0.5rem;
+        padding: 0.25rem 0.4rem !important;
+        max-height: 380px !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch !important;
     }
 }
 
