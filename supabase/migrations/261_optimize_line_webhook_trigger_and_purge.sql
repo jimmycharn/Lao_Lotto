@@ -86,23 +86,23 @@ GRANT EXECUTE ON FUNCTION public.purge_old_line_webhook_queue(INT) TO postgres, 
 GRANT EXECUTE ON FUNCTION public.trigger_process_line_webhook() TO postgres, service_role;
 
 -- 5. Schedule daily cleanup via pg_cron at 20:00 UTC (03:00 Bangkok Time UTC+7)
-DO $$
+DO $do$
 BEGIN
     -- Safely unschedule previous job if already registered
     PERFORM cron.unschedule('purge-old-webhook-queue');
 EXCEPTION WHEN OTHERS THEN
     -- Ignore if pg_cron is not installed or job did not exist
     NULL;
-END $$;
+END $do$;
 
-DO $$
+DO $do$
 BEGIN
     PERFORM cron.schedule(
         'purge-old-webhook-queue',
         '0 20 * * *', -- 20:00 UTC = 03:00 Bangkok Time
-        $$SELECT public.purge_old_line_webhook_queue(7);$$
+        'SELECT public.purge_old_line_webhook_queue(7);'
     );
 EXCEPTION WHEN OTHERS THEN
     -- Graceful fallback if pg_cron extension is not active in current environment
     RAISE NOTICE 'pg_cron not available or schedule failed: %', SQLERRM;
-END $$;
+END $do$;
