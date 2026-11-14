@@ -74,6 +74,24 @@ export function evaluateDealerCreditFast(
   };
 }
 
+// Logic mirror of the PostgreSQL trigger WHEN (NEW.status = 'pending')
+export function shouldTriggerWebhookBackgroundCall(status: string): boolean {
+  return status === 'pending';
+}
+
+// Logic mirror of public.purge_old_line_webhook_queue(p_days_to_keep)
+export function shouldPurgeQueueItem(
+  item: { status: string; created_at: string | Date },
+  now: Date,
+  daysToKeep: number = 7
+): boolean {
+  const itemDate = new Date(item.created_at);
+  const cutoffTime = now.getTime() - daysToKeep * 24 * 60 * 60 * 1000;
+  const isOldEnough = itemDate.getTime() < cutoffTime;
+  const isPurgeableStatus = ['completed', 'failed', 'processing'].includes(item.status);
+  return isOldEnough && isPurgeableStatus;
+}
+
 describe('Targeted Submissions and Fast-Path Optimization Helpers', () => {
   describe('accumulateSubmissionsTotals', () => {
     it('correctly tallies 2-digit and 3-digit submissions for normal lotteries', () => {
@@ -151,6 +169,39 @@ describe('Targeted Submissions and Fast-Path Optimization Helpers', () => {
       const failedRes = evaluateDealerCreditFast(1000, sub, credit2);
       expect(failedRes.allowed).toBe(false);
       expect(failedRes.message).toContain('เครดิตไม่เพียงพอ');
+    });
+  });
+
+  describe('Webhook Queue Trigger and Purge Logic (Option ก Optimization)', () => {
+    it('prevents duplicate background worker invocations for fast-path events', () => {
+      // Fast-path events are inserted with status 'processing'
+      const fastPathStatus = 'processing';
+      expect(shouldTriggerWebhookBackgroundCall(fastPathStatus)).toBe(false);
+
+      // Completed / failed rows also never trigger
+      expect(shouldTriggerWebhookBackgroundCall('completed')).toBe(false);
+      expect(shouldTriggerWebhookBackgroundCall('failed')).toBe(false);
+
+      // Only normal queued events with status 'pending' trigger pg_net background call
+      expect(shouldTriggerWebhookBackgroundCall('pending')).toBe(true);
+    });
+
+    it('correctly identifies items eligible for purge after 7 days', () => {
+      const now = new Date('2026-11-14T10:00:00Z');
+      const eightDaysAgo = new Date('2026-11-06T10:00:00Z');
+      const sixDaysAgo = new Date('2026-11-08T10:00:00Z');
+
+      // Old completed or failed items are purged
+      expect(shouldPurgeQueueItem({ status: 'completed', created_at: eightDaysAgo }, now, 7)).toBe(true);
+      expect(shouldPurgeQueueItem({ status: 'failed', created_at: eightDaysAgo }, now, 7)).toBe(true);
+      expect(shouldPurgeQueueItem({ status: 'processing', created_at: eightDaysAgo }, now, 7)).toBe(true);
+
+      // Recent items (under 7 days) are NEVER purged
+      expect(shouldPurgeQueueItem({ status: 'completed', created_at: sixDaysAgo }, now, 7)).toBe(false);
+      expect(shouldPurgeQueueItem({ status: 'failed', created_at: sixDaysAgo }, now, 7)).toBe(false);
+
+      // Pending items are kept safe
+      expect(shouldPurgeQueueItem({ status: 'pending', created_at: eightDaysAgo }, now, 7)).toBe(false);
     });
   });
 });
