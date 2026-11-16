@@ -32,6 +32,7 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
     const isBlocked = dealer.is_blocked
     const isPending = isLinked && dealer.status === 'pending'
     const isActive = !isLinked && dealer.status === 'active' && !isBlocked && dealer.is_default === true
+    const dealerCode = dealer.upstream_code || dealer.upstream_profile?.member_code
 
     // Bank account state (for external dealers)
     const [bankAccounts, setBankAccounts] = useState([])
@@ -321,10 +322,30 @@ export default function UpstreamDealerAccordionItem({ dealer, isExpanded, onTogg
                         {isPending ? <FiClock /> : isLinked ? <FiCheck /> : <FiUser />}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                             <span className="dealer-name" style={{ fontWeight: '600', color: 'var(--color-text)', fontSize: '1.1rem' }}>
                                 {dealer.upstream_name || 'ไม่ระบุชื่อ'}
                             </span>
+                            {dealerCode && (
+                                <span
+                                    className="dealer-id-badge"
+                                    style={{
+                                        fontSize: '0.75rem',
+                                        color: 'var(--color-primary, #eab308)',
+                                        background: 'rgba(234, 179, 8, 0.12)',
+                                        border: '1px solid rgba(234, 179, 8, 0.25)',
+                                        padding: '0.1rem 0.45rem',
+                                        borderRadius: '6px',
+                                        fontWeight: '600',
+                                        letterSpacing: '0.5px',
+                                        display: 'inline-flex',
+                                        alignItems: 'center'
+                                    }}
+                                    title={`รหัสเจ้ามือ: ${dealerCode}`}
+                                >
+                                    {`ID: ${dealerCode}`}
+                                </span>
+                            )}
                             {isLinked && isPending && (
                                 <span style={{
                                     background: 'var(--color-warning)',

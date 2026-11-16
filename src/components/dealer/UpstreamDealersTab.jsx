@@ -60,8 +60,9 @@ export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamD
                 .from('dealer_upstream_connections')
                 .select(`
                     *,
+                    upstream_code,
                     upstream_profile:upstream_dealer_id (
-                        id, full_name, email, phone
+                        id, full_name, email, phone, member_code
                     )
                 `)
                 .eq('dealer_id', user.id)
@@ -75,7 +76,7 @@ export default function UpstreamDealersTab({ user, upstreamDealers, setUpstreamD
                     status,
                     created_at,
                     profiles:dealer_id (
-                        id, full_name, email, phone, role
+                        id, full_name, email, phone, role, member_code
                     )
                 `)
                 .eq('user_id', user.id)
