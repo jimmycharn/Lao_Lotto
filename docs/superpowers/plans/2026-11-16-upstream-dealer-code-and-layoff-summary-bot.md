@@ -1,6 +1,6 @@
 # Upstream Dealer 5-digit Code & Line Bot Layoff Commands Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Provide a unique 5-digit ID for upstream dealers on the Web UI, and implement LINE Bot commands `/สรุปตีออก` and `/โพยตีออกถูก` (both global and targeted by dealer ID) with descending layoff volume sorting and strict permission controls.
 
@@ -28,7 +28,7 @@
 **Interfaces:**
 - Produces: `dealer_upstream_connections.upstream_code TEXT UNIQUE`
 
-- [ ] **Step 1: Write the migration file**
+- [x] **Step 1: Write the migration file**
 
 ```sql
 -- Migration 263: Add upstream_code to dealer_upstream_connections
@@ -51,7 +51,7 @@ CREATE INDEX IF NOT EXISTS idx_dealer_upstream_connections_code
 ON public.dealer_upstream_connections(upstream_code);
 ```
 
-- [ ] **Step 2: Apply the migration to the database**
+- [x] **Step 2: Apply the migration to the database**
 
 Run:
 ```powershell
@@ -59,7 +59,7 @@ Run:
 Get-Content supabase/migrations/263_add_upstream_code_to_dealer_upstream_connections.sql
 ```
 
-- [ ] **Step 3: Write verification script to confirm schema and backfill**
+- [x] **Step 3: Write verification script to confirm schema and backfill**
 
 Create `scratch/test_migration_263.js`:
 ```javascript
@@ -86,12 +86,12 @@ async function test() {
 test()
 ```
 
-- [ ] **Step 4: Run verification script**
+- [x] **Step 4: Run verification script**
 
 Run: `node scratch/test_migration_263.js`  
 Expected: `PASS: upstream connections fetched: [...]` with 5-digit `upstream_code`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add supabase/migrations/263_add_upstream_code_to_dealer_upstream_connections.sql scratch/test_migration_263.js; git commit -m "feat(db): add upstream_code column and backfill to dealer_upstream_connections"
@@ -110,7 +110,7 @@ git add supabase/migrations/263_add_upstream_code_to_dealer_upstream_connections
 - Consumes: `dealer.upstream_code`, `dealer.upstream_profile?.member_code`
 - Produces: Visual ID Badge `ID: 10001` in the accordion header
 
-- [ ] **Step 1: Write the unit test for UpstreamDealerAccordionItem badge**
+- [x] **Step 1: Write the unit test for UpstreamDealerAccordionItem badge**
 
 Create `src/components/dealer/__tests__/UpstreamDealerAccordionItem.test.jsx`:
 ```jsx
@@ -170,12 +170,12 @@ describe('UpstreamDealerAccordionItem', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test src/components/dealer/__tests__/UpstreamDealerAccordionItem.test.jsx`  
 Expected: FAIL (Badge not found).
 
-- [ ] **Step 3: Modify `UpstreamDealerAccordionItem.jsx` to render the ID badge**
+- [x] **Step 3: Modify `UpstreamDealerAccordionItem.jsx` to render the ID badge**
 
 In `src/components/dealer/UpstreamDealerAccordionItem.jsx`:
 ```jsx
@@ -208,7 +208,7 @@ const dealerCode = dealer.upstream_code || dealer.upstream_profile?.member_code;
     )}
 ```
 
-- [ ] **Step 4: Update `UpstreamDealersTab.jsx` query to select `upstream_code`**
+- [x] **Step 4: Update `UpstreamDealersTab.jsx` query to select `upstream_code`**
 
 In `src/components/dealer/UpstreamDealersTab.jsx`:
 Ensure `fetchUpstreamDealers` queries `upstream_code` in the select string:
@@ -219,12 +219,12 @@ Ensure `fetchUpstreamDealers` queries `upstream_code` in the select string:
 `)
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `npm test src/components/dealer/__tests__/UpstreamDealerAccordionItem.test.jsx`  
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```powershell
 git add src/components/dealer/UpstreamDealerAccordionItem.jsx src/components/dealer/UpstreamDealersTab.jsx src/components/dealer/__tests__/UpstreamDealerAccordionItem.test.jsx; git commit -m "feat(ui): display upstream dealer 5-digit ID badge in dealers tab"
@@ -245,7 +245,7 @@ git add src/components/dealer/UpstreamDealerAccordionItem.jsx src/components/dea
   - `generateTargetedLayoffSummaryFlex(targetDealer, roundInfo)`
   - `formatLayoffWinningBetsMessage(winningTransfers, targetDealer, roundInfo)`
 
-- [ ] **Step 1: Write unit tests for `layoffSummaryHelper.ts`**
+- [x] **Step 1: Write unit tests for `layoffSummaryHelper.ts`**
 
 Create `supabase/functions/line-bot/layoffSummaryHelper.test.ts`:
 ```typescript
@@ -301,12 +301,12 @@ Deno.test("formatLayoffWinningBetsMessage formats text accurately", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npm test supabase/functions/line-bot/layoffSummaryHelper.test.ts` (or deno test)  
 Expected: FAIL (File not created).
 
-- [ ] **Step 3: Implement `layoffSummaryHelper.ts`**
+- [x] **Step 3: Implement `layoffSummaryHelper.ts`**
 
 Create `supabase/functions/line-bot/layoffSummaryHelper.ts` with:
 - `calculateLayoffSummaries`: Group transfers by upstream connection (resolving by `upstream_dealer_id` or `target_dealer_name`).
@@ -318,12 +318,12 @@ Create `supabase/functions/line-bot/layoffSummaryHelper.ts` with:
 - `generateTargetedLayoffSummaryFlex`: Build targeted single-dealer bubble Flex message.
 - `formatLayoffWinningBetsMessage`: Format text slip list of winning bets.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `deno test --allow-read supabase/functions/line-bot/layoffSummaryHelper.test.ts` (or npm test equivalent)  
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add supabase/functions/line-bot/layoffSummaryHelper.ts supabase/functions/line-bot/layoffSummaryHelper.test.ts; git commit -m "feat(line-bot): add layoffSummaryHelper for financial aggregation and flex formatting"
@@ -341,7 +341,7 @@ git add supabase/functions/line-bot/layoffSummaryHelper.ts supabase/functions/li
 - Consumes: LINE webhook text event
 - Produces: Flex Message reply for `/สรุปตีออก`, Text/Flex reply for `/โพยตีออกถูก`
 
-- [ ] **Step 1: Write integration tests for command routing in `layoffCommands.test.ts`**
+- [x] **Step 1: Write integration tests for command routing in `layoffCommands.test.ts`**
 
 Create `supabase/functions/line-bot/layoffCommands.test.ts`:
 ```typescript
@@ -371,12 +371,12 @@ Deno.test("Command regex correctly matches /สรุปตีออก and /โ
 });
 ```
 
-- [ ] **Step 2: Run test to verify regex/parsing**
+- [x] **Step 2: Run test to verify regex/parsing**
 
 Run: `deno test supabase/functions/line-bot/layoffCommands.test.ts`  
 Expected: PASS.
 
-- [ ] **Step 3: Integrate command handlers in `supabase/functions/line-bot/index.ts`**
+- [x] **Step 3: Integrate command handlers in `supabase/functions/line-bot/index.ts`**
 
 In `supabase/functions/line-bot/index.ts`:
 1. Add fast-path detection for `/สรุปตีออก` and `/โพยตีออกถูก`.
@@ -389,12 +389,12 @@ In `supabase/functions/line-bot/index.ts`:
    - For `/สรุปตีออก`: if `targetId` present, find dealer by `upstream_code` or `member_code` or name. Render targeted Flex card or all-dealers ranked Flex card.
    - For `/โพยตีออกถูก`: filter winning bets (`winAmount > 0`). If `targetId` present, filter by target dealer. Format and send response.
 
-- [ ] **Step 4: Run line-bot tests to ensure zero regressions**
+- [x] **Step 4: Run line-bot tests to ensure zero regressions**
 
 Run: `npm test`  
 Expected: All tests pass (including existing 898 tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add supabase/functions/line-bot/index.ts supabase/functions/line-bot/layoffCommands.test.ts; git commit -m "feat(line-bot): integrate /สรุปตีออก and /โพยตีออกถูก commands with authorization check"
@@ -407,18 +407,18 @@ git add supabase/functions/line-bot/index.ts supabase/functions/line-bot/layoffC
 **Files:**
 - Test: `scratch/test_e2e_layoff.js`
 
-- [ ] **Step 1: Write E2E verification script**
+- [x] **Step 1: Write E2E verification script**
 Create a test script that validates the entire flow:
 - Queries an existing announced round with transfers (e.g. Thai round 16-11-2569).
 - Runs `calculateLayoffSummaries`.
 - Confirms ranking orders dealers by totalBet descending.
 - Confirms Flex Message payload conforms to LINE Messaging API schema.
 
-- [ ] **Step 2: Execute E2E verification**
+- [x] **Step 2: Execute E2E verification**
 Run: `node scratch/test_e2e_layoff.js`  
 Expected: Successful output, valid Flex JSON.
 
-- [ ] **Step 3: Final commit and summary**
+- [x] **Step 3: Final commit and summary**
 ```powershell
 git add scratch/test_e2e_layoff.js; git commit -m "test: add e2e verification for layoff summary and winning commands"
 ```
