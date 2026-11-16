@@ -837,6 +837,22 @@ describe('calculateRoundOutstandingDetails', () => {
             expect(win).toBe(10 * 900) // 9000
         })
 
+        it('calculates 2_bottom win with custom payout 70 (Thai lottery)', () => {
+            const transfer = { bet_type: '2_bottom', numbers: '06', amount: 100, target_dealer_name: 'พี่จิ้ม อ้อมค่าย' }
+            const upstreamSettings = [
+                {
+                    upstream_name: 'พี่จิ้ม อ้อมค่าย',
+                    lottery_settings: {
+                        thai: {
+                            '2_bottom': { payout: 70, commission: 25 }
+                        }
+                    }
+                }
+            ]
+            const win = calculateTransferWinning(transfer, { '2_bottom': '06' }, 'thai', 120, null, upstreamSettings)
+            expect(win).toBe(7000) // 100 * 70 = 7000
+        })
+
         it('returns 0 for non-winning transfer', () => {
             const transfer = { bet_type: '2_top', numbers: '99', amount: 100 }
             const win = calculateTransferWinning(transfer, winningNumbersThai, 'thai')

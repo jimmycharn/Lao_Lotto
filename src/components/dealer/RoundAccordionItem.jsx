@@ -996,8 +996,14 @@ export default function RoundAccordionItem({
                             let isWinner = false
                             let prize = 0
 
-                            // Payout rate from DEFAULT_PAYOUTS
-                            const payoutRate = DEFAULT_PAYOUTS[bt] || 1
+                            const settingsKey = getBetSettingsKey(bt, lotteryKey)
+                            const betSettings = extSettings?.[lotteryKey]?.[settingsKey]
+
+                            // Payout rate from custom settings, fallback to DEFAULT_PAYOUTS
+                            let payoutRate = DEFAULT_PAYOUTS[bt] || 1
+                            if (betSettings?.payout !== undefined && betSettings?.payout !== null && !isNaN(Number(betSettings.payout))) {
+                                payoutRate = Number(betSettings.payout)
+                            }
 
                             if (bt === 'run_top' && w3top && num.length === 1) {
                                 isWinner = w3top.includes(num)
@@ -1037,7 +1043,8 @@ export default function RoundAccordionItem({
                                 isWinner = floatCheck(w3top, num)
                             } else if (bt === '4_set' && w4set && num.length === 4) {
                                 // 4_set uses calculate4SetPrizes logic (fixed prize per set)
-                                const { totalPrize } = calculate4SetPrizes(num, w4set, round.set_prizes?.['4_top'] ? undefined : undefined)
+                                const prizesConfig = betSettings?.prizes || (round.set_prizes?.['4_top'] ? undefined : undefined)
+                                const { totalPrize } = calculate4SetPrizes(num, w4set, prizesConfig)
                                 if (totalPrize > 0) {
                                     isWinner = true
                                     prize = totalPrize // Single-set prize
@@ -3206,9 +3213,38 @@ export default function RoundAccordionItem({
         }
         if (!primaryNumber) return null
         const winNums = deriveWinningNumbers(primaryNumber, lt, bottomNumber)
-        const payoutRate = getFallbackPayout(item.bet_type, round.lottery_type)
-        const currentSetPrice = round?.set_prices?.['4_top'] || 120
-        const setPrizes = DEFAULT_4_SET_SETTINGS.prizes
+
+        // Find dealer connection from upstreamDealers state (by ID, dealer ID, or name)
+        const itemDealerName = (item.target_dealer_name || item.dealerName || '').trim().toLowerCase()
+        const targetUpstreamId = item.upstream_dealer_id || item.dealerId
+        const targetConn = (upstreamDealers || []).find(d => {
+            if (targetUpstreamId && (d.upstream_dealer_id === targetUpstreamId || d.id === targetUpstreamId)) {
+                return true
+            }
+            const dName = (d.upstream_name || '').trim().toLowerCase()
+            return itemDealerName && dName && itemDealerName === dName
+        })
+
+        const lotteryKey = getLotteryTypeKey(lt)
+        const POSITION_MAP = {
+            'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+            'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+        }
+        let settingsKey = POSITION_MAP[item.bet_type] || item.bet_type
+        if (lotteryKey === 'lao' || lotteryKey === 'hanoi') {
+            const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+            settingsKey = LAO_MAP[settingsKey] || settingsKey
+        }
+
+        const connSettings = targetConn?.lottery_settings
+        const betSettings = connSettings?.[lotteryKey]?.[settingsKey] || connSettings?.[lt]?.[settingsKey]
+
+        let payoutRate = getFallbackPayout(item.bet_type, round.lottery_type)
+        if (betSettings?.payout !== undefined && betSettings?.payout !== null && !isNaN(Number(betSettings.payout))) {
+            payoutRate = Number(betSettings.payout)
+        }
+        const currentSetPrice = betSettings?.setPrice || round?.set_prices?.['4_top'] || 120
+        const setPrizes = betSettings?.prizes || DEFAULT_4_SET_SETTINGS.prizes
         const result = checkBetWin(item.bet_type, item.numbers, winNums, payoutRate, item.amount, currentSetPrice, setPrizes)
         if (result.wins) {
             return { amount: item.amount, payout: Math.round(result.payout) }

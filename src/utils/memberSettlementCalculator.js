@@ -285,8 +285,21 @@ export function calculateTransferWinning(t, winningNumbers, lotteryType = 'thai'
         if (connSettings) {
             const lKey = getLotteryTypeKey(lt)
             const s = connSettings[lKey] || connSettings[lt] || connSettings
-            if (s && s[bt] && s[bt].payout !== undefined) {
-                payoutRate = Number(s[bt].payout) || payoutRate
+            const POSITION_MAP = {
+                'front_top_1': 'pak_top', 'middle_top_1': 'pak_top', 'back_top_1': 'pak_top',
+                'front_bottom_1': 'pak_bottom', 'back_bottom_1': 'pak_bottom'
+            }
+            let settingsKey = POSITION_MAP[bt] || bt
+            if (lKey === 'lao' || lKey === 'hanoi') {
+                const LAO_MAP = { '3_top': '3_straight', '3_tod': '3_tod_single' }
+                settingsKey = LAO_MAP[settingsKey] || settingsKey
+            }
+            const betSetting = s?.[settingsKey] || s?.[bt]
+            if (betSetting && betSetting.payout !== undefined && betSetting.payout !== null && !isNaN(Number(betSetting.payout))) {
+                payoutRate = Number(betSetting.payout)
+            }
+            if (betSetting?.prizes) {
+                setPrizes = betSetting.prizes
             }
         }
     }

@@ -85,6 +85,20 @@ describe('layoffSummaryHelper', () => {
       expect(calculateTransferWinning(transferBottom, winningNumbersThai, 'thai')).toBe(50 * 65);
     });
 
+    it('calculates 2_bottom winning with custom payout 70 (Thai)', () => {
+      const transfer = { amount: 100, bet_type: '2_bottom', numbers: '06', target_dealer_name: 'พี่จิ้ม อ้อมค่าย' };
+      const connection = {
+        upstream_name: 'พี่จิ้ม อ้อมค่าย',
+        lottery_settings: {
+          thai: {
+            '2_bottom': { payout: 70, commission: 25 }
+          }
+        }
+      };
+      const win = calculateTransferWinning(transfer, winningNumbersThai, 'thai', 120, null, connection);
+      expect(win).toBe(100 * 70); // 7,000
+    });
+
     it('calculates run_top and run_bottom', () => {
       const runTop = { amount: 100, bet_type: 'run_top', numbers: '6' };
       expect(calculateTransferWinning(runTop, winningNumbersThai, 'thai')).toBe(100 * 3);

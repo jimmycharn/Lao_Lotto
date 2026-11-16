@@ -1723,7 +1723,8 @@ function checkTransferWin(
   lotteryType: string,
   amount: number,
   setPrice: number,
-  prizeSettings: any
+  prizeSettings: any,
+  customPayoutRate?: number
 ): { wins: boolean, payout: number } {
   const bt = betType;
   const num = numbers;
@@ -1748,8 +1749,10 @@ function checkTransferWin(
     return true;
   };
   
-  let payoutRate = DEFAULT_PAYOUTS[bt] || 1;
-  if (lotteryType === 'lao' || lotteryType === 'hanoi') {
+  let payoutRate = (customPayoutRate !== undefined && customPayoutRate !== null && !isNaN(customPayoutRate))
+    ? customPayoutRate
+    : (DEFAULT_PAYOUTS[bt] || 1);
+  if ((customPayoutRate === undefined || customPayoutRate === null || isNaN(customPayoutRate)) && (lotteryType === 'lao' || lotteryType === 'hanoi')) {
     if (['2_top', '2_front', '2_center', '2_spread', '2_bottom'].includes(bt)) {
       payoutRate = 70;
     }
@@ -3762,7 +3765,10 @@ async function calculateRoundOutgoingProfit(
           }
         }
       } else if (!t.is_linked) {
-        const setPrice = activeRound.set_prices?.['4_top'] || 120;
+        const setPrice = betSettings?.setPrice || activeRound.set_prices?.['4_top'] || 120;
+        const customPayout = (betSettings?.payout !== undefined && betSettings?.payout !== null && !isNaN(Number(betSettings.payout)))
+          ? Number(betSettings.payout)
+          : undefined;
         const res = checkTransferWin(
           t.bet_type,
           t.numbers || '',
@@ -3770,7 +3776,8 @@ async function calculateRoundOutgoingProfit(
           activeRound.lottery_type,
           amt,
           setPrice,
-          DEFAULT_4_SET_SETTINGS.prizes
+          betSettings?.prizes || DEFAULT_4_SET_SETTINGS.prizes,
+          customPayout
         );
         if (res.wins) {
           win = res.payout;
@@ -5111,7 +5118,25 @@ async function deductProfitBasedCreditDeno(dealerId: string, roundId: string, pr
     }
 
     const externalOutgoing = activeOutgoing.filter((t: any) => !t.target_submission_id);
+    const uniqueExtDealers = externalOutgoing.map((t: any) => t.target_dealer_name).filter(Boolean);
+    const extConnMap: Record<string, any> = {};
+    if (uniqueExtDealers.length > 0) {
+      const { data: conns } = await supabase
+        .from('dealer_upstream_connections')
+        .select('upstream_name, lottery_settings')
+        .eq('dealer_id', dealerId)
+        .in('upstream_name', uniqueExtDealers);
+      (conns || []).forEach((c: any) => {
+        extConnMap[c.upstream_name] = c;
+      });
+    }
+
+    const lotteryKey = roundData.lottery_type === 'thai' ? 'thai' : roundData.lottery_type === 'lao' ? 'lao' : roundData.lottery_type === 'hanoi' ? 'hanoi' : 'thai';
     for (const t of externalOutgoing) {
+      const settingsKey = getBetSettingsKey(t.bet_type, lotteryKey);
+      const c = t.target_dealer_name ? extConnMap[t.target_dealer_name] : null;
+      const betSettings = c?.lottery_settings?.[lotteryKey]?.[settingsKey];
+
       let commRate = DEFAULT_COMMISSIONS[t.bet_type] || 15;
       if (roundData.lottery_type === 'lao' || roundData.lottery_type === 'hanoi') {
         const LAO_DEFAULTS: Record<string, number> = {
@@ -5123,9 +5148,13 @@ async function deductProfitBasedCreditDeno(dealerId: string, roundId: string, pr
         };
         commRate = LAO_DEFAULTS[t.bet_type] !== undefined ? LAO_DEFAULTS[t.bet_type] : 20;
       }
-      outgoingTotalCommission += parseFloat(t.amount || '0') * (commRate / 100);
+      const commissionRate = betSettings?.commission !== undefined ? betSettings.commission : commRate;
+      outgoingTotalCommission += parseFloat(t.amount || '0') * (commissionRate / 100);
 
-      const setPrice = roundData?.set_prices?.['4_top'] || 120;
+      const setPrice = betSettings?.setPrice || roundData?.set_prices?.['4_top'] || 120;
+      const customPayout = (betSettings?.payout !== undefined && betSettings?.payout !== null && !isNaN(Number(betSettings.payout)))
+        ? Number(betSettings.payout)
+        : undefined;
       const res = checkTransferWin(
         t.bet_type,
         t.numbers || '',
@@ -5133,7 +5162,8 @@ async function deductProfitBasedCreditDeno(dealerId: string, roundId: string, pr
         roundData.lottery_type,
         parseFloat(t.amount || '0'),
         setPrice,
-        DEFAULT_4_SET_SETTINGS.prizes
+        betSettings?.prizes || DEFAULT_4_SET_SETTINGS.prizes,
+        customPayout
       );
       if (res.wins) {
         outgoingTotalWin += res.payout;
@@ -11001,7 +11031,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                           const bt = t.bet_type;
                           let isWinner = false;
                           let prize = 0;
-                          const payoutRate = DEFAULT_PAYOUTS[bt] || 1;
+                          let payoutRate = (betSettings?.payout !== undefined && betSettings?.payout !== null && !isNaN(Number(betSettings.payout)))
+                            ? Number(betSettings.payout)
+                            : (DEFAULT_PAYOUTS[bt] || 1);
 
                           if (bt === 'run_top' && w3top && num.length === 1) isWinner = w3top.includes(num);
                           else if (bt === 'run_bottom' && w2bottom && num.length === 1) isWinner = w2bottom.includes(num);
@@ -11017,7 +11049,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                           else if ((bt === '3_top' || bt === '3_straight') && w3top && num.length === 3) isWinner = num === w3top;
                           else if ((bt === '3_tod' || bt === '3_tod_single') && w3top && num.length === 3) isWinner = num.split('').sort().join('') === w3topSorted;
                           else if (bt === '4_set' && w4set && num.length === 4) {
-                            const r = calculate4SetPrizesDeno(num, w4set, DEFAULT_4_SET_SETTINGS.prizes);
+                            const r = calculate4SetPrizesDeno(num, w4set, betSettings?.prizes || DEFAULT_4_SET_SETTINGS.prizes);
                             if (r.totalPrize > 0) {
                               isWinner = true;
                               prize = r.totalPrize;
