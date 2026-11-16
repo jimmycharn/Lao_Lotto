@@ -1,7 +1,107 @@
 import { describe, it, expect } from 'vitest';
 import { convertAndMergeTodItems } from './layoffTodConverter';
+import { parseLayoffCommand, checkLayoffAuthorization } from './layoffSummaryHelper';
 
 describe('layoff commands logic', () => {
+  describe('parseLayoffCommand', () => {
+    it('matches /สรุปตีออก without parameter', () => {
+      const res = parseLayoffCommand('/สรุปตีออก');
+      expect(res).toEqual({ type: 'summary', targetId: '' });
+    });
+
+    it('matches /สรุปตีออก with space separated id', () => {
+      const res = parseLayoffCommand('/สรุปตีออก 10001');
+      expect(res).toEqual({ type: 'summary', targetId: '10001' });
+    });
+
+    it('matches /สรุปตีออก with bracketed id', () => {
+      const res = parseLayoffCommand('/สรุปตีออก [10001]');
+      expect(res).toEqual({ type: 'summary', targetId: '10001' });
+    });
+
+    it('matches /สรุปตีออก with slash separated id', () => {
+      const res1 = parseLayoffCommand('/สรุปตีออก/10001');
+      expect(res1).toEqual({ type: 'summary', targetId: '10001' });
+
+      const res2 = parseLayoffCommand('/สรุปตีออก/[10001]');
+      expect(res2).toEqual({ type: 'summary', targetId: '10001' });
+    });
+
+    it('matches /สรุปตีออก with dealer name', () => {
+      const res = parseLayoffCommand('/สรุปตีออก พี่จิ้ม');
+      expect(res).toEqual({ type: 'summary', targetId: 'พี่จิ้ม' });
+    });
+
+    it('matches /โพยตีออกถูก without parameter', () => {
+      const res = parseLayoffCommand('/โพยตีออกถูก');
+      expect(res).toEqual({ type: 'winning', targetId: '' });
+    });
+
+    it('matches /โพยตีออก ถูก without parameter', () => {
+      const res = parseLayoffCommand('/โพยตีออก ถูก');
+      expect(res).toEqual({ type: 'winning', targetId: '' });
+    });
+
+    it('matches /โพยตีออก without parameter', () => {
+      const res = parseLayoffCommand('/โพยตีออก');
+      expect(res).toEqual({ type: 'winning', targetId: '' });
+    });
+
+    it('matches /โพยตีออกถูก with id variations', () => {
+      expect(parseLayoffCommand('/โพยตีออกถูก 10001')).toEqual({ type: 'winning', targetId: '10001' });
+      expect(parseLayoffCommand('/โพยตีออกถูก [10001]')).toEqual({ type: 'winning', targetId: '10001' });
+      expect(parseLayoffCommand('/โพยตีออกถูก/10001')).toEqual({ type: 'winning', targetId: '10001' });
+      expect(parseLayoffCommand('/โพยตีออกถูก/[10001]')).toEqual({ type: 'winning', targetId: '10001' });
+      expect(parseLayoffCommand('/โพยตีออก ถูก 10001')).toEqual({ type: 'winning', targetId: '10001' });
+      expect(parseLayoffCommand('/โพยตีออก ถูก [10001]')).toEqual({ type: 'winning', targetId: '10001' });
+      expect(parseLayoffCommand('/โพยตีออก ถูก/10001')).toEqual({ type: 'winning', targetId: '10001' });
+      expect(parseLayoffCommand('/โพยตีออก/10001')).toEqual({ type: 'winning', targetId: '10001' });
+      expect(parseLayoffCommand('/โพยตีออก [10001]')).toEqual({ type: 'winning', targetId: '10001' });
+    });
+
+    it('returns null for regular non-layoff commands', () => {
+      expect(parseLayoffCommand('/สรุป')).toBeNull();
+      expect(parseLayoffCommand('/สรุป 10001')).toBeNull();
+      expect(parseLayoffCommand('/โพย')).toBeNull();
+      expect(parseLayoffCommand('/โพยถูก')).toBeNull();
+      expect(parseLayoffCommand('/โพยถูก 10001')).toBeNull();
+      expect(parseLayoffCommand('/ตีออก 500')).toBeNull();
+    });
+  });
+
+  describe('checkLayoffAuthorization', () => {
+    const targetDealerId = 'dealer-uuid-123';
+
+    it('authorizes dealer when id matches targetDealerId', () => {
+      const profile = { id: 'dealer-uuid-123', role: 'user' };
+      expect(checkLayoffAuthorization(profile, targetDealerId, false)).toBe(true);
+    });
+
+    it('authorizes dealer when role is dealer', () => {
+      const profile = { id: 'other-id', role: 'dealer' };
+      expect(checkLayoffAuthorization(profile, targetDealerId, false)).toBe(true);
+    });
+
+    it('authorizes superadmin and admin', () => {
+      expect(checkLayoffAuthorization({ id: 'sa-id', role: 'superadmin' }, targetDealerId, false)).toBe(true);
+      expect(checkLayoffAuthorization({ id: 'ad-id', role: 'admin' }, targetDealerId, false)).toBe(true);
+    });
+
+    it('authorizes manager in line_managers', () => {
+      const profile = { id: 'member-id', role: 'user' };
+      expect(checkLayoffAuthorization(profile, targetDealerId, true)).toBe(true);
+    });
+
+    it('denies regular member who is not manager', () => {
+      const profile = { id: 'member-id', role: 'user' };
+      expect(checkLayoffAuthorization(profile, targetDealerId, false)).toBe(false);
+    });
+
+    it('denies unlinked or null sender', () => {
+      expect(checkLayoffAuthorization(null, targetDealerId, false)).toBe(false);
+    });
+  });
+
   it('detects /ตีออกแปลง and /ตีออกแปลงเลข prefixes correctly', () => {
     const texts = [
       '/ตีออกแปลง 123 100 บตก ตกลง',

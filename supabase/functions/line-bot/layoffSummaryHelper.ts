@@ -1153,3 +1153,44 @@ export function formatLayoffWinningBetsMessage(
 
   return lines.join('\n');
 }
+
+export interface ParsedLayoffCommand {
+  type: 'summary' | 'winning';
+  targetId: string;
+}
+
+export function parseLayoffCommand(text: string): ParsedLayoffCommand | null {
+  const trimmed = (text || '').trim();
+  if (/^\/สรุปตีออก(?:[\/\s]+.*)?$/i.test(trimmed)) {
+    const rawTarget = trimmed.replace(/^\/สรุปตีออก[\/\s]*/, '').trim();
+    const targetId = rawTarget.replace(/^[\[\(]|[\)\]]$/g, '').trim();
+    return { type: 'summary', targetId };
+  }
+  if (/^\/โพยตีออก(?:\s*[\/\s]?\s*ถูก)?(?:[\/\s]+.*)?$/i.test(trimmed)) {
+    let remainder = trimmed.replace(/^\/โพยตีออก/, '').trim();
+    if (remainder.startsWith('/') || remainder.startsWith(' ')) {
+      remainder = remainder.replace(/^[\/\s]+/, '');
+    }
+    if (remainder.startsWith('ถูก')) {
+      remainder = remainder.substring('ถูก'.length).trim();
+    }
+    if (remainder.startsWith('/') || remainder.startsWith(' ')) {
+      remainder = remainder.replace(/^[\/\s]+/, '');
+    }
+    const targetId = remainder.replace(/^[\[\(]|[\)\]]$/g, '').trim();
+    return { type: 'winning', targetId };
+  }
+  return null;
+}
+
+export function checkLayoffAuthorization(
+  senderProfile: { id?: string; role?: string } | null,
+  targetDealerId: string | null,
+  isManagerSender: boolean
+): boolean {
+  if (!senderProfile && !isManagerSender) return false;
+  const isDealer = senderProfile?.id === targetDealerId || senderProfile?.role === 'dealer';
+  const isAdmin = senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+  return Boolean(isDealer || isAdmin || isManagerSender);
+}
+

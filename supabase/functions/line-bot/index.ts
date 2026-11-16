@@ -29,6 +29,15 @@ import {
   isReceiverMatchingDealer,
   isSlipReceiverMismatch
 } from "./slipOkClient.ts"
+import {
+  calculateLayoffSummaries,
+  generateLayoffSummaryFlex,
+  generateTargetedLayoffSummaryFlex,
+  formatLayoffWinningBetsMessage,
+  parseLayoffCommand,
+  checkLayoffAuthorization
+} from "./layoffSummaryHelper.ts"
+
 
 
 const corsHeaders = {
@@ -8422,7 +8431,9 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
       const hasFastPathTextEvent = incomingEvents.some((ev: any) => {
         if (ev.type !== 'message' || ev.message?.type !== 'text') return false;
         const txt = (ev.message?.text || '').trim();
-        return txt.startsWith('/') || txt.startsWith('#') || /\d/.test(txt);
+        return txt.startsWith('/') || txt.startsWith('#') || /\d/.test(txt) ||
+          txt.startsWith('/สรุปตีออก') || txt.startsWith('/โพยตีออกถูก') ||
+          txt.startsWith('/โพยตีออก ถูก') || txt.startsWith('/โพยตีออก');
       });
 
       if (hasImageEvent || hasFastPathTextEvent) {
@@ -9038,6 +9049,233 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               } else {
                 const newName = typeNames[targetType] || targetType.toUpperCase();
                 await sendLineReply(replyToken, `🔄 เปลี่ยนประเภทหวยการส่งส่วนตัวของท่านเป็น: ${newName} เรียบร้อยแล้ว`);
+              }
+            }
+            continue;
+          }
+
+          // ─── COMMAND: /สรุปตีออก และ /โพยตีออกถูก ───
+          const layoffCmd = parseLayoffCommand(text) || parseLayoffCommand(normText);
+          if (layoffCmd) {
+            let listDealerId: string | null = null;
+            let listLotteryType: string | null = null;
+            let hasAccess = false;
+
+            if (groupLink) {
+              listDealerId = groupLink.dealer_id;
+              listLotteryType = groupLink.lottery_type || 'thai';
+              hasAccess = true;
+            } else if (privateSession) {
+              listDealerId = privateSession.dealer_id;
+              listLotteryType = privateSession.lottery_type || 'thai';
+              hasAccess = true;
+            }
+
+            if (!hasAccess || !listDealerId || !listLotteryType) {
+              await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ หรือท่านยังไม่ได้เชื่อมต่อระบบส่งโพยส่วนตัวค่ะ`);
+              continue;
+            }
+
+            // 1. Check authorization (Dealer, Admin, Superadmin, or Manager)
+            let { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('id, full_name, is_active, role')
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            if (privateSession && privateSession.is_assistant && privateSession.target_user_id) {
+              const { data: targetProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name, is_active, role')
+                .eq('id', privateSession.target_user_id)
+                .eq('is_active', true)
+                .maybeSingle();
+              if (targetProfile) {
+                senderProfile = targetProfile;
+              }
+            }
+
+            const targetDealerId = listDealerId;
+            let isManagerSender = false;
+            if (targetDealerId) {
+              const { data: mgr } = await supabase
+                .from('line_managers')
+                .select('id')
+                .eq('dealer_id', targetDealerId)
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle();
+              isManagerSender = !!mgr;
+            }
+
+            const isAuthorized = checkLayoffAuthorization(senderProfile, targetDealerId, isManagerSender);
+            if (!isAuthorized) {
+              await sendLineReply(replyToken, `❌ คำสั่งนี้ใช้ได้เฉพาะ เจ้ามือ / แอดมิน / ผู้จัดการ เท่านั้นค่ะ`);
+              continue;
+            }
+
+            // 2. Discover latest announced round (is_result_announced = true)
+            const { data: targetRounds } = await supabase
+              .from('lottery_rounds')
+              .select('*')
+              .eq('dealer_id', listDealerId)
+              .eq('lottery_type', listLotteryType)
+              .eq('is_result_announced', true)
+              .order('close_time', { ascending: false })
+              .limit(1);
+
+            const activeRound = targetRounds?.[0];
+            if (!activeRound) {
+              await sendLineReply(replyToken, `❌ หวยประเภท ${listLotteryType.toUpperCase()} ในขณะนี้ยังไม่มีงวดที่ประกาศผลรางวัลค่ะ`);
+              continue;
+            }
+
+            // 3. Data fetching with pagination (Domain Rule #2)
+            const { data: transfers, error: transferErr } = await fetchAllRows((from: number, to: number) =>
+              supabase
+                .from('bet_transfers')
+                .select('*')
+                .eq('round_id', activeRound.id)
+                .order('created_at', { ascending: false })
+                .range(from, to)
+            );
+
+            if (transferErr) {
+              console.error("Error fetching bet_transfers for layoff command:", transferErr);
+            }
+
+            const { data: upstreamConnections, error: connErr } = await supabase
+              .from('dealer_upstream_connections')
+              .select(`
+                *,
+                upstream_profile:upstream_dealer_id(id, full_name, email, phone, member_code)
+              `)
+              .eq('dealer_id', listDealerId);
+
+            if (connErr) {
+              console.error("Error fetching dealer_upstream_connections for layoff command:", connErr);
+            }
+
+            // 4. Calculations
+            const setPrice = activeRound.set_prices?.['4_top'] || 120;
+            const setPrizes = activeRound.set_prices;
+            const { overallTotals, sortedDealers } = calculateLayoffSummaries(
+              transfers || [],
+              upstreamConnections || [],
+              activeRound.winning_numbers,
+              activeRound.lottery_type,
+              setPrice,
+              setPrizes
+            );
+
+            const closeDateYMD = getRoundCloseDate(activeRound);
+            const formattedRoundDate = formatToThaiBudDate(closeDateYMD);
+            const lotteryName = LOTTERY_TYPE_NAMES[activeRound.lottery_type] || activeRound.lottery_name || activeRound.lottery_type.toUpperCase();
+            const winningResultStr = formatWinningNumbersForDisplay(activeRound.winning_numbers, activeRound.lottery_type);
+
+            const roundInfo = {
+              lotteryName,
+              roundDate: formattedRoundDate,
+              winningResultStr
+            };
+
+            const targetId = layoffCmd.targetId;
+
+            // 5. Output response
+            if (layoffCmd.type === 'summary') {
+              if (targetId) {
+                let targetDealer = sortedDealers.find(d =>
+                  (d.dealerCode && d.dealerCode.toLowerCase() === targetId.toLowerCase()) ||
+                  (d.dealerName && d.dealerName.toLowerCase() === targetId.toLowerCase())
+                );
+
+                if (!targetDealer && upstreamConnections) {
+                  const conn = (upstreamConnections || []).find((c: any) => {
+                    const code = (c.upstream_code || c.upstream_profile?.member_code || '').trim().toLowerCase();
+                    const name = (c.upstream_name || c.upstream_profile?.full_name || '').trim().toLowerCase();
+                    return (code && code === targetId.toLowerCase()) || (name && name === targetId.toLowerCase());
+                  });
+                  if (conn) {
+                    const dName = (conn.upstream_name || conn.upstream_profile?.full_name || 'ไม่ระบุเจ้ามือ').trim();
+                    const dCode = (conn.upstream_code || conn.upstream_profile?.member_code || '').trim();
+                    targetDealer = {
+                      dealerKey: conn.id || dCode || dName,
+                      dealerName: dName,
+                      dealerCode: dCode,
+                      totalBet: 0,
+                      totalCommission: 0,
+                      totalWin: 0,
+                      winCount: 0,
+                      ticketCount: 0,
+                      net: 0,
+                      winningTransfers: []
+                    };
+                  }
+                }
+
+                if (!targetDealer) {
+                  await sendLineReply(replyToken, `❌ ไม่พบเจ้ามือตีออกที่มีรหัส "${targetId}" ในระบบค่ะ`);
+                  continue;
+                }
+
+                const flexBubble = generateTargetedLayoffSummaryFlex(targetDealer, roundInfo);
+                await sendLineReply(replyToken, {
+                  type: 'flex',
+                  altText: 'สรุปยอดตีออก: ' + targetDealer.dealerName,
+                  contents: flexBubble
+                }, groupId || userId);
+              } else {
+                const flexBubble = generateLayoffSummaryFlex(overallTotals, sortedDealers, roundInfo);
+                await sendLineReply(replyToken, {
+                  type: 'flex',
+                  altText: 'สรุปยอดตีออกงวด ' + roundInfo.roundDate,
+                  contents: flexBubble
+                }, groupId || userId);
+              }
+            } else if (layoffCmd.type === 'winning') {
+              if (targetId) {
+                let targetDealer = sortedDealers.find(d =>
+                  (d.dealerCode && d.dealerCode.toLowerCase() === targetId.toLowerCase()) ||
+                  (d.dealerName && d.dealerName.toLowerCase() === targetId.toLowerCase())
+                );
+
+                if (!targetDealer && upstreamConnections) {
+                  const conn = (upstreamConnections || []).find((c: any) => {
+                    const code = (c.upstream_code || c.upstream_profile?.member_code || '').trim().toLowerCase();
+                    const name = (c.upstream_name || c.upstream_profile?.full_name || '').trim().toLowerCase();
+                    return (code && code === targetId.toLowerCase()) || (name && name === targetId.toLowerCase());
+                  });
+                  if (conn) {
+                    const dName = (conn.upstream_name || conn.upstream_profile?.full_name || 'ไม่ระบุเจ้ามือ').trim();
+                    const dCode = (conn.upstream_code || conn.upstream_profile?.member_code || '').trim();
+                    targetDealer = {
+                      dealerKey: conn.id || dCode || dName,
+                      dealerName: dName,
+                      dealerCode: dCode,
+                      totalBet: 0,
+                      totalCommission: 0,
+                      totalWin: 0,
+                      winCount: 0,
+                      ticketCount: 0,
+                      net: 0,
+                      winningTransfers: []
+                    };
+                  }
+                }
+
+                if (!targetDealer) {
+                  await sendLineReply(replyToken, `❌ ไม่พบเจ้ามือตีออกที่มีรหัส "${targetId}" ในระบบค่ะ`);
+                  continue;
+                }
+
+                const winningTransfers = targetDealer.winningTransfers || [];
+                const msg = formatLayoffWinningBetsMessage(winningTransfers, targetDealer, roundInfo);
+                await sendLineReply(replyToken, msg, groupId || userId);
+              } else {
+                const winningTransfers = overallTotals.winningTransfers || [];
+                const msg = formatLayoffWinningBetsMessage(winningTransfers, null, roundInfo);
+                await sendLineReply(replyToken, msg, groupId || userId);
               }
             }
             continue;
