@@ -291,6 +291,7 @@ export default function Dealer() {
     }, [lastMemberSubTab, lastBotSubTab])
     const [rounds, setRounds] = useState([])
     const [members, setMembers] = useState([])
+    const [memberAssistants, setMemberAssistants] = useState([])
     const [pendingMembers, setPendingMembers] = useState([])
     const [blockedMembers, setBlockedMembers] = useState([])
     const [downstreamDealers, setDownstreamDealers] = useState([]) // Dealers who send bets TO us
@@ -2340,6 +2341,24 @@ export default function Dealer() {
             setMembers(regularMembers.filter(m => m.membership_status === 'active'))
             setPendingMembers(regularMembers.filter(m => m.membership_status === 'pending'))
             setBlockedMembers(regularMembers.filter(m => m.membership_status === 'blocked'))
+
+            // Fetch member key-in assistants for this dealer
+            try {
+                const { data: asstData, error: asstErr } = await fetchAllRows((from, to) =>
+                    supabase
+                        .from('member_line_assistants')
+                        .select('*')
+                        .eq('dealer_id', user.id)
+                        .eq('is_active', true)
+                        .order('created_at', { ascending: true })
+                        .range(from, to)
+                )
+                if (!asstErr && asstData) {
+                    setMemberAssistants(asstData)
+                }
+            } catch (asstCatchErr) {
+                console.warn('Could not fetch member_line_assistants:', asstCatchErr)
+            }
             
             // Add dealer members to downstreamDealers (will be merged with connections later)
             const dealerMembersTransformed = dealerMembers.map(m => ({
@@ -3651,6 +3670,93 @@ export default function Dealer() {
         } catch (err) {
             console.error('Error updating member line_user_id:', err)
             toast.error('เกิดข้อผิดพลาดในการอัปเดต Line User ID: ' + err.message)
+        }
+    }
+
+    // Add LINE Key-in Assistant for a member via atomic RPC
+    async function handleAddMemberAssistant(profileId, lineUserId, assistantName) {
+        try {
+            const cleanUid = (lineUserId || '').trim()
+            if (!cleanUid) {
+                toast.error('กรุณาระบุ Line UID ของผู้ช่วยคีย์')
+                return false
+            }
+
+            const { data, error } = await supabase.rpc('bind_member_line_assistant', {
+                p_dealer_id: user.id,
+                p_profile_id: profileId,
+                p_line_user_id: cleanUid,
+                p_assistant_name: (assistantName || '').trim() || null
+            })
+
+            if (error) throw error
+            if (!data?.success) {
+                toast.error(data?.message || 'ไม่สามารถเพิ่มผู้ช่วยคีย์ได้')
+                return false
+            }
+
+            const newAsst = data.assistant
+            if (newAsst) {
+                setMemberAssistants(prev => {
+                    const filtered = prev.filter(a => a.id !== newAsst.id && a.line_user_id !== newAsst.line_user_id)
+                    return [...filtered, newAsst]
+                })
+            }
+
+            if (data.cleaned_up) {
+                toast.success(`เพิ่มผู้ช่วยคีย์สำเร็จ (และล้างบัญชีว่างอัตโนมัติ ${data.cleaned_up_name || ''} ออกให้แล้ว)`)
+                fetchData()
+            } else {
+                toast.success('เพิ่มผู้ช่วยคีย์สำเร็จ (สิทธิ์เริ่มต้น: คีย์อย่างเดียว)')
+            }
+            return true
+        } catch (err) {
+            console.error('Error adding member assistant:', err)
+            toast.error('เกิดข้อผิดพลาดในการเพิ่มผู้ช่วยคีย์: ' + (err.message || ''))
+            return false
+        }
+    }
+
+    // Toggle can_view_summary permission for a key-in assistant
+    async function handleToggleAssistantSummary(assistantId, canViewSummary) {
+        try {
+            const { error } = await supabase
+                .from('member_line_assistants')
+                .update({
+                    can_view_summary: !!canViewSummary,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', assistantId)
+                .eq('dealer_id', user.id)
+
+            if (error) throw error
+
+            setMemberAssistants(prev =>
+                prev.map(a => a.id === assistantId ? { ...a, can_view_summary: !!canViewSummary } : a)
+            )
+            toast.success(canViewSummary ? 'เปิดสิทธิ์ดูสรุป/โพยถูกสำหรับผู้ช่วยแล้ว' : 'ปิดสิทธิ์ดูสรุปแล้ว (คีย์ได้อย่างเดียว)')
+        } catch (err) {
+            console.error('Error toggling assistant summary permission:', err)
+            toast.error('เกิดข้อผิดพลาดในการปรับสิทธิ์ผู้ช่วย: ' + (err.message || ''))
+        }
+    }
+
+    // Delete a key-in assistant
+    async function handleDeleteMemberAssistant(assistantId) {
+        try {
+            const { error } = await supabase
+                .from('member_line_assistants')
+                .delete()
+                .eq('id', assistantId)
+                .eq('dealer_id', user.id)
+
+            if (error) throw error
+
+            setMemberAssistants(prev => prev.filter(a => a.id !== assistantId))
+            toast.success('ถอดสิทธิ์ผู้ช่วยคีย์เรียบร้อยแล้ว')
+        } catch (err) {
+            console.error('Error deleting member assistant:', err)
+            toast.error('เกิดข้อผิดพลาดในการลบผู้ช่วยคีย์: ' + (err.message || ''))
         }
     }
 
@@ -6332,15 +6438,23 @@ export default function Dealer() {
 
                                 if (memberSearchQuery.trim()) {
                                     const q = memberSearchQuery.trim().toLowerCase()
-                                    allActive = allActive.filter(m => 
-                                        (m.full_name || '').toLowerCase().includes(q) ||
-                                        (m.email || '').toLowerCase().includes(q) ||
-                                        (m.phone || '').toLowerCase().includes(q) ||
-                                        (m.line_user_id || '').toLowerCase().includes(q) ||
-                                        (m.bank_account || '').toLowerCase().includes(q) ||
-                                        (m.member_code || '').toLowerCase().includes(q) ||
-                                        String(m.id || '').toLowerCase().includes(q)
-                                    )
+                                    allActive = allActive.filter(m => {
+                                        const mAssistants = memberAssistants.filter(a => a.profile_id === m.id)
+                                        const matchesAssistant = mAssistants.some(a =>
+                                            (a.assistant_name || '').toLowerCase().includes(q) ||
+                                            (a.line_user_id || '').toLowerCase().includes(q)
+                                        )
+                                        return (
+                                            (m.full_name || '').toLowerCase().includes(q) ||
+                                            (m.email || '').toLowerCase().includes(q) ||
+                                            (m.phone || '').toLowerCase().includes(q) ||
+                                            (m.line_user_id || '').toLowerCase().includes(q) ||
+                                            (m.bank_account || '').toLowerCase().includes(q) ||
+                                            (m.member_code || '').toLowerCase().includes(q) ||
+                                            String(m.id || '').toLowerCase().includes(q) ||
+                                            matchesAssistant
+                                        )
+                                    })
                                 }
 
                                 const filteredMembers = allActive
@@ -6388,6 +6502,10 @@ export default function Dealer() {
                                                 onCopyCredentials={copyMemberCredentials}
                                                 isPerUserYearly={false}
                                                 onUpdateLineUserId={(lineId) => handleUpdateMemberLineUserId(member.id, lineId)}
+                                                assistants={member.is_dealer ? [] : memberAssistants.filter(a => a.profile_id === member.id)}
+                                                onAddAssistant={(lineUid, name) => handleAddMemberAssistant(member.id, lineUid, name)}
+                                                onToggleAssistantSummary={handleToggleAssistantSummary}
+                                                onDeleteAssistant={handleDeleteMemberAssistant}
                                             />
                                         ))}
                                     </div>

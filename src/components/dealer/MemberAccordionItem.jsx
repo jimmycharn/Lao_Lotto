@@ -14,7 +14,8 @@ import {
     FiCreditCard,
     FiRefreshCw,
     FiClock,
-    FiCheck
+    FiCheck,
+    FiUserPlus
 } from 'react-icons/fi'
 import '../../pages/Dealer.css'
 import '../../pages/SettingsTabs.css'
@@ -23,7 +24,7 @@ import BankAccountCard from '../BankAccountCard'
 import CopyButton from '../CopyButton'
 
 // Member Accordion Item Component
-export default function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials, isPerUserYearly = false, onRenew, onUpdateLineUserId }) {
+export default function MemberAccordionItem({ member, formatDate, isExpanded, onToggle, onBlock, onDelete, onDisconnect, dealerBankAccounts = [], onUpdateBank, isDealer = false, onCopyCredentials, isPerUserYearly = false, onRenew, onUpdateLineUserId, assistants = [], onAddAssistant, onToggleAssistantSummary, onDeleteAssistant }) {
     // Membership expiry helpers
     const membershipExpired = isPerUserYearly && !isDealer && member.membership_expires_at
         ? new Date(member.membership_expires_at) < new Date()
@@ -35,6 +36,10 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
     const [activeTab, setActiveTab] = useState('info') // 'info' | 'bank' | 'settings'
     const [lineUserId, setLineUserId] = useState(member.line_user_id || '')
     const [isSavingLineId, setIsSavingLineId] = useState(false)
+    const [newAssistantUid, setNewAssistantUid] = useState('')
+    const [newAssistantName, setNewAssistantName] = useState('')
+    const [isAddingAssistant, setIsAddingAssistant] = useState(false)
+    const [updatingAssistantId, setUpdatingAssistantId] = useState(null)
     const [memberPayoutBank, setMemberPayoutBank] = useState(member.member_bank || null)
     const [loadingBank, setLoadingBank] = useState(false)
 
@@ -211,6 +216,26 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                         title={`รหัสสมาชิก: ${member.member_code || String(member.id).slice(0, 5)}`}
                                     >
                                         ID: {member.member_code || String(member.id).slice(0, 5)}
+                                    </span>
+                                )}
+                                {!isDealer && assistants.length > 0 && (
+                                    <span
+                                        style={{
+                                            fontSize: '0.72rem',
+                                            color: '#38bdf8',
+                                            background: 'rgba(56, 189, 248, 0.12)',
+                                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                                            padding: '0.1rem 0.45rem',
+                                            borderRadius: '6px',
+                                            fontWeight: 600,
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.25rem'
+                                        }}
+                                        title={`มีผู้ช่วยคีย์ข้อมูล ${assistants.length} คน`}
+                                    >
+                                        <FiUserPlus size={11} />
+                                        ผู้ช่วย: {assistants.length}
                                     </span>
                                 )}
                                 {isDealer && (
@@ -569,9 +594,243 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                             marginTop: '0.35rem',
                                             opacity: 0.8
                                         }}>
-                                            ผูกเพื่อ รับ/ส่ง ข้อมูลทางไลน์กลุ่ม
+                                            ผูกเพื่อ รับ/ส่ง ข้อมูลทางไลน์กลุ่ม (บัญชีหลัก)
                                         </p>
                                     </div>
+
+                                    {/* Key-in Assistants (Many LINE UIDs -> 1 Primary Account) */}
+                                    {!isDealer && onAddAssistant && (
+                                        <div
+                                            className="info-item line-assistants-section"
+                                            style={{
+                                                gridColumn: 'span 2',
+                                                marginTop: '0.5rem',
+                                                padding: '1rem',
+                                                background: 'rgba(255, 255, 255, 0.02)',
+                                                border: '1px solid var(--color-border)',
+                                                borderRadius: 'var(--radius-md)'
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                <label className="info-item-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, fontWeight: 600, color: 'var(--color-text)' }}>
+                                                    <FiUserPlus style={{ color: 'var(--color-primary)' }} />
+                                                    <span>ผู้ช่วยคีย์ข้อมูล (Line UIDs เพิ่มเติม)</span>
+                                                    <span style={{
+                                                        fontSize: '0.75rem',
+                                                        padding: '0.1rem 0.5rem',
+                                                        borderRadius: '999px',
+                                                        background: 'rgba(234, 179, 8, 0.15)',
+                                                        color: 'var(--color-primary, #eab308)',
+                                                        fontWeight: 600
+                                                    }}>
+                                                        {assistants.length} คน
+                                                    </span>
+                                                </label>
+                                            </div>
+
+                                            {assistants.length === 0 ? (
+                                                <div style={{
+                                                    fontSize: '0.85rem',
+                                                    color: 'var(--color-text-muted)',
+                                                    padding: '0.65rem 0.75rem',
+                                                    background: 'var(--color-surface)',
+                                                    borderRadius: 'var(--radius-sm)',
+                                                    border: '1px dashed var(--color-border)',
+                                                    marginBottom: '0.75rem'
+                                                }}>
+                                                    ยังไม่มีผู้ช่วยคีย์ข้อมูล — เพิ่ม LINE UID เพื่ออนุญาตให้หลายคนคีย์เลขแทงลงบัญชีนี้ร่วมกันได้
+                                                </div>
+                                            ) : (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                                    {assistants.map((asst) => (
+                                                        <div
+                                                            key={asst.id}
+                                                            style={{
+                                                                display: 'flex',
+                                                                justifyContent: 'space-between',
+                                                                alignItems: 'center',
+                                                                gap: '0.75rem',
+                                                                padding: '0.6rem 0.75rem',
+                                                                background: 'var(--color-surface)',
+                                                                border: '1px solid var(--color-border)',
+                                                                borderRadius: 'var(--radius-sm)',
+                                                                flexWrap: 'wrap'
+                                                            }}
+                                                        >
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', minWidth: 0, flex: '1 1 200px' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                                    <span style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--color-text)' }}>
+                                                                        {asst.assistant_name || 'ผู้ช่วยคีย์'}
+                                                                    </span>
+                                                                    <span style={{
+                                                                        fontSize: '0.72rem',
+                                                                        padding: '0.1rem 0.45rem',
+                                                                        borderRadius: '4px',
+                                                                        fontWeight: 600,
+                                                                        background: asst.can_view_summary ? 'rgba(16, 185, 129, 0.15)' : 'rgba(148, 163, 184, 0.15)',
+                                                                        color: asst.can_view_summary ? '#10b981' : 'var(--color-text-muted)',
+                                                                        border: asst.can_view_summary ? '1px solid rgba(16, 185, 129, 0.35)' : '1px solid rgba(148, 163, 184, 0.3)'
+                                                                    }}>
+                                                                        {asst.can_view_summary ? 'คีย์+ดูสรุป' : 'คีย์อย่างเดียว'}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                                    <code style={{
+                                                                        fontSize: '0.78rem',
+                                                                        color: 'var(--color-text-muted)',
+                                                                        fontFamily: 'monospace',
+                                                                        wordBreak: 'break-all'
+                                                                    }}>
+                                                                        {asst.line_user_id}
+                                                                    </code>
+                                                                    <CopyButton text={asst.line_user_id} />
+                                                                </div>
+                                                            </div>
+
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                                                                <label
+                                                                    style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '0.35rem',
+                                                                        fontSize: '0.8rem',
+                                                                        color: 'var(--color-text)',
+                                                                        cursor: updatingAssistantId === asst.id ? 'wait' : 'pointer',
+                                                                        userSelect: 'none'
+                                                                    }}
+                                                                    title="เปิด/ปิดสิทธิ์ให้ผู้ช่วยคนนี้สั่ง /สรุป และ /โพยถูก ของบัญชีหลักได้"
+                                                                >
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={!!asst.can_view_summary}
+                                                                        disabled={updatingAssistantId === asst.id}
+                                                                        onChange={async (e) => {
+                                                                            if (!onToggleAssistantSummary) return
+                                                                            setUpdatingAssistantId(asst.id)
+                                                                            try {
+                                                                                await onToggleAssistantSummary(asst.id, e.target.checked)
+                                                                            } finally {
+                                                                                setUpdatingAssistantId(null)
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    <span>ดูสรุป/โพยถูก</span>
+                                                                </label>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={async () => {
+                                                                        if (!onDeleteAssistant) return
+                                                                        if (!window.confirm(`ต้องการถอดสิทธิ์ผู้ช่วยคีย์ "${asst.assistant_name || asst.line_user_id}" ออกจากบัญชีนี้หรือไม่?`)) return
+                                                                        setUpdatingAssistantId(asst.id)
+                                                                        try {
+                                                                            await onDeleteAssistant(asst.id)
+                                                                        } finally {
+                                                                            setUpdatingAssistantId(null)
+                                                                        }
+                                                                    }}
+                                                                    disabled={updatingAssistantId === asst.id}
+                                                                    style={{
+                                                                        padding: '0.35rem 0.5rem',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'center',
+                                                                        background: 'rgba(239, 68, 68, 0.1)',
+                                                                        border: '1px solid rgba(239, 68, 68, 0.3)',
+                                                                        borderRadius: 'var(--radius-sm)',
+                                                                        color: '#ef4444',
+                                                                        cursor: 'pointer'
+                                                                    }}
+                                                                    title="ลบผู้ช่วยคีย์"
+                                                                >
+                                                                    <FiTrash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+
+                                            {/* Add new assistant inline form */}
+                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    placeholder="Line UID ผู้ช่วย (เช่น U94906fc...)"
+                                                    value={newAssistantUid}
+                                                    onChange={(e) => setNewAssistantUid(e.target.value)}
+                                                    disabled={isAddingAssistant}
+                                                    style={{
+                                                        flex: '2 1 200px',
+                                                        minWidth: 0,
+                                                        background: 'var(--color-surface)',
+                                                        border: '1px solid var(--color-border)',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        padding: '0.45rem 0.7rem',
+                                                        color: 'var(--color-text)',
+                                                        fontSize: '0.88rem'
+                                                    }}
+                                                />
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    placeholder="ชื่อเรียกผู้ช่วย (ไม่บังคับ)"
+                                                    value={newAssistantName}
+                                                    onChange={(e) => setNewAssistantName(e.target.value)}
+                                                    disabled={isAddingAssistant}
+                                                    style={{
+                                                        flex: '1 1 140px',
+                                                        minWidth: 0,
+                                                        background: 'var(--color-surface)',
+                                                        border: '1px solid var(--color-border)',
+                                                        borderRadius: 'var(--radius-md)',
+                                                        padding: '0.45rem 0.7rem',
+                                                        color: 'var(--color-text)',
+                                                        fontSize: '0.88rem'
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-primary"
+                                                    disabled={isAddingAssistant || !newAssistantUid.trim()}
+                                                    onClick={async () => {
+                                                        const uid = newAssistantUid.trim()
+                                                        if (!uid) return
+                                                        setIsAddingAssistant(true)
+                                                        try {
+                                                            const ok = await onAddAssistant(uid, newAssistantName.trim())
+                                                            if (ok) {
+                                                                setNewAssistantUid('')
+                                                                setNewAssistantName('')
+                                                            }
+                                                        } finally {
+                                                            setIsAddingAssistant(false)
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        padding: '0.45rem 1rem',
+                                                        fontSize: '0.88rem',
+                                                        fontWeight: 600,
+                                                        borderRadius: 'var(--radius-md)',
+                                                        flexShrink: 0,
+                                                        whiteSpace: 'nowrap'
+                                                    }}
+                                                >
+                                                    {isAddingAssistant ? 'กำลังเพิ่ม...' : '+ เพิ่มผู้ช่วย'}
+                                                </button>
+                                            </div>
+                                            <p style={{
+                                                fontSize: '0.78rem',
+                                                color: 'var(--color-text-muted)',
+                                                marginTop: '0.4rem',
+                                                marginBottom: 0,
+                                                opacity: 0.85
+                                            }}>
+                                                ค่าเริ่มต้น: คีย์เลขแทงได้และยกเลิกได้เฉพาะใบที่ตัวเองคีย์ (เจ้ามือสามารถเปิดสิทธิ์ดูสรุป/โพยถูกรายคนได้ด้านบน)
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
