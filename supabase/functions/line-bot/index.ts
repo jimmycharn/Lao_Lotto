@@ -37,6 +37,16 @@ import {
   parseLayoffCommand,
   checkLayoffAuthorization
 } from "./layoffSummaryHelper.ts"
+import {
+  parseBindAssistantCommand,
+  parseUnbindAssistantCommand,
+  parseListAssistantsCommand,
+  parseAutoRegisterCommand,
+  formatAssistantBillNote,
+  canAssistantRunCommand,
+  canAssistantCancelBill,
+  isLineUserIdFormat
+} from "./assistantHelper.ts"
 
 
 
@@ -5414,6 +5424,19 @@ async function handleLineSlipMessage({
       return `[SLIP] Dealer ${dealerId} slip verification disabled (enabled=${dealerProfile?.auto_slip_verification_enabled}, hasKey=${!!dealerProfile?.slipok_api_key})`;
     }
 
+    // Check if sender is a key-in assistant without summary/financial permissions
+    const { data: slipAssistant } = await supabase
+      .from('member_line_assistants')
+      .select('id, profile_id, can_view_summary')
+      .eq('dealer_id', dealerId)
+      .eq('line_user_id', userId)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (slipAssistant && !slipAssistant.can_view_summary) {
+      return `[SLIP] Ignored image from key-in-only assistant ${userId} (profile=${slipAssistant.profile_id})`;
+    }
+
     // Fallback: check line_group_members in this group if direct lookup was not found
     if (!memberProfile && groupId) {
       const { data: groupMember } = await supabase
@@ -8567,7 +8590,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         // Fetch group link information to check dealer
         const { data: groupLink } = await supabase
           .from('line_groups')
-          .select('dealer_id, group_name')
+          .select('dealer_id, group_name, disable_auto_register')
           .eq('line_group_id', groupId)
           .eq('is_active', true)
           .maybeSingle();
@@ -8578,6 +8601,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         }
 
         const dealerId = groupLink.dealer_id;
+        const disableAutoRegister = groupLink.disable_auto_register === true;
         const welcomeMsgs: string[] = [];
 
         for (const member of joinedMembers) {
@@ -8587,6 +8611,30 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           // 1. Fetch LINE display name
           const userProfile = await fetchLineUserProfile(groupId, mUserId, event.source?.type || 'group');
           const displayName = userProfile?.displayName || 'คุณสมาชิกใหม่';
+
+          // 1.5 Check if pre-bound as a key-in assistant for this dealer
+          const { data: assistantLink } = await supabase
+            .from('member_line_assistants')
+            .select('id, profile_id, assistant_name, profiles:profile_id(id, full_name, member_code)')
+            .eq('dealer_id', dealerId)
+            .eq('line_user_id', mUserId)
+            .eq('is_active', true)
+            .maybeSingle();
+
+          if (assistantLink && assistantLink.profile_id) {
+            const primaryInfo = assistantLink.profiles as any;
+            const primaryName = primaryInfo?.full_name || 'บัญชีหลัก';
+            const primaryCode = primaryInfo?.member_code ? ` (${primaryInfo.member_code})` : '';
+            welcomeMsgs.push(
+              `ยินดีต้อนรับคุณ ${assistantLink.assistant_name || displayName} เข้าสู่กลุ่มค่ะ! 🎉\n` +
+              `📝 สถานะ: ผู้ช่วยคีย์ข้อมูลของ คุณ ${primaryName}${primaryCode}\n` +
+              `สามารถพิมพ์ส่งโพยได้ทันทีค่ะ`
+            );
+            upsertGroupMember(groupId, mUserId, event.source?.type || 'group', displayName, assistantLink.profile_id).catch(err => {
+              console.error(`Error background upserting joined assistant ${mUserId} in group ${groupId}:`, err);
+            });
+            continue;
+          }
 
           // 2. Check if profile exists
           const { data: existingProfile } = await supabase
@@ -8607,7 +8655,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               .eq('dealer_id', dealerId)
               .maybeSingle();
 
-            if (!existingMembership) {
+            if (!existingMembership && !disableAutoRegister) {
               await supabase
                 .from('user_dealer_memberships')
                 .insert({
@@ -8617,6 +8665,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 });
             }
             welcomeMsgs.push(`ยินดีต้อนรับคุณ ${existingProfile.full_name} กลับสู่กลุ่มค่ะ! 🎉\n(LINE User ID: ${mUserId})`);
+          } else if (disableAutoRegister) {
+            // Auto-registration is disabled for this group: do NOT create auth user or profile
+            welcomeMsgs.push(
+              `ยินดีต้อนรับคุณ ${displayName} เข้าสู่กลุ่มค่ะ! 🎉\n` +
+              `(กลุ่มนี้ปิดการสมัครสมาชิกอัตโนมัติ)\n` +
+              `LINE User ID: ${mUserId}\n\n` +
+              `💡 แอดมินสามารถผูกเป็นผู้ช่วยคีย์ได้ด้วยคำสั่ง:\n/ผูกผู้ช่วย [รหัสสมาชิก 5 ตัว] ${mUserId}`
+            );
           } else {
             // Create dummy auth user
             const shortId = mUserId.slice(-8).toLowerCase();
@@ -9311,6 +9367,295 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             continue;
           }
 
+          // ─── COMMAND: /ผูกผู้ช่วย, /ยกเลิกผู้ช่วย, /ผู้ช่วย, /ปิดรับอัตโนมัติ, /เปิดรับอัตโนมัติ ───
+          const isBindAssistantAttempt = /^\/ผูกผู้ช่วย(?:\s|$)/.test(text);
+          const isUnbindAssistantAttempt = /^\/ยกเลิกผู้ช่วย(?:\s|$)/.test(text);
+          const listAssistantsCmd = parseListAssistantsCommand(text);
+          const autoRegisterCmd = parseAutoRegisterCommand(text);
+
+          if (isBindAssistantAttempt || isUnbindAssistantAttempt || listAssistantsCmd || autoRegisterCmd) {
+            const targetDealerId = groupLink?.dealer_id || privateSession?.dealer_id || null;
+            if (!targetDealerId) {
+              await sendLineReply(replyToken, `❌ กลุ่มนี้ยังไม่ได้ผูกกับเจ้ามือ หรือท่านยังไม่ได้เชื่อมต่อระบบค่ะ`);
+              continue;
+            }
+
+            // Check authorization (Dealer, Admin, Superadmin, or active Manager)
+            const { data: cmdSenderProfile } = await supabase
+              .from('profiles')
+              .select('id, full_name, is_active, role')
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+
+            let isCmdManager = false;
+            const { data: cmdMgr } = await supabase
+              .from('line_managers')
+              .select('id')
+              .eq('dealer_id', targetDealerId)
+              .eq('line_user_id', userId)
+              .eq('is_active', true)
+              .maybeSingle();
+            isCmdManager = !!cmdMgr;
+
+            if (!checkLayoffAuthorization(cmdSenderProfile, targetDealerId, isCmdManager)) {
+              await sendLineReply(replyToken, `❌ คำสั่งนี้ใช้ได้เฉพาะ เจ้ามือ / แอดมิน / ผู้จัดการ เท่านั้นค่ะ`);
+              continue;
+            }
+
+            // 1. /ปิดรับอัตโนมัติ & /เปิดรับอัตโนมัติ
+            if (autoRegisterCmd) {
+              if (!groupLink) {
+                await sendLineReply(replyToken, `❌ คำสั่งนี้ใช้ได้เฉพาะภายในกลุ่ม LINE ที่ผูกกับเจ้ามือแล้วเท่านั้นค่ะ`);
+                continue;
+              }
+              const { error: toggleErr } = await supabase
+                .from('line_groups')
+                .update({
+                  disable_auto_register: autoRegisterCmd.disable,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', groupLink.id);
+
+              if (toggleErr) {
+                console.error('Error updating disable_auto_register:', toggleErr);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการบันทึกตั้งค่ากลุ่ม กรุณาลองใหม่อีกครั้งค่ะ`);
+              } else if (autoRegisterCmd.disable) {
+                await sendLineReply(
+                  replyToken,
+                  `🔒 ปิดการสมัครสมาชิกอัตโนมัติสำหรับกลุ่มนี้แล้วค่ะ\n\n` +
+                  `เมื่อมีสมาชิกใหม่เข้ากลุ่ม บอทจะไม่สร้างบัญชีใหม่อัตโนมัติ แต่จะแจ้ง LINE UID เพื่อให้แอดมินใช้คำสั่ง /ผูกผู้ช่วย หรือเพิ่มที่หน้าเว็บได้เลยค่ะ`
+                );
+              } else {
+                await sendLineReply(
+                  replyToken,
+                  `🔓 เปิดการสมัครสมาชิกอัตโนมัติสำหรับกลุ่มนี้แล้วค่ะ\nเมื่อมีสมาชิกใหม่เข้ากลุ่ม บอทจะสร้างบัญชีให้อัตโนมัติตามปกติ (ยกเว้นผู้ช่วยคีย์ที่ผูกไว้ล่วงหน้า)`
+                );
+              }
+              continue;
+            }
+
+            // 2. /ผูกผู้ช่วย [รหัสสมาชิกหลัก] [UID หรือ รหัส 5 ตัว] [ชื่อเรียก(ไม่บังคับ)]
+            if (isBindAssistantAttempt) {
+              const bindCmd = parseBindAssistantCommand(text);
+              if (!bindCmd) {
+                await sendLineReply(
+                  replyToken,
+                  `❌ รูปแบบคำสั่งไม่ถูกต้องค่ะ\n\n` +
+                  `📌 ตัวอย่างการใช้งาน:\n` +
+                  `• /ผูกผู้ช่วย 10050 U4c8f56532d5253f6a2a7538bf5aee897 น้องมด\n` +
+                  `• /ผูกผู้ช่วย 10050 10099 น้องมด\n\n` +
+                  `(รหัสแรก = บัญชีสมาชิกหลัก, ค่าที่สอง = LINE UID หรือรหัส 5 ตัวของผู้ช่วย)`
+                );
+                continue;
+              }
+
+              // Find primary member by member_code
+              const { data: primaryProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name, member_code')
+                .eq('member_code', bindCmd.primaryCode)
+                .maybeSingle();
+
+              if (!primaryProfile) {
+                await sendLineReply(replyToken, `❌ ไม่พบบัญชีสมาชิกหลักรหัส "${bindCmd.primaryCode}" ในระบบค่ะ`);
+                continue;
+              }
+
+              // Resolve target LINE UID (either direct UID or 5-digit member_code of newly joined user)
+              let targetUid = '';
+              let resolvedAssistantName = bindCmd.assistantName;
+              if (isLineUserIdFormat(bindCmd.targetRef)) {
+                targetUid = bindCmd.targetRef;
+              } else {
+                const { data: refProfile } = await supabase
+                  .from('profiles')
+                  .select('id, full_name, line_user_id')
+                  .eq('member_code', bindCmd.targetRef)
+                  .maybeSingle();
+
+                if (!refProfile || !refProfile.line_user_id) {
+                  await sendLineReply(
+                    replyToken,
+                    `❌ ไม่พบ LINE UID ของรหัส "${bindCmd.targetRef}" ค่ะ\nกรุณาตรวจสอบรหัส 5 ตัว หรือระบุ LINE UID (ขึ้นต้นด้วย U...) โดยตรงค่ะ`
+                  );
+                  continue;
+                }
+                targetUid = refProfile.line_user_id;
+                if (!resolvedAssistantName && refProfile.full_name) {
+                  resolvedAssistantName = refProfile.full_name;
+                }
+              }
+
+              // Fetch LINE display name if assistant name is still empty
+              if (!resolvedAssistantName && groupId) {
+                const fetched = await fetchLineUserProfile(groupId, targetUid, event.source?.type || 'group');
+                if (fetched?.displayName) {
+                  resolvedAssistantName = fetched.displayName;
+                }
+              }
+
+              const { data: bindRes, error: bindErr } = await supabase.rpc('bind_member_line_assistant', {
+                p_dealer_id: targetDealerId,
+                p_profile_id: primaryProfile.id,
+                p_line_user_id: targetUid,
+                p_assistant_name: resolvedAssistantName
+              });
+
+              if (bindErr || !bindRes) {
+                console.error('Error calling bind_member_line_assistant:', bindErr);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการผูกผู้ช่วยคีย์: ${bindErr?.message || 'Unknown error'}`);
+                continue;
+              }
+
+              if (!bindRes.success) {
+                await sendLineReply(replyToken, `❌ ไม่สามารถผูกผู้ช่วยคีย์ได้\n${bindRes.message || 'กรุณาตรวจสอบข้อมูลอีกครั้ง'}`);
+                continue;
+              }
+
+              const aRow = bindRes.assistant || {};
+              let replyMsg =
+                `✅ ผูกผู้ช่วยคีย์ข้อมูลสำเร็จแล้วค่ะ!\n` +
+                `--------------------------\n` +
+                `👤 บัญชีหลัก: คุณ ${bindRes.primary_name || primaryProfile.full_name} (${bindRes.primary_code || primaryProfile.member_code})\n` +
+                `✍️ ผู้ช่วยคีย์: ${aRow.assistant_name || resolvedAssistantName || 'ผู้ช่วยคีย์'}\n` +
+                `🆔 LINE UID: ${targetUid}\n` +
+                `🔐 สิทธิ์: ${aRow.can_view_summary ? 'คีย์โพย + ดูสรุป/โพยถูก' : 'คีย์โพยอย่างเดียว (ยกเลิกได้เฉพาะใบที่คีย์เอง)'}`;
+
+              if (bindRes.cleaned_up) {
+                replyMsg += `\n\n🧹 ระบบได้ล้างบัญชีว่างที่สร้างอัตโนมัติ (${bindRes.cleaned_up_name || '-'} / ${bindRes.cleaned_up_code || '-'}) ออกให้เรียบร้อยแล้วค่ะ`;
+              }
+
+              await sendLineReply(replyToken, replyMsg);
+              continue;
+            }
+
+            // 3. /ยกเลิกผู้ช่วย [UID หรือ ชื่อผู้ช่วย]
+            if (isUnbindAssistantAttempt) {
+              const unbindCmd = parseUnbindAssistantCommand(text);
+              if (!unbindCmd) {
+                await sendLineReply(replyToken, `❌ กรุณาระบุ LINE UID หรือชื่อผู้ช่วยที่ต้องการยกเลิก เช่น:\n/ยกเลิกผู้ช่วย U4c8f... หรือ /ยกเลิกผู้ช่วย น้องมด`);
+                continue;
+              }
+
+              let matchedRows: any[] = [];
+              if (isLineUserIdFormat(unbindCmd.targetRef)) {
+                const { data } = await supabase
+                  .from('member_line_assistants')
+                  .select('id, line_user_id, assistant_name, profiles:profile_id(full_name, member_code)')
+                  .eq('dealer_id', targetDealerId)
+                  .eq('line_user_id', unbindCmd.targetRef);
+                matchedRows = data || [];
+              } else {
+                const { data } = await supabase
+                  .from('member_line_assistants')
+                  .select('id, line_user_id, assistant_name, profiles:profile_id(full_name, member_code)')
+                  .eq('dealer_id', targetDealerId)
+                  .ilike('assistant_name', unbindCmd.targetRef);
+                matchedRows = data || [];
+              }
+
+              if (matchedRows.length === 0) {
+                await sendLineReply(replyToken, `❌ ไม่พบผู้ช่วยคีย์ที่ตรงกับ "${unbindCmd.targetRef}" ในระบบค่ะ`);
+                continue;
+              }
+
+              if (matchedRows.length > 1) {
+                const dupList = matchedRows
+                  .map((r: any, idx: number) => `${idx + 1}. ${r.assistant_name} (${r.line_user_id}) → คุณ ${r.profiles?.full_name || '-'}`)
+                  .join('\n');
+                await sendLineReply(
+                  replyToken,
+                  `⚠️ พบชื่อผู้ช่วยซ้ำกัน ${matchedRows.length} รายการ กรุณาระบุ LINE UID แทนค่ะ:\n${dupList}`
+                );
+                continue;
+              }
+
+              const targetRow = matchedRows[0];
+              const { error: delErr } = await supabase
+                .from('member_line_assistants')
+                .delete()
+                .eq('id', targetRow.id)
+                .eq('dealer_id', targetDealerId);
+
+              if (delErr) {
+                console.error('Error deleting assistant:', delErr);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการยกเลิกผู้ช่วยคีย์ค่ะ`);
+                continue;
+              }
+
+              await sendLineReply(
+                replyToken,
+                `✅ ยกเลิกสิทธิ์ผู้ช่วยคีย์ "${targetRow.assistant_name || targetRow.line_user_id}" ออกจากบัญชี คุณ ${targetRow.profiles?.full_name || '-'} (${targetRow.profiles?.member_code || '-'}) เรียบร้อยแล้วค่ะ`
+              );
+              continue;
+            }
+
+            // 4. /ผู้ช่วย [รหัสสมาชิกหลัก(ไม่บังคับ)]
+            if (listAssistantsCmd) {
+              let query = supabase
+                .from('member_line_assistants')
+                .select('id, profile_id, line_user_id, assistant_name, can_view_summary, profiles:profile_id(full_name, member_code)')
+                .eq('dealer_id', targetDealerId)
+                .eq('is_active', true)
+                .order('created_at', { ascending: true });
+
+              if (listAssistantsCmd.primaryCode) {
+                const { data: pProf } = await supabase
+                  .from('profiles')
+                  .select('id, full_name, member_code')
+                  .eq('member_code', listAssistantsCmd.primaryCode)
+                  .maybeSingle();
+
+                if (!pProf) {
+                  await sendLineReply(replyToken, `❌ ไม่พบสมาชิกรหัส "${listAssistantsCmd.primaryCode}" ในระบบค่ะ`);
+                  continue;
+                }
+                query = query.eq('profile_id', pProf.id);
+              }
+
+              const { data: listRows, error: listErr } = await query;
+              if (listErr) {
+                console.error('Error listing assistants:', listErr);
+                await sendLineReply(replyToken, `❌ เกิดข้อผิดพลาดในการดึงรายชื่อผู้ช่วยคีย์ค่ะ`);
+                continue;
+              }
+
+              if (!listRows || listRows.length === 0) {
+                const scopeText = listAssistantsCmd.primaryCode ? `ของรหัส ${listAssistantsCmd.primaryCode}` : 'ในระบบ';
+                await sendLineReply(replyToken, `📋 ยังไม่มีผู้ช่วยคีย์ข้อมูล${scopeText}ค่ะ`);
+                continue;
+              }
+
+              // Group by primary member
+              const grouped = new Map<string, { header: string; items: any[] }>();
+              for (const row of listRows) {
+                const prof = row.profiles as any;
+                const key = row.profile_id;
+                if (!grouped.has(key)) {
+                  grouped.set(key, {
+                    header: `👤 คุณ ${prof?.full_name || 'ไม่ระบุชื่อ'} (${prof?.member_code || '-'})`,
+                    items: []
+                  });
+                }
+                grouped.get(key)!.items.push(row);
+              }
+
+              let msg = `📋 รายชื่อผู้ช่วยคีย์ข้อมูล (${listRows.length} คน)\n==========================`;
+              for (const group of grouped.values()) {
+                msg += `\n${group.header}`;
+                group.items.forEach((a: any, idx: number) => {
+                  const permLabel = a.can_view_summary ? 'คีย์+ดูสรุป' : 'คีย์อย่างเดียว';
+                  msg += `\n  ${idx + 1}. ${a.assistant_name || 'ผู้ช่วยคีย์'} [${permLabel}]\n     UID: ${a.line_user_id}`;
+                });
+                msg += `\n--------------------------`;
+              }
+
+              await sendLineReply(replyToken, msg.trim());
+              continue;
+            }
+          }
+
           // ─── MANAGER COMMANDS ROUTER ───
           const isManagerCommand = 
             text.startsWith('/stats') || text.startsWith('/สมาชิก') || text.startsWith('/ยอดสมาชิก') ||
@@ -9367,7 +9712,31 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               .eq('is_active', true)
               .maybeSingle();
 
-            if (privateSession && privateSession.is_assistant) {
+            // Check if sender is a group key-in assistant under this dealer
+            const { data: groupAssistant } = dealerId
+              ? await supabase
+                  .from('member_line_assistants')
+                  .select('id, profile_id, assistant_name, can_view_summary')
+                  .eq('dealer_id', dealerId)
+                  .eq('line_user_id', userId)
+                  .eq('is_active', true)
+                  .maybeSingle()
+              : { data: null };
+
+            const isStaff = profile?.role === 'dealer' || profile?.role === 'superadmin' || profile?.role === 'admin';
+            const isAdminOrDealer = isStaff || (manager && manager.role === 'admin');
+
+            if (groupAssistant && !manager && !isStaff) {
+              const { data: targetProfile } = await supabase
+                .from('profiles')
+                .select('id, full_name, is_active, role')
+                .eq('id', groupAssistant.profile_id)
+                .eq('is_active', true)
+                .maybeSingle();
+              if (targetProfile) {
+                profile = targetProfile;
+              }
+            } else if (privateSession && privateSession.is_assistant) {
               const { data: targetProfile } = await supabase
                 .from('profiles')
                 .select('id, full_name, is_active, role')
@@ -9379,9 +9748,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               }
             }
 
-            const isStaff = profile?.role === 'dealer' || profile?.role === 'superadmin' || profile?.role === 'admin';
-            const isAdminOrDealer = isStaff || (manager && manager.role === 'admin');
-
             const isTotalCommand = text.startsWith('/total') || text.startsWith('/ยอดรวม');
             const isSummaryCommand = text.startsWith('/summary') || text.startsWith('/สรุป');
             const isHelpCommand = text.startsWith('/help') || text.startsWith('/คำสั่ง');
@@ -9392,6 +9758,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
             let memberProfileName = '';
 
             if (!manager && !isStaff) {
+              if (groupAssistant && (isTotalCommand || isSummaryCommand) && !canAssistantRunCommand(groupAssistant, 'summary')) {
+                await sendLineReply(
+                  replyToken,
+                  `❌ บัญชีผู้ช่วยคีย์ของคุณเปิดสิทธิ์ไว้สำหรับคีย์โพยเท่านั้น หากต้องการดูสรุปยอดกรุณาแจ้งเจ้ามือเปิดสิทธิ์ให้ค่ะ`
+                );
+                continue;
+              }
+
               if (isTotalCommand || isSummaryCommand || isHelpCommand || isOpenCloseCommand || isReportCommand) {
                 // Check member permissions toggles
                 const memberPerms = groupLink ? (groupLink.member_permissions || {}) : { total: true, summary: true, help: true };
@@ -16451,9 +16825,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                       cmdRow("/หวย", "เช็คประเภทหวยของกลุ่ม หรือเปลี่ยนหวย (เช่น /หวยไทย, /หวยลาว)"),
                       cmdRow("/โพยปิด หรือ /โพยเปิด", "ปิด/เปิดการแสดงใบโพยหลังแทงเลข"),
 
-                      sectionHeader("📩", "ผูกกลุ่ม (แอดมินเท่านั้น)"),
+                      sectionHeader("📩", "ผูกกลุ่ม & ผู้ช่วยคีย์ (แอดมินเท่านั้น)"),
                       cmdRow("/ขอรหัส [ไทย/ลาว/ฮานอย/หุ้น/ยี่กี่]", "ขอรหัสผูกกลุ่มพร้อมเลือกประเภทหวย (แชทส่วนตัว)"),
                       cmdRow("/bind [รหัส]", "ผูกกลุ่ม LINE ด้วยรหัส (ใช้ในกลุ่ม)"),
+                      cmdRow("/ผูกผู้ช่วย [รหัสหลัก] [UID/รหัส] [ชื่อ]", "ผูก LINE UID เป็นผู้ช่วยคีย์ของสมาชิก (เช่น /ผูกผู้ช่วย 10050 10099 น้องมด)"),
+                      cmdRow("/ยกเลิกผู้ช่วย [UID/ชื่อ]", "ถอดสิทธิ์ผู้ช่วยคีย์ข้อมูล"),
+                      cmdRow("/ผู้ช่วย [รหัสหลัก]", "ดูรายชื่อผู้ช่วยคีย์ทั้งหมด หรือเฉพาะสมาชิกที่ระบุ"),
+                      cmdRow("/ปิดรับอัตโนมัติ /เปิดรับอัตโนมัติ", "ปิด/เปิดการสร้างบัญชีอัตโนมัติเมื่อมีคนเข้ากลุ่ม"),
 
                       sectionHeader("❓", "อื่นๆ"),
                       cmdRow(".. [ข้อความ]", "พิมพ์ .. นำหน้าข้อความเพื่อคุยในกลุ่ม (บอทจะไม่ตอบกลับ)"),
@@ -16894,7 +17272,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           // 1. Find the active submissions with this bill_id
           const { data: subs, error: fetchErr } = await supabase
             .from('submissions')
-            .select('id, user_id, amount, round_id')
+            .select('id, user_id, amount, round_id, submitted_by_line_user_id')
             .eq('bill_id', cancelCode)
             .eq('is_deleted', false);
 
@@ -16904,6 +17282,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           }
 
           const submissionUserId = subs[0].user_id;
+          const billSubmittedByLineUid = subs[0].submitted_by_line_user_id || null;
           const targetRoundId = subs[0].round_id;
 
           // Fetch dealer_id from round
@@ -16915,43 +17294,57 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
           const targetDealerId = roundData?.dealer_id;
 
-          // 2. Identify the sender's profile
-          const { data: senderProfile } = await supabase
-            .from('profiles')
-            .select('id, role')
-            .eq('line_user_id', userId)
-            .maybeSingle();
-
-          let isAuthorized = false;
-
-          if (senderProfile) {
-            // Check if sender is the creator of the bill
-            if (senderProfile.id === submissionUserId) {
-              isAuthorized = true;
-            }
-            // Check if sender is the dealer themselves
-            if (senderProfile.id === targetDealerId) {
-              isAuthorized = true;
-            }
-          }
-
-          // If not authorized yet, check if sender is an active manager of the dealer
-          if (!isAuthorized && targetDealerId) {
-            const { data: manager } = await supabase
-              .from('line_managers')
-              .select('id')
-              .eq('dealer_id', targetDealerId)
+          // 2. Identify the sender's profile, manager role, and assistant mapping
+          const [senderProfileRes, managerRes, cancelAssistantRes] = await Promise.all([
+            supabase
+              .from('profiles')
+              .select('id, role')
               .eq('line_user_id', userId)
-              .eq('is_active', true)
-              .maybeSingle();
+              .maybeSingle(),
+            targetDealerId
+              ? supabase
+                  .from('line_managers')
+                  .select('id')
+                  .eq('dealer_id', targetDealerId)
+                  .eq('line_user_id', userId)
+                  .eq('is_active', true)
+                  .maybeSingle()
+              : Promise.resolve({ data: null }),
+            targetDealerId
+              ? supabase
+                  .from('member_line_assistants')
+                  .select('id, profile_id')
+                  .eq('dealer_id', targetDealerId)
+                  .eq('line_user_id', userId)
+                  .eq('is_active', true)
+                  .maybeSingle()
+              : Promise.resolve({ data: null })
+          ]);
 
-            if (manager) {
-              isAuthorized = true;
-            }
-          }
+          const senderProfile = senderProfileRes.data;
+          const isMainOwner = Boolean(senderProfile && senderProfile.id === submissionUserId);
+          const isStaffOrManager = Boolean(
+            (senderProfile && (senderProfile.id === targetDealerId || senderProfile.role === 'superadmin' || senderProfile.role === 'admin')) ||
+            managerRes.data
+          );
+          const isMatchingAssistant = Boolean(
+            cancelAssistantRes.data && cancelAssistantRes.data.profile_id === submissionUserId
+          );
+
+          const isAuthorized = canAssistantCancelBill({
+            isMainOwner,
+            isStaffOrManager,
+            isAssistant: isMatchingAssistant,
+            senderLineUserId: userId,
+            billSubmittedByLineUserId: billSubmittedByLineUid
+          });
 
           if (!isAuthorized) {
-            await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการยกเลิกใบโพยนี้ (เฉพาะผู้ส่งโพยเอง หรือผู้จัดการ/เจ้ามือของกลุ่มเท่านั้น)`);
+            if (isMatchingAssistant) {
+              await sendLineReply(replyToken, `❌ คุณสามารถยกเลิกได้เฉพาะใบโพยที่คุณเป็นผู้คีย์เองเท่านั้นค่ะ`);
+            } else {
+              await sendLineReply(replyToken, `❌ คุณไม่มีสิทธิ์ในการยกเลิกใบโพยนี้ (เฉพาะผู้ส่งโพยเอง หรือผู้จัดการ/เจ้ามือของกลุ่มเท่านั้น)`);
+            }
             continue;
           }
 
@@ -18717,13 +19110,57 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              // 2. Identify the sender's linked profile
-              const { data: senderProfile } = await supabase
+              // 2. Identify the sender's linked profile (or assistant mapping)
+              let { data: senderProfile } = await supabase
                 .from('profiles')
                 .select('id, full_name, role')
                 .eq('line_user_id', userId)
                 .eq('is_active', true)
                 .maybeSingle();
+
+              const targetDealerId = listDealerId;
+              const isDirectStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+              let isManagerSender = false;
+              if (!isDirectStaffSender && targetDealerId) {
+                const { data: mgr } = await supabase
+                  .from('line_managers')
+                  .select('id')
+                  .eq('dealer_id', targetDealerId)
+                  .eq('line_user_id', userId)
+                  .eq('is_active', true)
+                  .maybeSingle();
+                isManagerSender = !!mgr;
+              }
+              const isStaffSender = isDirectStaffSender;
+
+              if (!isStaffSender && !isManagerSender && targetDealerId) {
+                const { data: winAssistant } = await supabase
+                  .from('member_line_assistants')
+                  .select('id, profile_id, can_view_summary')
+                  .eq('dealer_id', targetDealerId)
+                  .eq('line_user_id', userId)
+                  .eq('is_active', true)
+                  .maybeSingle();
+
+                if (winAssistant) {
+                  if (!canAssistantRunCommand(winAssistant, 'summary')) {
+                    await sendLineReply(
+                      replyToken,
+                      `❌ บัญชีผู้ช่วยคีย์ของคุณเปิดสิทธิ์ไว้สำหรับคีย์โพยเท่านั้น หากต้องการดูโพยถูกกรุณาแจ้งเจ้ามือเปิดสิทธิ์ให้ค่ะ`
+                    );
+                    continue;
+                  }
+                  const { data: primaryProf } = await supabase
+                    .from('profiles')
+                    .select('id, full_name, role')
+                    .eq('id', winAssistant.profile_id)
+                    .eq('is_active', true)
+                    .maybeSingle();
+                  if (primaryProf) {
+                    senderProfile = primaryProf;
+                  }
+                }
+              }
 
               if (!senderProfile) {
                 await sendLineReply(replyToken, [
@@ -18734,19 +19171,6 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
               }
 
               // 3. Check sender permissions (Authorized roles: superadmin, admin, dealer, manager)
-              const targetDealerId = listDealerId;
-              const isStaffSender = senderProfile?.id === targetDealerId || senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
-              let isManagerSender = false;
-              if (!isStaffSender && targetDealerId) {
-                const { data: mgr } = await supabase
-                  .from('line_managers')
-                  .select('id')
-                  .eq('dealer_id', targetDealerId)
-                  .eq('line_user_id', userId)
-                  .eq('is_active', true)
-                  .maybeSingle();
-                isManagerSender = !!mgr;
-              }
               const isAuthorized = isStaffSender || isManagerSender;
 
               // Non-admin trying to query another member's winning slips
@@ -19182,13 +19606,42 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 continue;
               }
 
-              // 2. Identify the sender's linked profile
-              const { data: senderProfile } = await supabase
+              // 2. Identify the sender's linked profile (or assistant mapping)
+              let { data: senderProfile } = await supabase
                 .from('profiles')
                 .select('id, full_name')
                 .eq('line_user_id', userId)
                 .eq('is_active', true)
                 .maybeSingle();
+
+              if (listDealerId) {
+                const { data: billAssistant } = await supabase
+                  .from('member_line_assistants')
+                  .select('id, profile_id, can_view_summary')
+                  .eq('dealer_id', listDealerId)
+                  .eq('line_user_id', userId)
+                  .eq('is_active', true)
+                  .maybeSingle();
+
+                if (billAssistant) {
+                  if (!canAssistantRunCommand(billAssistant, 'summary')) {
+                    await sendLineReply(
+                      replyToken,
+                      `❌ บัญชีผู้ช่วยคีย์ของคุณเปิดสิทธิ์ไว้สำหรับคีย์โพยเท่านั้น หากต้องการดูรายการใบโพยรวมกรุณาแจ้งเจ้ามือเปิดสิทธิ์ให้ค่ะ`
+                    );
+                    continue;
+                  }
+                  const { data: primaryProf } = await supabase
+                    .from('profiles')
+                    .select('id, full_name')
+                    .eq('id', billAssistant.profile_id)
+                    .eq('is_active', true)
+                    .maybeSingle();
+                  if (primaryProf) {
+                    senderProfile = primaryProf;
+                  }
+                }
+              }
 
               if (!senderProfile) {
                 await sendLineReply(replyToken, [
@@ -19634,8 +20087,8 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         console.log(`[LINE BOT MSG] Found session for target dealerId: ${dealerId}`);
 
-        // Verify sender's profile, group membership, and manager record in parallel
-        const [profileRes, memberRecordRes, managerRecordRes] = await Promise.all([
+        // Verify sender's profile, group membership, manager record, and assistant mapping in parallel
+        const [profileRes, memberRecordRes, managerRecordRes, groupAssistantRes] = await Promise.all([
           supabase
             .from('profiles')
             .select('id, full_name, is_active, role, line_poy_display, admin_poy_display, member_code')
@@ -19656,6 +20109,15 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
                 .eq('line_user_id', userId)
                 .eq('is_active', true)
                 .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          dealerId
+            ? supabase
+                .from('member_line_assistants')
+                .select('id, profile_id, assistant_name, can_view_summary')
+                .eq('dealer_id', dealerId)
+                .eq('line_user_id', userId)
+                .eq('is_active', true)
+                .maybeSingle()
             : Promise.resolve({ data: null, error: null })
         ]);
 
@@ -19664,9 +20126,24 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         const memberRecord = memberRecordRes.data;
         const managerRecord = managerRecordRes.data;
         const managerErr = managerRecordRes.error;
+        const groupAssistant = groupAssistantRes.data;
 
-        // Override profile if using an assistant private session
-        if (privateSession && privateSession.is_assistant) {
+        const isDealer = senderProfile?.role === 'dealer';
+        const isAdmin = senderProfile?.role === 'superadmin' || senderProfile?.role === 'admin';
+        const isManager = !!managerRecord;
+
+        // Override profile if sender is a group key-in assistant (takes priority for non-staff key-in)
+        if (groupAssistant && !isDealer && !isAdmin && !isManager) {
+          const { data: targetProfile } = await supabase
+            .from('profiles')
+            .select('id, full_name, is_active, role, line_poy_display, admin_poy_display, member_code')
+            .eq('id', groupAssistant.profile_id)
+            .eq('is_active', true)
+            .maybeSingle();
+          if (targetProfile) {
+            profile = targetProfile;
+          }
+        } else if (privateSession && privateSession.is_assistant) {
           const { data: targetProfile } = await supabase
             .from('profiles')
             .select('id, full_name, is_active, role, line_poy_display, admin_poy_display, member_code')
@@ -19684,11 +20161,7 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
 
         let senderPoyDisplay = groupMemberPoy || 'short';
 
-        console.log(`[LINE BOT MSG] managerRecord lookup result:`, { managerRecord, managerErr });
-
-        const isDealer = profile?.role === 'dealer';
-        const isAdmin = profile?.role === 'superadmin' || profile?.role === 'admin';
-        const isManager = !!managerRecord;
+        console.log(`[LINE BOT MSG] managerRecord lookup result:`, { managerRecord, managerErr, hasGroupAssistant: !!groupAssistant });
 
         // If the user has NOT bound their ID and is not staff or manager
         if (!profile && !isDealer && !isAdmin && !isManager) {
@@ -19968,7 +20441,20 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           }
         }
 
-        if (privateSession && privateSession.is_assistant) {
+        if (groupAssistant && !isDealer && !isAdmin && !isManager) {
+          let assistantDisplayName = (groupAssistant.assistant_name || '').trim();
+          if (!assistantDisplayName) {
+            try {
+              const lineProfile = await fetchLineUserProfile(groupId, userId, sourceType);
+              if (lineProfile?.displayName) {
+                assistantDisplayName = lineProfile.displayName;
+              }
+            } catch (err) {
+              console.error("Failed to fetch assistant LINE display name:", err);
+            }
+          }
+          finalBillNote = formatAssistantBillNote(assistantDisplayName || 'ผู้ช่วยคีย์', buyerNote);
+        } else if (privateSession && privateSession.is_assistant) {
           finalBillNote = `ผู้ส่ง: ${privateSession.assistant_name || 'LINE Bot'}`;
           if (buyerNote) {
             finalBillNote += ` (${buyerNote})`;
@@ -20543,10 +21029,14 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
           continue;
         }
 
-        // Write Submissions to Database
+        // Write Submissions to Database (always track actual LINE UID who keyed the bet)
+        const rowsToInsert = processedInserts.map((row) => ({
+          ...row,
+          submitted_by_line_user_id: userId
+        }));
         const { error: insertErr } = await supabase
           .from('submissions')
-          .insert(processedInserts);
+          .insert(rowsToInsert);
 
         if (insertErr) {
           console.error("Submissions insert failed:", insertErr);
@@ -20560,8 +21050,13 @@ CRITICAL: You must verify that the draw date of the lottery results in the searc
         });
 
         // Format and send confirmation ticket
-        const senderName = senderProfile?.full_name || 'ผู้ใช้ LINE';
-        const senderIdVal = senderProfile?.member_code || (senderProfile?.id ? senderProfile.id.substring(0, 5) : '-');
+        const isGroupAssistantSubmit = Boolean(groupAssistant && !isDealer && !isAdmin && !isManager);
+        const ticketProfile = isGroupAssistantSubmit ? profile : (senderProfile || profile);
+        const baseSenderName = ticketProfile?.full_name || 'ผู้ใช้ LINE';
+        const senderName = isGroupAssistantSubmit
+          ? `${baseSenderName} (ผู้ช่วย: ${groupAssistant.assistant_name || 'ผู้ช่วยคีย์'})`
+          : baseSenderName;
+        const senderIdVal = ticketProfile?.member_code || (ticketProfile?.id ? ticketProfile.id.substring(0, 5) : '-');
 
         let summaryText = `✅บันทึกโพยสำเร็จ!✅\n`;
         summaryText += `ผู้ส่งโพย: ${senderName}\n`;
