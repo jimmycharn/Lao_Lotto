@@ -52,6 +52,7 @@ export default function DealerLineBotTab({ user, profile }) {
         can_transfer: false
     })
     const [groupMembers, setGroupMembers] = useState({})
+    const [dealerAssistants, setDealerAssistants] = useState({})
     const [loadingGroupMembers, setLoadingGroupMembers] = useState({})
     const [selectedGroupId, setSelectedGroupId] = useState(null)
     const [selectedConfigGroupId, setSelectedConfigGroupId] = useState(null)
@@ -87,6 +88,27 @@ export default function DealerLineBotTab({ user, profile }) {
         } catch (error) {
             console.error('Error fetching managers:', error)
             toast.error('ไม่สามารถดึงข้อมูลผู้จัดการกลุ่มได้')
+        }
+    }
+
+    const fetchDealerAssistants = async () => {
+        if (!user?.id) return
+        try {
+            const { data, error } = await supabase
+                .from('member_line_assistants')
+                .select('id, profile_id, line_user_id, assistant_name, can_view_summary, profiles:profile_id(full_name, member_code)')
+                .eq('dealer_id', user.id)
+                .eq('is_active', true)
+            if (error) throw error
+            const map = {}
+            ;(data || []).forEach(a => {
+                if (a.line_user_id) {
+                    map[a.line_user_id] = a
+                }
+            })
+            setDealerAssistants(map)
+        } catch (error) {
+            console.warn('Error fetching dealer assistants:', error)
         }
     }
 
@@ -321,6 +343,7 @@ export default function DealerLineBotTab({ user, profile }) {
                     fetchLineGroups(),
                     fetchActiveMembers(),
                     fetchManagers(),
+                    fetchDealerAssistants(),
                     fetchAllowedLotteryTypes(),
                     fetchSlipSettings()
                 ])
@@ -528,6 +551,32 @@ export default function DealerLineBotTab({ user, profile }) {
         }
     }
 
+    const handleToggleDisableAutoRegister = async (groupId, disabled) => {
+        setLineGroups(prev => prev.map(g => g.id === groupId ? { ...g, disable_auto_register: disabled } : g))
+
+        try {
+            const { error } = await supabase
+                .from('line_groups')
+                .update({
+                    disable_auto_register: disabled,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', groupId)
+
+            if (error) throw error
+
+            toast.success(
+                disabled
+                    ? 'ปิดการสมัครสมาชิกอัตโนมัติสำหรับกลุ่มนี้แล้ว!'
+                    : 'เปิดการสมัครสมาชิกอัตโนมัติสำหรับกลุ่มนี้แล้ว!'
+            )
+        } catch (error) {
+            console.error('Error toggling disable auto register:', error)
+            toast.error('ไม่สามารถอัปเดตการตั้งค่าได้')
+            fetchLineGroups()
+        }
+    }
+
     const handleUpdateStaffMember = async (groupId, staffMemberId) => {
         const value = staffMemberId === '' ? null : staffMemberId
         // Optimistic update
@@ -677,6 +726,16 @@ export default function DealerLineBotTab({ user, profile }) {
                     />
                     <span style={{ fontSize: '0.85rem', color: '#ef4444', fontWeight: 'bold' }}>บอทไม่ตอบกลับ</span>
                 </label>
+                <label className="staff-bet-label" style={{ cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed' }} title="เมื่อปิด บอทจะไม่สร้างบัญชีใหม่อัตโนมัติเวลาคนเข้ากลุ่ม (เหมาะสำหรับกลุ่มทีมผู้ช่วยคีย์)">
+                    <input
+                        type="checkbox"
+                        className="staff-bet-checkbox"
+                        checked={group.disable_auto_register || false}
+                        disabled={!isOwnerOrSuper}
+                        onChange={e => handleToggleDisableAutoRegister(group.id, e.target.checked)}
+                    />
+                    <span style={{ fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600 }}>ปิดรับสมาชิกอัตโนมัติ</span>
+                </label>
                 <label className="staff-bet-label" style={{ cursor: isOwnerOrSuper ? 'pointer' : 'not-allowed' }}>
                     <input
                         type="checkbox"
@@ -743,30 +802,51 @@ export default function DealerLineBotTab({ user, profile }) {
                                             </div>
                                         </td>
                                         <td style={{ padding: '0.5rem' }}>
-                                            {member.user_id ? (
-                                                <span style={{ 
-                                                    color: 'var(--color-success)', 
-                                                    fontSize: '0.8rem',
-                                                    background: 'rgba(34, 197, 94, 0.08)',
-                                                    padding: '0.15rem 0.4rem',
-                                                    borderRadius: '4px',
-                                                    border: '1px solid rgba(34, 197, 94, 0.15)',
-                                                    fontWeight: 600
-                                                }}>
-                                                    ผูกแล้ว: {member.profiles?.full_name || 'ไม่ทราบชื่อ'}{member.profiles?.member_code ? ` (รหัส: ${member.profiles.member_code})` : ''}
-                                                </span>
-                                            ) : (
-                                                <span style={{ 
-                                                    color: 'var(--color-text-muted)', 
-                                                    fontSize: '0.8rem',
-                                                    background: 'rgba(239, 68, 68, 0.08)',
-                                                    padding: '0.15rem 0.4rem',
-                                                    borderRadius: '4px',
-                                                    border: '1px solid rgba(239, 68, 68, 0.15)'
-                                                }}>
-                                                    ยังไม่ผูกบัญชี LINE
-                                                </span>
-                                            )}
+                                            {(() => {
+                                                const asstInfo = dealerAssistants[member.line_user_id]
+                                                if (asstInfo) {
+                                                    return (
+                                                        <span style={{
+                                                            color: '#38bdf8',
+                                                            fontSize: '0.8rem',
+                                                            background: 'rgba(56, 189, 248, 0.1)',
+                                                            padding: '0.15rem 0.45rem',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid rgba(56, 189, 248, 0.3)',
+                                                            fontWeight: 600
+                                                        }}>
+                                                            ผู้ช่วยคีย์ → {asstInfo.profiles?.full_name || 'บัญชีหลัก'}{asstInfo.profiles?.member_code ? ` (${asstInfo.profiles.member_code})` : ''} [{asstInfo.can_view_summary ? 'คีย์+ดูสรุป' : 'คีย์อย่างเดียว'}]
+                                                        </span>
+                                                    )
+                                                }
+                                                if (member.user_id) {
+                                                    return (
+                                                        <span style={{ 
+                                                            color: 'var(--color-success)', 
+                                                            fontSize: '0.8rem',
+                                                            background: 'rgba(34, 197, 94, 0.08)',
+                                                            padding: '0.15rem 0.4rem',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid rgba(34, 197, 94, 0.15)',
+                                                            fontWeight: 600
+                                                        }}>
+                                                            ผูกแล้ว: {member.profiles?.full_name || 'ไม่ทราบชื่อ'}{member.profiles?.member_code ? ` (รหัส: ${member.profiles.member_code})` : ''}
+                                                        </span>
+                                                    )
+                                                }
+                                                return (
+                                                    <span style={{ 
+                                                        color: 'var(--color-text-muted)', 
+                                                        fontSize: '0.8rem',
+                                                        background: 'rgba(239, 68, 68, 0.08)',
+                                                        padding: '0.15rem 0.4rem',
+                                                        borderRadius: '4px',
+                                                        border: '1px solid rgba(239, 68, 68, 0.15)'
+                                                    }}>
+                                                        ยังไม่ผูกบัญชี LINE
+                                                    </span>
+                                                )
+                                            })()}
                                         </td>
                                     </tr>
                                 ))}
