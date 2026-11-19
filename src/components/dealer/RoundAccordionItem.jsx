@@ -52,7 +52,9 @@ import {
     encodeTodConversionNote,
     parseTodConversionNote,
     calculateTransferDeduction,
-    getRemainingBetTypeDisplay
+    getRemainingBetTypeDisplay,
+    calculateRemainingItemTransfer,
+    calculateExcessItemTransfer
 } from '../../utils/layoffTodConverter'
 import { sortRemainingItems } from '../../utils/remainingSortHelper'
 import BetTypeChipsFilter from './BetTypeChipsFilter'
@@ -404,6 +406,8 @@ export default function RoundAccordionItem({
     const [isConvertTodToTopRemainingActive, setIsConvertTodToTopRemainingActive] = useState(false)
     const [transferSource, setTransferSource] = useState('excess') // 'excess' | 'remaining'
     const [remainingRetainByType, setRemainingRetainByType] = useState({}) // { [bet_type]: number | '' }
+    const [remainingMaxCapByType, setRemainingMaxCapByType] = useState({}) // { [bet_type]: number | '' }
+    const [excessMaxCapByType, setExcessMaxCapByType] = useState({}) // { [bet_type]: number | '' }
     const [remainingSortBy, setRemainingSortBy] = useState('number') // 'number' | 'remaining' | 'total'
     const [remainingSortOrder, setRemainingSortOrder] = useState('asc') // 'asc' | 'desc'
     
@@ -1837,24 +1841,26 @@ export default function RoundAccordionItem({
     // 2. Apply retain amount per bet type (remainingRetainByType):
     //    - If not specified: retain = 0, transfer 100% of remainingAmount
     //    - If specified: keep up to retain amount, transfer remaining - retain (if remaining <= retain, keep all -> transfer 0)
-    // 3. Keep only items with excess > 0
-    // 4. If isConvertTodToTopRemainingActive is true: convert ONLY selected 3_tod items with excess > 0 to 3_top permutations
+    // 3. Apply split cap per bet type (remainingMaxCapByType):
+    //    - If specified: cap transfer amount at maxCap per number
+    // 4. Keep only items with excess > 0
+    // 5. If isConvertTodToTopRemainingActive is true: convert ONLY selected 3_tod items with excess > 0 to 3_top permutations
     const calculatedRemainingTransferItems = useMemo(() => {
         const rawSelected = baseRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`])
         if (rawSelected.length === 0) return []
 
         const itemsWithExcess = rawSelected.map(item => {
             const retainVal = remainingRetainByType[item.bet_type]
-            const hasRetain = retainVal !== undefined && retainVal !== null && retainVal !== '' && !isNaN(Number(retainVal)) && Number(retainVal) >= 0
-            const retain = hasRetain ? Number(retainVal) : 0
-            
-            const transferAmt = hasRetain ? Math.max(0, item.remainingAmount - retain) : item.remainingAmount
+            const capVal = remainingMaxCapByType[item.bet_type]
+            const { transferAmount, retainAmount, maxCap, availableAfterRetain } = calculateRemainingItemTransfer(item, retainVal, capVal)
 
             return {
                 ...item,
-                excess: transferAmt,
+                excess: transferAmount,
                 originalRemaining: item.remainingAmount,
-                retainAmount: hasRetain ? retain : 0
+                retainAmount,
+                maxCap,
+                availableAfterRetain
             }
         }).filter(item => item.excess > 0)
 
@@ -1865,7 +1871,7 @@ export default function RoundAccordionItem({
         }
 
         return itemsWithExcess
-    }, [baseRemainingItems, selectedRemainingItems, remainingRetainByType, isConvertTodToTopRemainingActive, round?.lottery_type])
+    }, [baseRemainingItems, selectedRemainingItems, remainingRetainByType, remainingMaxCapByType, isConvertTodToTopRemainingActive, round?.lottery_type])
 
     const totalRemainingTransferAmount = useMemo(() => {
         return calculatedRemainingTransferItems.reduce((sum, item) => {
@@ -1873,6 +1879,29 @@ export default function RoundAccordionItem({
             return sum + (item.isSetBased ? item.excess * setPrice : item.excess)
         }, 0)
     }, [calculatedRemainingTransferItems, round])
+
+    // Calculate items for excess transfer:
+    // 1. Take user-selected items from activeExcessItems
+    // 2. Apply split cap per bet type (excessMaxCapByType):
+    //    - If not specified: transfer 100% of excess
+    //    - If specified: cap transfer amount at maxCap per number (or sets)
+    // 3. Keep only items with excess > 0
+    const calculatedExcessTransferItems = useMemo(() => {
+        const rawSelected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        if (rawSelected.length === 0) return []
+
+        return rawSelected.map(item => {
+            const capVal = excessMaxCapByType[item.bet_type]
+            const { transferAmount, maxCap } = calculateExcessItemTransfer(item, capVal)
+
+            return {
+                ...item,
+                excess: transferAmount,
+                originalExcess: item.excess,
+                maxCap
+            }
+        }).filter(item => item.excess > 0)
+    }, [activeExcessItems, selectedExcessItems, excessMaxCapByType])
 
     // Helper to open transfer modal from Remaining tab
     const handleOpenRemainingTransferModal = () => {
@@ -1897,10 +1926,14 @@ export default function RoundAccordionItem({
             toast.warning('กรุณาเลือกรายการที่ต้องการตีออก')
             return
         }
+        if (calculatedExcessTransferItems.length === 0) {
+            toast.warning('ไม่มีรายการที่จะตีออก')
+            return
+        }
         setGraphTransferItems(null)
         setTransferSource('excess')
         const initialTypes = {}
-        rawSelected.forEach(item => {
+        calculatedExcessTransferItems.forEach(item => {
             initialTypes[item.bet_type] = true
         })
         setTransferModalBetTypes(initialTypes)
@@ -1979,7 +2012,7 @@ export default function RoundAccordionItem({
             return breakdown
         }
 
-        const selected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        const selected = calculatedExcessTransferItems
         const breakdown = {}
         selected.forEach(item => {
             const bt = item.bet_type
@@ -2000,7 +2033,7 @@ export default function RoundAccordionItem({
             if (item.isSetBased) breakdown[bt].excessSets += item.excess
         })
         return breakdown
-    }, [graphTransferItems, transferSource, calculatedRemainingTransferItems, activeExcessItems, selectedExcessItems, round])
+    }, [graphTransferItems, transferSource, calculatedRemainingTransferItems, calculatedExcessTransferItems, round])
 
     const modalSelectedItems = useMemo(() => {
         if (graphTransferItems && graphTransferItems.length > 0) {
@@ -2009,9 +2042,9 @@ export default function RoundAccordionItem({
         if (transferSource === 'remaining') {
             return calculatedRemainingTransferItems
         }
-        const selected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        const selected = calculatedExcessTransferItems
         return selected.filter(item => transferModalBetTypes[item.bet_type] !== false)
-    }, [graphTransferItems, transferSource, calculatedRemainingTransferItems, activeExcessItems, selectedExcessItems, transferModalBetTypes])
+    }, [graphTransferItems, transferSource, calculatedRemainingTransferItems, calculatedExcessTransferItems, transferModalBetTypes])
 
     const modalSelectedCount = modalSelectedItems.length
     const modalSelectedAmount = useMemo(() => {
@@ -2513,7 +2546,11 @@ export default function RoundAccordionItem({
         const closeTime = new Date(round.close_time)
         const formattedDate = closeTime.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' })
         const setPrice = round?.set_prices?.['4_top'] || 120
-        const grandTotal = filteredExcessItems.reduce((sum, i) => sum + (i.isSetBased ? i.excess * setPrice : i.excess), 0)
+        const grandTotal = filteredExcessItems.reduce((sum, i) => {
+            const capVal = excessMaxCapByType[i.bet_type]
+            const { transferAmount } = calculateExcessItemTransfer(i, capVal)
+            return sum + (i.isSetBased ? transferAmount * setPrice : transferAmount)
+        }, 0)
 
         let text = `📤 ยอดที่เกิน - ${lotteryName}\n`
         text += `📅 วันที่ ${formattedDate}\n`
@@ -2541,7 +2578,9 @@ export default function RoundAccordionItem({
             const label = BET_TYPES_BY_LOTTERY[round.lottery_type]?.[betType]?.label || BET_TYPES[betType] || betType
             text += `${label}\n`
             items.forEach(item => {
-                const excessAmount = item.isSetBased ? item.excess * setPrice : item.excess
+                const capVal = excessMaxCapByType[item.bet_type]
+                const { transferAmount } = calculateExcessItemTransfer(item, capVal)
+                const excessAmount = item.isSetBased ? transferAmount * setPrice : transferAmount
                 text += `${item.numbers}=${excessAmount}\n`
             })
             if (idx < sortedBetTypes.length - 1) {
@@ -5909,7 +5948,7 @@ export default function RoundAccordionItem({
                                                                     })}
                                                                 </div>
 
-                                                                {/* Retain Settings per Bet Type */}
+                                                                {/* Retain & Split Cap Settings per Bet Type */}
                                                                 <div style={{
                                                                     marginTop: '0.45rem',
                                                                     paddingTop: '0.65rem',
@@ -5919,41 +5958,63 @@ export default function RoundAccordionItem({
                                                                     gap: '0.5rem'
                                                                 }}>
                                                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
                                                                             <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-main)' }}>
-                                                                                🛡️ ยอดเก็บไว้ตัวละ (แยกตามประเภทเลข):
+                                                                                🛡️ ตั้งค่ายอดเก็บ & 📤 แบ่งตีออกไม่เกินตัวละ (แยกตามประเภทเลข):
                                                                             </span>
                                                                             <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
-                                                                                (เว้นว่าง = ตีออกหมด 100% | ยอดไม่ถึง = เก็บเท่าที่มี)
+                                                                                (เก็บ = สำรองไว้ไม่ตี | ตีไม่เกิน = เพดานตีออกต่อตัวในแต่ละรอบ)
                                                                             </span>
                                                                         </div>
-                                                                        {Object.values(remainingRetainByType).some(v => v !== '' && v !== undefined && v !== null) && (
-                                                                            <button
-                                                                                type="button"
-                                                                                onClick={() => setRemainingRetainByType({})}
-                                                                                style={{
-                                                                                    background: 'transparent',
-                                                                                    border: '1px solid var(--color-border)',
-                                                                                    color: 'var(--color-text-muted)',
-                                                                                    borderRadius: '4px',
-                                                                                    padding: '0.15rem 0.5rem',
-                                                                                    fontSize: '0.72rem',
-                                                                                    cursor: 'pointer'
-                                                                                }}
-                                                                            >
-                                                                                ล้างยอดเก็บทั้งหมด
-                                                                            </button>
-                                                                        )}
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                                                            {Object.values(remainingRetainByType).some(v => v !== '' && v !== undefined && v !== null) && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => setRemainingRetainByType({})}
+                                                                                    style={{
+                                                                                        background: 'transparent',
+                                                                                        border: '1px solid var(--color-border)',
+                                                                                        color: 'var(--color-text-muted)',
+                                                                                        borderRadius: '4px',
+                                                                                        padding: '0.15rem 0.5rem',
+                                                                                        fontSize: '0.72rem',
+                                                                                        cursor: 'pointer'
+                                                                                    }}
+                                                                                >
+                                                                                    ล้างยอดเก็บ
+                                                                                </button>
+                                                                            )}
+                                                                            {Object.values(remainingMaxCapByType).some(v => v !== '' && v !== undefined && v !== null) && (
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => setRemainingMaxCapByType({})}
+                                                                                    style={{
+                                                                                        background: 'transparent',
+                                                                                        border: '1px solid var(--color-border)',
+                                                                                        color: 'var(--color-text-muted)',
+                                                                                        borderRadius: '4px',
+                                                                                        padding: '0.15rem 0.5rem',
+                                                                                        fontSize: '0.72rem',
+                                                                                        cursor: 'pointer'
+                                                                                    }}
+                                                                                >
+                                                                                    ล้างยอดตีไม่เกิน
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
 
                                                                     <div style={{
                                                                         display: 'grid',
-                                                                        gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))',
+                                                                        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
                                                                         gap: '0.5rem'
                                                                     }}>
                                                                         {betTypeList.map(bt => {
                                                                             const retainVal = remainingRetainByType[bt.bet_type] ?? ''
                                                                             const hasRetain = retainVal !== '' && !isNaN(Number(retainVal)) && Number(retainVal) >= 0
+                                                                            const capVal = remainingMaxCapByType[bt.bet_type] ?? ''
+                                                                            const hasCap = capVal !== '' && !isNaN(Number(capVal)) && Number(capVal) > 0
+                                                                            const isConfigured = hasRetain || hasCap
                                                                             return (
                                                                                 <div
                                                                                     key={`retain-${bt.bet_type}`}
@@ -5961,59 +6022,101 @@ export default function RoundAccordionItem({
                                                                                         display: 'flex',
                                                                                         alignItems: 'center',
                                                                                         justifyContent: 'space-between',
-                                                                                        padding: '0.35rem 0.65rem',
-                                                                                        background: hasRetain ? 'rgba(245, 158, 11, 0.1)' : 'rgba(0, 0, 0, 0.25)',
-                                                                                        border: `1px solid ${hasRetain ? 'rgba(245, 158, 11, 0.4)' : 'var(--color-border, #334155)'}`,
+                                                                                        padding: '0.4rem 0.65rem',
+                                                                                        background: isConfigured ? 'rgba(245, 158, 11, 0.1)' : 'rgba(0, 0, 0, 0.25)',
+                                                                                        border: `1px solid ${isConfigured ? 'rgba(245, 158, 11, 0.4)' : 'var(--color-border, #334155)'}`,
                                                                                         borderRadius: '6px',
                                                                                         gap: '0.5rem'
                                                                                     }}
                                                                                 >
                                                                                     <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-                                                                                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: hasRetain ? '#fbbf24' : 'var(--color-text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: isConfigured ? '#fbbf24' : 'var(--color-text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                                                             {bt.label}
                                                                                         </span>
                                                                                         <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
-                                                                                            {bt.count} รายการ {hasRetain ? `(เก็บ ฿${Number(retainVal).toLocaleString()})` : '(ออกหมด)'}
+                                                                                            {bt.count} รายการ {hasRetain ? `(เก็บ ฿${Number(retainVal).toLocaleString()})` : ''} {hasCap ? `(ตีไม่เกิน ฿${Number(capVal).toLocaleString()})` : ''} {!isConfigured ? '(ออกหมด)' : ''}
                                                                                         </span>
                                                                                     </div>
-                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>เก็บ:</span>
-                                                                                        <div style={{ position: 'relative', width: '90px' }}>
-                                                                                            <input
-                                                                                                type="number"
-                                                                                                min="0"
-                                                                                                placeholder="ออกหมด"
-                                                                                                value={retainVal}
-                                                                                                onChange={(e) => {
-                                                                                                    const val = e.target.value
-                                                                                                    setRemainingRetainByType(prev => ({
-                                                                                                        ...prev,
-                                                                                                        [bt.bet_type]: val
-                                                                                                    }))
-                                                                                                }}
-                                                                                                style={{
-                                                                                                    width: '100%',
-                                                                                                    padding: '0.25rem 1.2rem 0.25rem 0.45rem',
-                                                                                                    fontSize: '0.78rem',
-                                                                                                    fontWeight: 600,
-                                                                                                    borderRadius: '4px',
-                                                                                                    border: '1px solid var(--color-border)',
-                                                                                                    background: 'var(--color-surface, #0f172a)',
-                                                                                                    color: hasRetain ? '#fbbf24' : 'var(--color-text-main)',
-                                                                                                    textAlign: 'right'
-                                                                                                }}
-                                                                                            />
-                                                                                            <span style={{
-                                                                                                position: 'absolute',
-                                                                                                right: '0.35rem',
-                                                                                                top: '50%',
-                                                                                                transform: 'translateY(-50%)',
-                                                                                                fontSize: '0.7rem',
-                                                                                                color: 'var(--color-text-muted)',
-                                                                                                pointerEvents: 'none'
-                                                                                            }}>
-                                                                                                {round?.currency_symbol || '฿'}
-                                                                                            </span>
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', alignItems: 'flex-end' }}>
+                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', minWidth: '46px', textAlign: 'right' }}>เก็บ:</span>
+                                                                                            <div style={{ position: 'relative', width: '80px' }}>
+                                                                                                <input
+                                                                                                    type="number"
+                                                                                                    min="0"
+                                                                                                    placeholder="ออกหมด"
+                                                                                                    value={retainVal}
+                                                                                                    onChange={(e) => {
+                                                                                                        const val = e.target.value
+                                                                                                        setRemainingRetainByType(prev => ({
+                                                                                                            ...prev,
+                                                                                                            [bt.bet_type]: val
+                                                                                                        }))
+                                                                                                    }}
+                                                                                                    style={{
+                                                                                                        width: '100%',
+                                                                                                        padding: '0.2rem 1.1rem 0.2rem 0.35rem',
+                                                                                                        fontSize: '0.75rem',
+                                                                                                        fontWeight: 600,
+                                                                                                        borderRadius: '4px',
+                                                                                                        border: '1px solid var(--color-border)',
+                                                                                                        background: 'var(--color-surface, #0f172a)',
+                                                                                                        color: hasRetain ? '#fbbf24' : 'var(--color-text-main)',
+                                                                                                        textAlign: 'right'
+                                                                                                    }}
+                                                                                                />
+                                                                                                <span style={{
+                                                                                                    position: 'absolute',
+                                                                                                    right: '0.3rem',
+                                                                                                    top: '50%',
+                                                                                                    transform: 'translateY(-50%)',
+                                                                                                    fontSize: '0.68rem',
+                                                                                                    color: 'var(--color-text-muted)',
+                                                                                                    pointerEvents: 'none'
+                                                                                                }}>
+                                                                                                    {bt.isSetBased ? 'ชุด' : (round?.currency_symbol || '฿')}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        </div>
+                                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                                            <span style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', minWidth: '46px', textAlign: 'right' }}>ตีไม่เกิน:</span>
+                                                                                            <div style={{ position: 'relative', width: '80px' }}>
+                                                                                                <input
+                                                                                                    type="number"
+                                                                                                    min="1"
+                                                                                                    placeholder="ไม่จำกัด"
+                                                                                                    value={capVal}
+                                                                                                    onChange={(e) => {
+                                                                                                        const val = e.target.value
+                                                                                                        setRemainingMaxCapByType(prev => ({
+                                                                                                            ...prev,
+                                                                                                            [bt.bet_type]: val
+                                                                                                        }))
+                                                                                                    }}
+                                                                                                    style={{
+                                                                                                        width: '100%',
+                                                                                                        padding: '0.2rem 1.1rem 0.2rem 0.35rem',
+                                                                                                        fontSize: '0.75rem',
+                                                                                                        fontWeight: 600,
+                                                                                                        borderRadius: '4px',
+                                                                                                        border: '1px solid var(--color-border)',
+                                                                                                        background: 'var(--color-surface, #0f172a)',
+                                                                                                        color: hasCap ? '#38bdf8' : 'var(--color-text-main)',
+                                                                                                        textAlign: 'right'
+                                                                                                    }}
+                                                                                                />
+                                                                                                <span style={{
+                                                                                                    position: 'absolute',
+                                                                                                    right: '0.3rem',
+                                                                                                    top: '50%',
+                                                                                                    transform: 'translateY(-50%)',
+                                                                                                    fontSize: '0.68rem',
+                                                                                                    color: 'var(--color-text-muted)',
+                                                                                                    pointerEvents: 'none'
+                                                                                                }}>
+                                                                                                    {bt.isSetBased ? 'ชุด' : (round?.currency_symbol || '฿')}
+                                                                                                </span>
+                                                                                            </div>
                                                                                         </div>
                                                                                     </div>
                                                                                 </div>
@@ -6120,9 +6223,8 @@ export default function RoundAccordionItem({
                                                                     {filteredRemainingItems.map((item, idx) => {
                                                                         const isSelected = !!selectedRemainingItems[`${item.bet_type}|${item.numbers}`]
                                                                         const retainVal = remainingRetainByType[item.bet_type]
-                                                                        const hasRetain = retainVal !== undefined && retainVal !== null && retainVal !== '' && !isNaN(Number(retainVal)) && Number(retainVal) >= 0
-                                                                        const retain = hasRetain ? Number(retainVal) : 0
-                                                                        const transferAmt = hasRetain ? Math.max(0, item.remainingAmount - retain) : item.remainingAmount
+                                                                        const capVal = remainingMaxCapByType[item.bet_type]
+                                                                        const { transferAmount, hasRetain, hasCap } = calculateRemainingItemTransfer(item, retainVal, capVal)
                                                                         return (
                                                                             <tr
                                                                                 key={`${item.numbers}-${item.bet_type}-${idx}`}
@@ -6154,9 +6256,9 @@ export default function RoundAccordionItem({
                                                                                 </td>
                                                                                 <td style={{ fontWeight: 600, color: 'var(--color-warning)', textAlign: 'right' }}>
                                                                                     <div>{(round?.currency_symbol || '฿')}{(Number(item.remainingAmount) || 0).toLocaleString()}</div>
-                                                                                    {hasRetain && (
-                                                                                        <div style={{ fontSize: '0.7rem', fontWeight: 400, color: transferAmt > 0 ? '#38bdf8' : 'var(--color-text-muted)', marginTop: '0.1rem' }}>
-                                                                                            {transferAmt > 0 ? `ตีออก ${(round?.currency_symbol || '฿')}${transferAmt.toLocaleString()}` : 'เก็บหมด'}
+                                                                                    {(hasRetain || hasCap) && (
+                                                                                        <div style={{ fontSize: '0.7rem', fontWeight: 400, color: transferAmount > 0 ? '#38bdf8' : 'var(--color-text-muted)', marginTop: '0.1rem' }}>
+                                                                                            {transferAmount > 0 ? `ตีออก ${(round?.currency_symbol || '฿')}${transferAmount.toLocaleString()}` : 'เก็บหมด'}
                                                                                         </div>
                                                                                     )}
                                                                                 </td>
@@ -6185,8 +6287,10 @@ export default function RoundAccordionItem({
                                         const filteredSelectedAmount = filteredExcessItems
                                             .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
                                             .reduce((sum, item) => {
+                                                const capVal = excessMaxCapByType[item.bet_type]
+                                                const { transferAmount } = calculateExcessItemTransfer(item, capVal)
                                                 const setPrice = round?.set_prices?.['4_top'] || 120
-                                                return sum + (item.isSetBased ? item.excess * setPrice : item.excess)
+                                                return sum + (item.isSetBased ? transferAmount * setPrice : transferAmount)
                                             }, 0)
 
                                         // Compute breakdown by bet_type for filteredExcessItems
@@ -6482,6 +6586,119 @@ export default function RoundAccordionItem({
                                                                         )
                                                                     })}
                                                                 </div>
+
+                                                                {/* Split Layoff Cap Settings per Bet Type */}
+                                                                <div style={{
+                                                                    marginTop: '0.45rem',
+                                                                    paddingTop: '0.65rem',
+                                                                    borderTop: '1px solid rgba(255, 255, 255, 0.08)',
+                                                                    display: 'flex',
+                                                                    flexDirection: 'column',
+                                                                    gap: '0.5rem'
+                                                                }}>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                                                            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--color-text-main)' }}>
+                                                                                📤 แบ่งตีออกไม่เกินตัวละ (แยกตามประเภทเลข):
+                                                                            </span>
+                                                                            <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>
+                                                                                (เว้นว่าง = ตีออกยอดเกินทั้งหมด 100% | ยอดเกินไม่ถึง = ตีออกเท่าที่มี)
+                                                                            </span>
+                                                                        </div>
+                                                                        {Object.values(excessMaxCapByType).some(v => v !== '' && v !== undefined && v !== null) && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => setExcessMaxCapByType({})}
+                                                                                style={{
+                                                                                    background: 'transparent',
+                                                                                    border: '1px solid var(--color-border)',
+                                                                                    color: 'var(--color-text-muted)',
+                                                                                    borderRadius: '4px',
+                                                                                    padding: '0.15rem 0.5rem',
+                                                                                    fontSize: '0.72rem',
+                                                                                    cursor: 'pointer'
+                                                                                }}
+                                                                            >
+                                                                                ล้างยอดตีไม่เกินทั้งหมด
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+
+                                                                    <div style={{
+                                                                        display: 'grid',
+                                                                        gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))',
+                                                                        gap: '0.5rem'
+                                                                    }}>
+                                                                        {betTypeList.map(bt => {
+                                                                            const capVal = excessMaxCapByType[bt.bet_type] ?? ''
+                                                                            const hasCap = capVal !== '' && !isNaN(Number(capVal)) && Number(capVal) > 0
+                                                                            return (
+                                                                                <div
+                                                                                    key={`excess-cap-${bt.bet_type}`}
+                                                                                    style={{
+                                                                                        display: 'flex',
+                                                                                        alignItems: 'center',
+                                                                                        justifyContent: 'space-between',
+                                                                                        padding: '0.35rem 0.65rem',
+                                                                                        background: hasCap ? 'rgba(56, 189, 248, 0.1)' : 'rgba(0, 0, 0, 0.25)',
+                                                                                        border: `1px solid ${hasCap ? 'rgba(56, 189, 248, 0.4)' : 'var(--color-border, #334155)'}`,
+                                                                                        borderRadius: '6px',
+                                                                                        gap: '0.5rem'
+                                                                                    }}
+                                                                                >
+                                                                                    <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                                                                                        <span style={{ fontSize: '0.78rem', fontWeight: 600, color: hasCap ? '#38bdf8' : 'var(--color-text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                                            {bt.label}
+                                                                                        </span>
+                                                                                        <span style={{ fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+                                                                                            {bt.count} รายการ {hasCap ? `(ไม่เกิน ${bt.isSetBased ? `${Number(capVal).toLocaleString()} ชุด` : `฿${Number(capVal).toLocaleString()}`})` : '(ออกหมด)'}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                                        <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)' }}>ตีไม่เกิน:</span>
+                                                                                        <div style={{ position: 'relative', width: '85px' }}>
+                                                                                            <input
+                                                                                                type="number"
+                                                                                                min="1"
+                                                                                                placeholder="ออกหมด"
+                                                                                                value={capVal}
+                                                                                                onChange={(e) => {
+                                                                                                    const val = e.target.value
+                                                                                                    setExcessMaxCapByType(prev => ({
+                                                                                                        ...prev,
+                                                                                                        [bt.bet_type]: val
+                                                                                                    }))
+                                                                                                }}
+                                                                                                style={{
+                                                                                                    width: '100%',
+                                                                                                    padding: '0.25rem 1.2rem 0.25rem 0.45rem',
+                                                                                                    fontSize: '0.78rem',
+                                                                                                    fontWeight: 600,
+                                                                                                    borderRadius: '4px',
+                                                                                                    border: '1px solid var(--color-border)',
+                                                                                                    background: 'var(--color-surface, #0f172a)',
+                                                                                                    color: hasCap ? '#38bdf8' : 'var(--color-text-main)',
+                                                                                                    textAlign: 'right'
+                                                                                                }}
+                                                                                            />
+                                                                                            <span style={{
+                                                                                                position: 'absolute',
+                                                                                                right: '0.35rem',
+                                                                                                top: '50%',
+                                                                                                transform: 'translateY(-50%)',
+                                                                                                fontSize: '0.7rem',
+                                                                                                color: 'var(--color-text-muted)',
+                                                                                                pointerEvents: 'none'
+                                                                                            }}>
+                                                                                                {bt.isSetBased ? 'ชุด' : (round?.currency_symbol || '฿')}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            )
+                                                                        })}
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         )}
 
@@ -6528,9 +6745,9 @@ export default function RoundAccordionItem({
                                                                 <button
                                                                     className="btn btn-warning"
                                                                     onClick={(e) => { e.stopPropagation(); handleOpenTransferModal(); }}
-                                                                    disabled={filteredSelectedCount === 0}
+                                                                    disabled={filteredSelectedCount === 0 || calculatedExcessTransferItems.length === 0}
                                                                 >
-                                                                    <FiSend /> ตีออก ({filteredSelectedCount})
+                                                                    <FiSend /> ตีออก ({calculatedExcessTransferItems.length})
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -6558,7 +6775,10 @@ export default function RoundAccordionItem({
                                                             {filteredExcessItems.map((item, idx) => {
                                                                 const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
                                                                 const setPrice = round?.set_prices?.['4_top'] || 120
-                                                                const excessAmount = item.isSetBased ? item.excess * setPrice : item.excess
+                                                                const capVal = excessMaxCapByType[item.bet_type]
+                                                                const { transferAmount, hasCap } = calculateExcessItemTransfer(item, capVal)
+                                                                const transferTotal = item.isSetBased ? transferAmount * setPrice : transferAmount
+                                                                const excessTotal = item.isSetBased ? item.excess * setPrice : item.excess
                                                                 return (
                                                                     <div
                                                                         key={idx}
@@ -6599,8 +6819,15 @@ export default function RoundAccordionItem({
                                                                         </div>
                                                                         <div style={{ textAlign: 'right', color: 'var(--color-warning)', fontWeight: 600 }}>
                                                                             {item.isAIRecommended && <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginBottom: '0.1rem' }}>ตีออก</div>}
-                                                                            {round.currency_symbol}{(excessAmount || 0).toLocaleString()}
-                                                                            {item.isSetBased && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({item.excess} ชุด)</div>}
+                                                                            <div style={{ color: hasCap && transferAmount < item.excess ? '#38bdf8' : 'var(--color-warning)' }}>
+                                                                                {round.currency_symbol}{(transferTotal || 0).toLocaleString()}
+                                                                            </div>
+                                                                            {hasCap && transferAmount < item.excess && (
+                                                                                <div style={{ fontSize: '0.68rem', fontWeight: 400, color: 'var(--color-text-muted)' }}>
+                                                                                    (เกินจริง {round.currency_symbol}{excessTotal.toLocaleString()})
+                                                                                </div>
+                                                                            )}
+                                                                            {item.isSetBased && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({transferAmount} ชุด)</div>}
                                                                         </div>
                                                                     </div>
                                                                 )

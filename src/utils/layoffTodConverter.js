@@ -236,3 +236,50 @@ export function calculateTransferDeduction(transfers, targetBetType, targetNumbe
     return total
 }
 
+/**
+ * Calculates transferable amount and metadata for an item in the Remaining Tab.
+ * @param {object} item - Item with remainingAmount and bet_type
+ * @param {number|string|null|undefined} retainVal - Amount to keep for this bet type
+ * @param {number|string|null|undefined} maxCapVal - Maximum amount to transfer per number in this round
+ * @returns {object} { transferAmount: number, retainAmount: number, hasRetain: boolean, maxCap: number|null, hasCap: boolean, availableAfterRetain: number }
+ */
+export function calculateRemainingItemTransfer(item, retainVal, maxCapVal) {
+    const hasRetain = retainVal !== undefined && retainVal !== null && retainVal !== '' && !isNaN(Number(retainVal)) && Number(retainVal) >= 0
+    const retain = hasRetain ? Number(retainVal) : 0
+    const remaining = Number(item?.remainingAmount || 0)
+    const availableAfterRetain = hasRetain ? Math.max(0, remaining - retain) : remaining
+
+    const hasCap = maxCapVal !== undefined && maxCapVal !== null && maxCapVal !== '' && !isNaN(Number(maxCapVal)) && Number(maxCapVal) > 0
+    const cap = hasCap ? Number(maxCapVal) : null
+    const transferAmount = hasCap ? Math.min(availableAfterRetain, cap) : availableAfterRetain
+
+    return {
+        transferAmount,
+        retainAmount: retain,
+        hasRetain,
+        maxCap: cap,
+        hasCap,
+        availableAfterRetain
+    }
+}
+
+/**
+ * Calculates transferable amount and metadata for an item in the Excess Tab.
+ * @param {object} item - Item with excess and bet_type
+ * @param {number|string|null|undefined} maxCapVal - Maximum amount (or sets) to transfer per number in this round
+ * @returns {object} { transferAmount: number, maxCap: number|null, hasCap: boolean }
+ */
+export function calculateExcessItemTransfer(item, maxCapVal) {
+    const excess = Number(item?.excess || 0)
+    const hasCap = maxCapVal !== undefined && maxCapVal !== null && maxCapVal !== '' && !isNaN(Number(maxCapVal)) && Number(maxCapVal) > 0
+    const cap = hasCap ? Number(maxCapVal) : null
+    const transferAmount = hasCap ? Math.min(excess, cap) : excess
+
+    return {
+        transferAmount,
+        maxCap: cap,
+        hasCap
+    }
+}
+
+
