@@ -536,7 +536,7 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                             <div className="info-item-value">{member.membership_years} ปี</div>
                                         </div>
                                     )}
-                                    <div className="info-item line-uid-item" style={{ gridColumn: 'span 2' }}>
+                                    <div className="info-item line-uid-item" style={{ gridColumn: '1 / span 2' }}>
                                         <label className="info-item-label">Line UID</label>
                                         <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
                                             <input
@@ -603,8 +603,7 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                         <div
                                             className="info-item line-assistants-section"
                                             style={{
-                                                gridColumn: 'span 2',
-                                                marginTop: '0.5rem',
+                                                gridColumn: '1 / span 2',
                                                 padding: '1rem',
                                                 background: 'rgba(255, 255, 255, 0.02)',
                                                 border: '1px solid var(--color-border)',

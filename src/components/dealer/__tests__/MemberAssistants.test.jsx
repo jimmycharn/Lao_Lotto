@@ -99,5 +99,6 @@ describe('MemberAccordionItem — Key-in Assistants UI', () => {
         expect(html).not.toContain('ยังไม่มีผู้ช่วยคีย์ข้อมูล')
         expect(html).not.toContain('ค่าเริ่มต้น: คีย์เลขแทงได้')
         expect(html).toContain('เพิ่มผู้ช่วย')
+        expect(html).toContain('grid-column:1 / span 2')
     })
 })
