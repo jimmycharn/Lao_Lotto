@@ -615,7 +615,7 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                 <label className="info-item-label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', margin: 0, fontWeight: 600, color: 'var(--color-text)' }}>
                                                     <FiUserPlus style={{ color: 'var(--color-primary)' }} />
-                                                    <span>ผู้ช่วยคีย์ข้อมูล (Line UIDs เพิ่มเติม)</span>
+                                                    <span>ผู้ช่วยคีย์ข้อมูล</span>
                                                     <span style={{
                                                         fontSize: '0.75rem',
                                                         padding: '0.1rem 0.5rem',
@@ -629,19 +629,7 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                                 </label>
                                             </div>
 
-                                            {assistants.length === 0 ? (
-                                                <div style={{
-                                                    fontSize: '0.85rem',
-                                                    color: 'var(--color-text-muted)',
-                                                    padding: '0.65rem 0.75rem',
-                                                    background: 'var(--color-surface)',
-                                                    borderRadius: 'var(--radius-sm)',
-                                                    border: '1px dashed var(--color-border)',
-                                                    marginBottom: '0.75rem'
-                                                }}>
-                                                    ยังไม่มีผู้ช่วยคีย์ข้อมูล — เพิ่ม LINE UID เพื่ออนุญาตให้หลายคนคีย์เลขแทงลงบัญชีนี้ร่วมกันได้
-                                                </div>
-                                            ) : (
+                                            {assistants.length > 0 && (
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
                                                     {assistants.map((asst) => (
                                                         <div
@@ -820,15 +808,6 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                                     {isAddingAssistant ? 'กำลังเพิ่ม...' : '+ เพิ่มผู้ช่วย'}
                                                 </button>
                                             </div>
-                                            <p style={{
-                                                fontSize: '0.78rem',
-                                                color: 'var(--color-text-muted)',
-                                                marginTop: '0.4rem',
-                                                marginBottom: 0,
-                                                opacity: 0.85
-                                            }}>
-                                                ค่าเริ่มต้น: คีย์เลขแทงได้และยกเลิกได้เฉพาะใบที่ตัวเองคีย์ (เจ้ามือสามารถเปิดสิทธิ์ดูสรุป/โพยถูกรายคนได้ด้านบน)
-                                            </p>
                                         </div>
                                     )}
                                 </div>

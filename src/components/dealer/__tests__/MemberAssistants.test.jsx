@@ -76,7 +76,7 @@ describe('MemberAccordionItem — Key-in Assistants UI', () => {
         expect(html).toContain('เพิ่มผู้ช่วย')
     })
 
-    it('renders empty state hint when member has no assistants yet', () => {
+    it('renders clean compact section without verbose explanations when member has no assistants yet', () => {
         const html = renderToString(
             <MemberAccordionItem
                 member={baseMember}
@@ -94,7 +94,10 @@ describe('MemberAccordionItem — Key-in Assistants UI', () => {
         )
 
         expect(html).toContain('ผู้ช่วยคีย์ข้อมูล')
-        expect(html).toContain('ยังไม่มีผู้ช่วยคีย์')
+        expect(html).toContain('0<!-- --> คน')
+        expect(html).not.toContain('(Line UIDs เพิ่มเติม)')
+        expect(html).not.toContain('ยังไม่มีผู้ช่วยคีย์ข้อมูล')
+        expect(html).not.toContain('ค่าเริ่มต้น: คีย์เลขแทงได้')
         expect(html).toContain('เพิ่มผู้ช่วย')
     })
 })
