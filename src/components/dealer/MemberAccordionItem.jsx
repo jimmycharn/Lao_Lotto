@@ -510,11 +510,7 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                         <label className="info-item-label">เบอร์โทรศัพท์</label>
                                         <div className="info-item-value">{member.phone || '-'}</div>
                                     </div>
-                                    <div className="info-item">
-                                        <label className="info-item-label">วันที่สมัคร</label>
-                                        <div className="info-item-value">{formatDate(member.created_at)}</div>
-                                    </div>
-                                    <div className="info-item">
+                                    <div className="info-item" style={{ gridColumn: 1 }}>
                                         <label className="info-item-label">สถานะ</label>
                                         <div className="info-item-value" style={{ color: membershipExpired ? 'var(--color-error)' : 'var(--color-success)' }}>
                                             <span className={`status-badge ${membershipExpired ? 'closed' : 'open'}`} style={{ fontSize: '0.9rem' }}>
@@ -522,8 +518,12 @@ export default function MemberAccordionItem({ member, formatDate, isExpanded, on
                                             </span>
                                         </div>
                                     </div>
+                                    <div className="info-item">
+                                        <label className="info-item-label">วันที่สมัคร</label>
+                                        <div className="info-item-value">{formatDate(member.created_at)}</div>
+                                    </div>
                                     {isPerUserYearly && !isDealer && member.membership_expires_at && (
-                                        <div className="info-item">
+                                        <div className="info-item" style={{ gridColumn: 1 }}>
                                             <label className="info-item-label">วันหมดอายุ</label>
                                             <div className="info-item-value" style={{ color: membershipExpired ? 'var(--color-error)' : 'var(--color-text)' }}>
                                                 {new Date(member.membership_expires_at).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' })}
