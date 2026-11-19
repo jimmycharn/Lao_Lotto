@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sortRemainingItems } from '../remainingSortHelper'
+import { sortRemainingItems, sortTransferModalItems } from '../remainingSortHelper'
 
 describe('sortRemainingItems', () => {
     const mockItems = [
@@ -63,6 +63,64 @@ describe('sortRemainingItems', () => {
             const sorted = sortRemainingItems(itemsWithNaN, 'remaining', 'desc')
             expect(sorted[0].numbers).toBe('22')
             expect(sorted[1].numbers).toBe('11')
+        })
+    })
+})
+
+describe('sortTransferModalItems', () => {
+    const mockModalItems = [
+        { numbers: '369', bet_type: '3_top', excess: 50, originalRemaining: 175 },
+        { numbers: '643', bet_type: '3_top', excess: 100, originalRemaining: 175 },
+        { numbers: '396', bet_type: '3_top', excess: 50, originalRemaining: 176 },
+        { numbers: '685', bet_type: '3_top', excess: 200, originalRemaining: 176 },
+        { numbers: '05', bet_type: '2_top', excess: 30, originalRemaining: 50 }
+    ]
+
+    describe('Sort by number', () => {
+        it('sorts numbers ascending: shorter length first, then numeric value', () => {
+            const sorted = sortTransferModalItems(mockModalItems, 'number', 'asc')
+            expect(sorted.map(i => i.numbers)).toEqual(['05', '369', '396', '643', '685'])
+        })
+
+        it('sorts numbers descending: longer length first, then numeric value descending', () => {
+            const sorted = sortTransferModalItems(mockModalItems, 'number', 'desc')
+            expect(sorted.map(i => i.numbers)).toEqual(['685', '643', '396', '369', '05'])
+        })
+
+        it('uses displayNumbers when present (e.g. converted tod permutations)', () => {
+            const itemsWithDisplay = [
+                { numbers: '123', displayNumbers: '321', excess: 50 },
+                { numbers: '999', displayNumbers: '111', excess: 50 }
+            ]
+            const sorted = sortTransferModalItems(itemsWithDisplay, 'number', 'asc')
+            expect(sorted.map(i => i.displayNumbers)).toEqual(['111', '321'])
+        })
+    })
+
+    describe('Sort by amount (excess)', () => {
+        it('sorts by excess amount descending with number tie-breaker', () => {
+            const sorted = sortTransferModalItems(mockModalItems, 'amount', 'desc')
+            // excess: 200 (685), 100 (643), 50 (369, 396 -> 369 before 396), 30 (05)
+            expect(sorted.map(i => i.numbers)).toEqual(['685', '643', '369', '396', '05'])
+        })
+
+        it('sorts by excess amount ascending with number tie-breaker', () => {
+            const sorted = sortTransferModalItems(mockModalItems, 'amount', 'asc')
+            // excess: 30 (05), 50 (369, 396 -> 369 before 396), 100 (643), 200 (685)
+            expect(sorted.map(i => i.numbers)).toEqual(['05', '369', '396', '643', '685'])
+        })
+    })
+
+    describe('Edge cases', () => {
+        it('handles null, undefined or empty array', () => {
+            expect(sortTransferModalItems(null)).toEqual([])
+            expect(sortTransferModalItems(undefined)).toEqual([])
+            expect(sortTransferModalItems([])).toEqual([])
+        })
+
+        it('handles single item without changes', () => {
+            const single = [{ numbers: '123', excess: 50 }]
+            expect(sortTransferModalItems(single)).toEqual(single)
         })
     })
 })

@@ -56,7 +56,7 @@ import {
     calculateRemainingItemTransfer,
     calculateExcessItemTransfer
 } from '../../utils/layoffTodConverter'
-import { sortRemainingItems } from '../../utils/remainingSortHelper'
+import { sortRemainingItems, sortTransferModalItems } from '../../utils/remainingSortHelper'
 import BetTypeChipsFilter from './BetTypeChipsFilter'
 import {
     isBetTypeMatched,
@@ -410,6 +410,8 @@ export default function RoundAccordionItem({
     const [excessMaxCapByType, setExcessMaxCapByType] = useState({}) // { [bet_type]: number | '' }
     const [remainingSortBy, setRemainingSortBy] = useState('number') // 'number' | 'remaining' | 'total'
     const [remainingSortOrder, setRemainingSortOrder] = useState('asc') // 'asc' | 'desc'
+    const [modalTransferSortBy, setModalTransferSortBy] = useState('number') // 'number' | 'amount'
+    const [modalTransferSortOrder, setModalTransferSortOrder] = useState('asc') // 'asc' | 'desc'
     
     // Graph-based Layoff states
     const [showGraphLayoffModal, setShowGraphLayoffModal] = useState(false)
@@ -1836,6 +1838,15 @@ export default function RoundAccordionItem({
         }
     }
 
+    const handleToggleModalTransferSort = (colKey) => {
+        if (modalTransferSortBy === colKey) {
+            setModalTransferSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+        } else {
+            setModalTransferSortBy(colKey)
+            setModalTransferSortOrder(colKey === 'number' ? 'asc' : 'desc')
+        }
+    }
+
     // Filtered items matching the current user filter, search chips, and sort order:
     const filteredRemainingItems = useMemo(() => {
         const raw = activeRemainingItems.filter(item => {
@@ -1938,6 +1949,8 @@ export default function RoundAccordionItem({
             toast.warning('ไม่มีรายการที่จะตีออก (ทุกเลขที่เลือกมียอดไม่เกินจำนวนเงินที่ตั้งเก็บไว้)')
             return
         }
+        setModalTransferSortBy('number')
+        setModalTransferSortOrder('asc')
         setGraphTransferItems(null)
         setTransferSource('remaining')
         setShowTransferModal(true)
@@ -1954,6 +1967,8 @@ export default function RoundAccordionItem({
             toast.warning('ไม่มีรายการที่จะตีออก')
             return
         }
+        setModalTransferSortBy('number')
+        setModalTransferSortOrder('asc')
         setGraphTransferItems(null)
         setTransferSource('excess')
         const initialTypes = {}
@@ -1975,6 +1990,8 @@ export default function RoundAccordionItem({
             ? mergeTodToTopExcessItems(stagedItems, round?.lottery_type)
             : stagedItems
 
+        setModalTransferSortBy('number')
+        setModalTransferSortOrder('asc')
         setGraphTransferItems(stagedItemsToTransfer)
         setTransferSource(source)
         const initialTypes = {}
@@ -2078,6 +2095,10 @@ export default function RoundAccordionItem({
         }, 0)
     }, [modalSelectedItems, round])
 
+    const sortedModalSelectedItems = useMemo(() => {
+        return sortTransferModalItems(modalSelectedItems, modalTransferSortBy, modalTransferSortOrder)
+    }, [modalSelectedItems, modalTransferSortBy, modalTransferSortOrder])
+
     const handleSaveTransfer = async () => {
         if (!transferForm.target_dealer_name) {
             toast.warning('กรุณากรอกชื่อเจ้ามือที่ต้องการตีออก')
@@ -2090,7 +2111,7 @@ export default function RoundAccordionItem({
             return
         }
         
-        const selectedItems = modalSelectedItems
+        const selectedItems = sortedModalSelectedItems
         if (selectedItems.length === 0) {
             toast.warning('กรุณาเลือกประเภทเลขที่ต้องการตีออกอย่างน้อย 1 ประเภท')
             return
@@ -6960,14 +6981,81 @@ export default function RoundAccordionItem({
                                                         }}>
                                                             <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-text-muted)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                                 <span>รายการที่จะตีออก ({modalSelectedCount} รายการ):</span>
+                                                                <span style={{ fontSize: '0.72rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>
+                                                                    (คลิกเพื่อเรียงลำดับ)
+                                                                </span>
                                                             </div>
+
+                                                            {/* Column Sort Header */}
+                                                            <div style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'space-between',
+                                                                padding: '0.25rem 0.55rem',
+                                                                background: 'rgba(255, 255, 255, 0.03)',
+                                                                border: '1px solid rgba(255, 255, 255, 0.06)',
+                                                                borderRadius: '6px',
+                                                                marginBottom: '0.45rem',
+                                                                fontSize: '0.75rem',
+                                                                fontWeight: 600,
+                                                                userSelect: 'none'
+                                                            }}>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleToggleModalTransferSort('number')}
+                                                                    style={{
+                                                                        background: modalTransferSortBy === 'number' ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
+                                                                        border: `1px solid ${modalTransferSortBy === 'number' ? 'rgba(245, 158, 11, 0.4)' : 'transparent'}`,
+                                                                        borderRadius: '4px',
+                                                                        padding: '0.2rem 0.5rem',
+                                                                        cursor: 'pointer',
+                                                                        font: 'inherit',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '0.25rem',
+                                                                        color: modalTransferSortBy === 'number' ? 'var(--color-warning)' : 'var(--color-text-muted)',
+                                                                        transition: 'all 0.15s ease'
+                                                                    }}
+                                                                    title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"
+                                                                >
+                                                                    <span>เลข</span>
+                                                                    <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                                                                        {modalTransferSortBy === 'number' ? (modalTransferSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                    </span>
+                                                                </button>
+
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleToggleModalTransferSort('amount')}
+                                                                    style={{
+                                                                        background: modalTransferSortBy === 'amount' ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
+                                                                        border: `1px solid ${modalTransferSortBy === 'amount' ? 'rgba(245, 158, 11, 0.4)' : 'transparent'}`,
+                                                                        borderRadius: '4px',
+                                                                        padding: '0.2rem 0.5rem',
+                                                                        cursor: 'pointer',
+                                                                        font: 'inherit',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '0.25rem',
+                                                                        color: modalTransferSortBy === 'amount' ? 'var(--color-warning)' : 'var(--color-text-muted)',
+                                                                        transition: 'all 0.15s ease'
+                                                                    }}
+                                                                    title="คลิกเพื่อเรียงตามจำนวนที่ตีออก (มากไปน้อย / น้อยไปมาก)"
+                                                                >
+                                                                    <span>จำนวนที่ตีออก</span>
+                                                                    <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                                                                        {modalTransferSortBy === 'amount' ? (modalTransferSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                    </span>
+                                                                </button>
+                                                            </div>
+
                                                             <div style={{ maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                                                                {modalSelectedItems.length === 0 ? (
+                                                                {sortedModalSelectedItems.length === 0 ? (
                                                                     <div style={{ textAlign: 'center', padding: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.78rem', fontStyle: 'italic' }}>
                                                                         ไม่มีรายการที่จะตีออก (ไม่มียอดที่เกินจำนวนเงินที่เก็บไว้)
                                                                     </div>
                                                                 ) : (
-                                                                    modalSelectedItems.map((item, idx) => (
+                                                                    sortedModalSelectedItems.map((item, idx) => (
                                                                         <div
                                                                             key={idx}
                                                                             style={{
