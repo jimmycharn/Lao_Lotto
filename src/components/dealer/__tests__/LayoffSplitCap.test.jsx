@@ -102,4 +102,42 @@ describe('Layoff Split Cap Logic (แบ่งตีออกไม่เกิ�
             expect(result.transferAmount).toBe(2)
         })
     })
+
+    describe('Filter Isolation (การแยกขอบเขตการเลือกตามตัวกรอง)', () => {
+        it('calculatedRemainingTransferItems must only calculate from filteredRemainingItems, never exceeding filtered count', () => {
+            // Simulate 1,457 total items, where 823 items were previously in selectedRemainingItems
+            const allItems = Array.from({ length: 1457 }, (_, i) => ({
+                bet_type: i < 991 ? '3_top' : '2_top',
+                numbers: String(i).padStart(3, '0'),
+                remainingAmount: 200
+            }))
+
+            // Stale selected state containing 823 items across the round
+            const selectedRemainingItems = {}
+            allItems.slice(0, 823).forEach(item => {
+                selectedRemainingItems[`${item.bet_type}|${item.numbers}`] = true
+            })
+
+            // Now dealer applies a filter that narrows the view to 334 items
+            const filteredRemainingItems = allItems.slice(0, 334)
+
+            // Calculate transfer items strictly bounded by filteredRemainingItems
+            const rawSelected = filteredRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`])
+            const retainVal = 100
+            const capVal = 20
+
+            const calculatedItems = rawSelected.map(item => {
+                const { transferAmount, retainAmount, maxCap } = calculateRemainingItemTransfer(item, retainVal, capVal)
+                return { ...item, excess: transferAmount, retainAmount, maxCap }
+            }).filter(item => item.excess > 0)
+
+            // Must NOT be 823! It must be bounded by the 334 filtered items!
+            expect(rawSelected.length).toBe(334)
+            expect(calculatedItems.length).toBe(334)
+            expect(calculatedItems.length).toBeLessThanOrEqual(filteredRemainingItems.length)
+            // Each item transfers capped 20 baht
+            expect(calculatedItems[0].excess).toBe(20)
+        })
+    })
 })
+

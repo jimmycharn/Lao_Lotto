@@ -1836,8 +1836,32 @@ export default function RoundAccordionItem({
         }
     }
 
+    // Filtered items matching the current user filter, search chips, and sort order:
+    const filteredRemainingItems = useMemo(() => {
+        const raw = activeRemainingItems.filter(item => {
+            if (!isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)) return false
+            if (isSearchActive) {
+                const numMatched = isSearchNumberMatched(item.numbers, activeSearchNumbers, inlineIsCompositeSearch)
+                if (inlineSearchMode === 'exclude' ? numMatched : !numMatched) return false
+            }
+            return true
+        })
+        return sortRemainingItems(raw, remainingSortBy, remainingSortOrder)
+    }, [activeRemainingItems, inlineSelectedBetTypes, isSearchActive, activeSearchNumbers, inlineIsCompositeSearch, inlineSearchMode, remainingSortBy, remainingSortOrder])
+
+    const filteredExcessItems = useMemo(() => {
+        return activeExcessItems.filter(item => {
+            if (!isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)) return false
+            if (isSearchActive) {
+                const numMatched = isSearchNumberMatched(item.numbers, activeSearchNumbers, inlineIsCompositeSearch)
+                if (inlineSearchMode === 'exclude' ? numMatched : !numMatched) return false
+            }
+            return true
+        })
+    }, [activeExcessItems, inlineSelectedBetTypes, isSearchActive, activeSearchNumbers, inlineIsCompositeSearch, inlineSearchMode])
+
     // Calculate items for remaining transfer:
-    // 1. Take user-selected items from baseRemainingItems
+    // 1. Take user-selected items from filteredRemainingItems (strictly matching current view/filters)
     // 2. Apply retain amount per bet type (remainingRetainByType):
     //    - If not specified: retain = 0, transfer 100% of remainingAmount
     //    - If specified: keep up to retain amount, transfer remaining - retain (if remaining <= retain, keep all -> transfer 0)
@@ -1846,7 +1870,7 @@ export default function RoundAccordionItem({
     // 4. Keep only items with excess > 0
     // 5. If isConvertTodToTopRemainingActive is true: convert ONLY selected 3_tod items with excess > 0 to 3_top permutations
     const calculatedRemainingTransferItems = useMemo(() => {
-        const rawSelected = baseRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`])
+        const rawSelected = filteredRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`])
         if (rawSelected.length === 0) return []
 
         const itemsWithExcess = rawSelected.map(item => {
@@ -1871,7 +1895,7 @@ export default function RoundAccordionItem({
         }
 
         return itemsWithExcess
-    }, [baseRemainingItems, selectedRemainingItems, remainingRetainByType, remainingMaxCapByType, isConvertTodToTopRemainingActive, round?.lottery_type])
+    }, [filteredRemainingItems, selectedRemainingItems, remainingRetainByType, remainingMaxCapByType, isConvertTodToTopRemainingActive, round?.lottery_type])
 
     const totalRemainingTransferAmount = useMemo(() => {
         return calculatedRemainingTransferItems.reduce((sum, item) => {
@@ -1881,13 +1905,13 @@ export default function RoundAccordionItem({
     }, [calculatedRemainingTransferItems, round])
 
     // Calculate items for excess transfer:
-    // 1. Take user-selected items from activeExcessItems
+    // 1. Take user-selected items from filteredExcessItems (strictly matching current view/filters)
     // 2. Apply split cap per bet type (excessMaxCapByType):
     //    - If not specified: transfer 100% of excess
     //    - If specified: cap transfer amount at maxCap per number (or sets)
     // 3. Keep only items with excess > 0
     const calculatedExcessTransferItems = useMemo(() => {
-        const rawSelected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        const rawSelected = filteredExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
         if (rawSelected.length === 0) return []
 
         return rawSelected.map(item => {
@@ -1901,11 +1925,11 @@ export default function RoundAccordionItem({
                 maxCap
             }
         }).filter(item => item.excess > 0)
-    }, [activeExcessItems, selectedExcessItems, excessMaxCapByType])
+    }, [filteredExcessItems, selectedExcessItems, excessMaxCapByType])
 
     // Helper to open transfer modal from Remaining tab
     const handleOpenRemainingTransferModal = () => {
-        const rawSelectedCount = baseRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`]).length
+        const rawSelectedCount = filteredRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`]).length
         if (rawSelectedCount === 0) {
             toast.warning('กรุณาเลือกรายการที่ต้องการตีออก')
             return
@@ -1921,7 +1945,7 @@ export default function RoundAccordionItem({
 
     // Helper to open transfer modal with pre-initialized bet types
     const handleOpenTransferModal = () => {
-        const rawSelected = activeExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
+        const rawSelected = filteredExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
         if (rawSelected.length === 0) {
             toast.warning('กรุณาเลือกรายการที่ต้องการตีออก')
             return
@@ -5636,17 +5660,6 @@ export default function RoundAccordionItem({
                                     )}
 
                                     {inlineTab === 'remaining' && (() => {
-                                        // Filter activeRemainingItems by inlineSelectedBetTypes and activeSearchNumbers
-                                        const rawRemainingItems = activeRemainingItems.filter(item => {
-                                            if (!isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)) return false
-                                            if (isSearchActive) {
-                                                const numMatched = isSearchNumberMatched(item.numbers, activeSearchNumbers, inlineIsCompositeSearch)
-                                                if (inlineSearchMode === 'exclude' ? numMatched : !numMatched) return false
-                                            }
-                                            return true
-                                        })
-                                        const filteredRemainingItems = sortRemainingItems(rawRemainingItems, remainingSortBy, remainingSortOrder)
-
                                         const totalRemaining = filteredRemainingItems.reduce((sum, item) => sum + (Number(item.remainingAmount) || 0), 0)
                                         const filteredSelectedCount = filteredRemainingItems.filter(item => selectedRemainingItems[`${item.bet_type}|${item.numbers}`]).length
                                         const filteredSelectedAmount = filteredRemainingItems
@@ -5864,13 +5877,7 @@ export default function RoundAccordionItem({
                                                                             <button
                                                                                 type="button"
                                                                                 className="btn btn-sm"
-                                                                                onClick={() => {
-                                                                                    const next = { ...selectedRemainingItems }
-                                                                                    filteredRemainingItems.forEach(item => {
-                                                                                        delete next[`${item.bet_type}|${item.numbers}`]
-                                                                                    })
-                                                                                    setSelectedRemainingItems(next)
-                                                                                }}
+                                                                                onClick={() => setSelectedRemainingItems({})}
                                                                                 style={{
                                                                                     padding: '0.2rem 0.45rem',
                                                                                     fontSize: '0.72rem',
@@ -6275,14 +6282,6 @@ export default function RoundAccordionItem({
                                     })()}
 
                                     {inlineTab === 'excess' && (() => {
-                                        const filteredExcessItems = activeExcessItems.filter(item => {
-                                            if (!isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)) return false
-                                            if (isSearchActive) {
-                                                const numMatched = isSearchNumberMatched(item.numbers, activeSearchNumbers, inlineIsCompositeSearch)
-                                                if (inlineSearchMode === 'exclude' ? numMatched : !numMatched) return false
-                                            }
-                                            return true
-                                        })
                                         const filteredSelectedCount = filteredExcessItems.filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`]).length
                                         const filteredSelectedAmount = filteredExcessItems
                                             .filter(item => selectedExcessItems[`${item.bet_type}|${item.numbers}`])
@@ -6503,13 +6502,7 @@ export default function RoundAccordionItem({
                                                                             <button
                                                                                 type="button"
                                                                                 className="btn btn-sm"
-                                                                                onClick={() => {
-                                                                                    const next = { ...selectedExcessItems }
-                                                                                    filteredExcessItems.forEach(item => {
-                                                                                        delete next[`${item.bet_type}|${item.numbers}`]
-                                                                                    })
-                                                                                    setSelectedExcessItems(next)
-                                                                                }}
+                                                                                onClick={() => setSelectedExcessItems({})}
                                                                                 style={{
                                                                                     padding: '0.2rem 0.45rem',
                                                                                     fontSize: '0.72rem',
