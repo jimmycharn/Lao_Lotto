@@ -5,7 +5,10 @@ import {
     getDigitGroups,
     isBetTypeMatched,
     matchesCompositeDigits,
-    isSearchNumberMatched
+    isSearchNumberMatched,
+    isSearchNoteMatched,
+    isSubmissionSearchMatched,
+    isBillItemSearchMatched
 } from './betTypeFilterHelper'
 
 describe('betTypeFilterHelper', () => {
@@ -259,6 +262,173 @@ describe('betTypeFilterHelper', () => {
             expect(isSearchNumberMatched('123', [], false)).toBe(true)
             expect(isSearchNumberMatched('123', [], true)).toBe(true)
             expect(isSearchNumberMatched('123', ['', null], false)).toBe(true)
+        })
+    })
+
+    describe('isSearchNoteMatched', () => {
+        it('should return false for empty note or empty search targets', () => {
+            expect(isSearchNoteMatched('', ['หญิง'])).toBe(false)
+            expect(isSearchNoteMatched(null, ['หญิง'])).toBe(false)
+            expect(isSearchNoteMatched('หญิง', [])).toBe(false)
+            expect(isSearchNoteMatched('หญิง', null)).toBe(false)
+        })
+
+        it('should match case-insensitively and substring', () => {
+            expect(isSearchNoteMatched('โพยคุณหญิง', ['หญิง'])).toBe(true)
+            expect(isSearchNoteMatched('VIP-Note', ['vip'])).toBe(true)
+            expect(isSearchNoteMatched('โพยสมชาย', ['หญิง'])).toBe(false)
+        })
+
+        it('should support single string target as well as array', () => {
+            expect(isSearchNoteMatched('โพยคุณหญิง', 'หญิง')).toBe(true)
+            expect(isSearchNoteMatched('โพยคุณหญิง', 'ชาย')).toBe(false)
+        })
+    })
+
+    describe('isSubmissionSearchMatched (include vs exclude mode)', () => {
+        const targets = ['หญิง', '123']
+
+        describe('Include Mode (default)', () => {
+            it('should return true if numbers match target', () => {
+                expect(isSubmissionSearchMatched({
+                    numbers: '123',
+                    note: 'สมชาย',
+                    searchTargets: targets,
+                    searchMode: 'include'
+                })).toBe(true)
+            })
+
+            it('should return true if note matches target', () => {
+                expect(isSubmissionSearchMatched({
+                    numbers: '999',
+                    note: 'โพยคุณหญิง',
+                    searchTargets: targets,
+                    searchMode: 'include'
+                })).toBe(true)
+            })
+
+            it('should return false if neither numbers nor note match', () => {
+                expect(isSubmissionSearchMatched({
+                    numbers: '999',
+                    note: 'สมชาย',
+                    searchTargets: targets,
+                    searchMode: 'include'
+                })).toBe(false)
+            })
+
+            it('should return true when searchTargets is empty', () => {
+                expect(isSubmissionSearchMatched({
+                    numbers: '999',
+                    note: 'สมชาย',
+                    searchTargets: [],
+                    searchMode: 'include'
+                })).toBe(true)
+            })
+        })
+
+        describe('Exclude Mode (ไม่เอา / ยกเว้น)', () => {
+            it('should return false (exclude) if numbers match target', () => {
+                expect(isSubmissionSearchMatched({
+                    numbers: '123',
+                    note: 'สมชาย',
+                    searchTargets: targets,
+                    searchMode: 'exclude'
+                })).toBe(false)
+            })
+
+            it('should return false (exclude) if note matches target', () => {
+                expect(isSubmissionSearchMatched({
+                    numbers: '999',
+                    note: 'โพยคุณหญิง',
+                    searchTargets: targets,
+                    searchMode: 'exclude'
+                })).toBe(false)
+            })
+
+            it('should return true (keep) if neither numbers nor note match target', () => {
+                expect(isSubmissionSearchMatched({
+                    numbers: '999',
+                    note: 'สมชาย',
+                    searchTargets: targets,
+                    searchMode: 'exclude'
+                })).toBe(true)
+            })
+
+            it('should return true when searchTargets is empty in exclude mode', () => {
+                expect(isSubmissionSearchMatched({
+                    numbers: '999',
+                    note: 'สมชาย',
+                    searchTargets: [],
+                    searchMode: 'exclude'
+                })).toBe(true)
+            })
+        })
+    })
+
+    describe('isBillItemSearchMatched', () => {
+        const targets = ['หญิง', '123']
+
+        describe('Include Mode', () => {
+            it('should match any item if bill note matched (hasBillNoteMatch: true)', () => {
+                expect(isBillItemSearchMatched({
+                    numbers: '999',
+                    hasBillNoteMatch: true,
+                    searchTargets: targets,
+                    searchMode: 'include'
+                })).toBe(true)
+            })
+
+            it('should match only items whose number matches if bill note did not match', () => {
+                expect(isBillItemSearchMatched({
+                    numbers: '123',
+                    hasBillNoteMatch: false,
+                    searchTargets: targets,
+                    searchMode: 'include'
+                })).toBe(true)
+
+                expect(isBillItemSearchMatched({
+                    numbers: '999',
+                    hasBillNoteMatch: false,
+                    searchTargets: targets,
+                    searchMode: 'include'
+                })).toBe(false)
+            })
+        })
+
+        describe('Exclude Mode (ไม่เอา / ยกเว้น)', () => {
+            it('should return false (exclude all items) if bill note matched (hasBillNoteMatch: true)', () => {
+                expect(isBillItemSearchMatched({
+                    numbers: '999',
+                    hasBillNoteMatch: true,
+                    searchTargets: targets,
+                    searchMode: 'exclude'
+                })).toBe(false)
+
+                expect(isBillItemSearchMatched({
+                    numbers: '123',
+                    hasBillNoteMatch: true,
+                    searchTargets: targets,
+                    searchMode: 'exclude'
+                })).toBe(false)
+            })
+
+            it('should exclude matching number but keep non-matching number when bill note did not match', () => {
+                // Item with number '123' should be excluded
+                expect(isBillItemSearchMatched({
+                    numbers: '123',
+                    hasBillNoteMatch: false,
+                    searchTargets: targets,
+                    searchMode: 'exclude'
+                })).toBe(false)
+
+                // Item with number '999' should be KEPT
+                expect(isBillItemSearchMatched({
+                    numbers: '999',
+                    hasBillNoteMatch: false,
+                    searchTargets: targets,
+                    searchMode: 'exclude'
+                })).toBe(true)
+            })
         })
     })
 })

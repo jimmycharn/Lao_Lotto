@@ -213,3 +213,82 @@ export function isSearchNumberMatched(numberStr, searchStr, isComposite = false)
     return String(numberStr).includes(trimmedSearch)
 }
 
+/**
+ * Checks if a note string contains any of the search targets
+ * @param {string} note 
+ * @param {string|number|Array<string|number>} searchTargets 
+ * @returns {boolean}
+ */
+export function isSearchNoteMatched(note, searchTargets) {
+    if (!note || !searchTargets) return false
+    const lowerNote = String(note).toLowerCase()
+    if (Array.isArray(searchTargets)) {
+        return searchTargets.some(target => {
+            if (target === null || target === undefined) return false
+            const trimmed = String(target).trim().toLowerCase()
+            return trimmed !== '' && lowerNote.includes(trimmed)
+        })
+    }
+    const trimmed = String(searchTargets).trim().toLowerCase()
+    return trimmed !== '' && lowerNote.includes(trimmed)
+}
+
+/**
+ * Combined matcher for submission or item with numbers and optional note (supporting include/exclude mode)
+ * @param {Object} params
+ * @param {string|number} params.numbers
+ * @param {string} [params.note]
+ * @param {Array<string|number>} params.searchTargets
+ * @param {boolean} [params.isComposite=false]
+ * @param {'include'|'exclude'} [params.searchMode='include']
+ * @returns {boolean}
+ */
+export function isSubmissionSearchMatched({ numbers, note, searchTargets, isComposite = false, searchMode = 'include' }) {
+    if (!searchTargets || (Array.isArray(searchTargets) && searchTargets.length === 0)) {
+        return true
+    }
+    const validTargets = Array.isArray(searchTargets)
+        ? searchTargets.filter(t => t !== null && t !== undefined && String(t).trim() !== '')
+        : [searchTargets]
+    if (validTargets.length === 0) return true
+
+    const numMatched = isSearchNumberMatched(numbers, validTargets, isComposite)
+    const noteMatched = isSearchNoteMatched(note, validTargets)
+    const isMatched = numMatched || noteMatched
+
+    return searchMode === 'exclude' ? !isMatched : isMatched
+}
+
+/**
+ * Evaluates whether an item in a bill should be displayed given bill note match and search mode
+ * @param {Object} params
+ * @param {string|number} params.numbers
+ * @param {boolean} params.hasBillNoteMatch
+ * @param {Array<string|number>} params.searchTargets
+ * @param {boolean} [params.isComposite=false]
+ * @param {'include'|'exclude'} [params.searchMode='include']
+ * @returns {boolean}
+ */
+export function isBillItemSearchMatched({ numbers, hasBillNoteMatch, searchTargets, isComposite = false, searchMode = 'include' }) {
+    if (!searchTargets || (Array.isArray(searchTargets) && searchTargets.length === 0)) {
+        return true
+    }
+    const validTargets = Array.isArray(searchTargets)
+        ? searchTargets.filter(t => t !== null && t !== undefined && String(t).trim() !== '')
+        : [searchTargets]
+    if (validTargets.length === 0) return true
+
+    if (searchMode === 'exclude') {
+        // In exclude mode: if bill note matched exclude target, entire bill is excluded
+        if (hasBillNoteMatch) return false
+        // Otherwise, exclude item if its numbers match
+        const numMatched = isSearchNumberMatched(numbers, validTargets, isComposite)
+        return !numMatched
+    } else {
+        // In include mode: item matches if bill note matches OR item numbers match
+        if (hasBillNoteMatch) return true
+        return isSearchNumberMatched(numbers, validTargets, isComposite)
+    }
+}
+
+
