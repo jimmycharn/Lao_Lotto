@@ -5872,14 +5872,24 @@ html.theme-light .icon-btn-sm:hover {
     justify-content: space-between;
 }
 
-.searchable-dropdown-option:hover {
-    background: rgba(255, 255, 255, 0.05);
+.searchable-dropdown-option:hover,
+.searchable-dropdown-option.highlighted {
+    background: rgba(102, 126, 234, 0.35) !important;
+    color: #ffffff !important;
+    border-radius: 6px;
 }
 
 .searchable-dropdown-option.active {
     color: #000 !important;
     background: var(--color-primary) !important;
     font-weight: 500;
+    border-radius: 6px;
+}
+
+.searchable-dropdown-option.active.highlighted {
+    background: var(--color-primary) !important;
+    color: #000000 !important;
+    filter: brightness(1.15);
 }
 
 /* Light theme overrides for custom dropdown */
@@ -5908,8 +5918,12 @@ html.theme-light .icon-btn-sm:hover {
 }
 
 :root.theme-light .searchable-dropdown-option:hover,
-[data-theme="light"] .searchable-dropdown-option:hover {
-    background: rgba(0, 0, 0, 0.05);
+:root.theme-light .searchable-dropdown-option.highlighted,
+[data-theme="light"] .searchable-dropdown-option:hover,
+[data-theme="light"] .searchable-dropdown-option.highlighted {
+    background: rgba(102, 126, 234, 0.2) !important;
+    color: #1a1a2e !important;
+    border-radius: 6px;
 }
 
 :root.theme-light .searchable-dropdown-option.active,
