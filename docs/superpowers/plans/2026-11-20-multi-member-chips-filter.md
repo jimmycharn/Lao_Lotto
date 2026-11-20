@@ -76,8 +76,8 @@
 - Modify: `src/components/dealer/RoundAccordionItem.jsx`
 - Test: `src/components/dealer/__tests__/MemberChipsFilterIntegration.test.jsx`
 
-- [ ] **Step 1: Write integration tests** verifying filter scoping across summary cards, bills, and write bet button gating.
-- [ ] **Step 2: Update `RoundAccordionItem.jsx` state and handlers**:
+- [x] **Step 1: Write integration tests** verifying filter scoping across summary cards, bills, and write bet button gating.
+- [x] **Step 2: Update `RoundAccordionItem.jsx` state and handlers**:
   - Replace `inlineUserFilter` with `inlineSelectedMembers` and `inlineMemberSelectMode`
   - Update `canWriteBetForSelectedMember` to gate on single member in include mode
   - Update `handleOpenWriteBet`
@@ -86,8 +86,8 @@
   - Update `filteredBills` in view mode "ใบโพย" with `isMemberMatched`
   - Update `handleCopyTotal` and `generateTotalCopyText`
   - Replace old member bar JSX with `<MemberChipsFilter />`
-- [ ] **Step 3: Run integration tests to confirm they pass** (`npx vitest run src/components/dealer/__tests__/MemberChipsFilterIntegration.test.jsx`)
-- [ ] **Step 4: Commit task 3** (`git add src/components/dealer/RoundAccordionItem.jsx src/components/dealer/__tests__/MemberChipsFilterIntegration.test.jsx && git commit -m "feat(dealer): integrate MemberChipsFilter into RoundAccordionItem"`)
+- [x] **Step 3: Run integration tests to confirm they pass** (`npx vitest run src/components/dealer/__tests__/MemberChipsFilterIntegration.test.jsx`)
+- [x] **Step 4: Commit task 3** (`git add src/components/dealer/RoundAccordionItem.jsx src/components/dealer/__tests__/MemberChipsFilterIntegration.test.jsx && git commit -m "feat(dealer): integrate MemberChipsFilter into RoundAccordionItem"`)
 
 ---
 
@@ -97,6 +97,6 @@
 - Full test suite: `npx vitest run`
 - Production build: `npm run build`
 
-- [ ] **Step 1: Run full vitest suite (all 58+ test files)**
-- [ ] **Step 2: Run production build (`npm run build`)**
+- [x] **Step 1: Run full vitest suite (all 58+ test files)**
+- [x] **Step 2: Run production build (`npm run build`)**
 - [ ] **Step 3: Commit and push to `origin/master`**

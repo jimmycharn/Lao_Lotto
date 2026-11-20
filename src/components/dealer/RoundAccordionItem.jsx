@@ -65,6 +65,8 @@ import {
     isSubmissionSearchMatched,
     isBillItemSearchMatched
 } from '../../utils/betTypeFilterHelper'
+import { isMemberMatched } from '../../utils/memberFilterHelper'
+import MemberChipsFilter from './MemberChipsFilter'
 import DealerWriteSubmissionWrapper from './DealerWriteSubmissionWrapper'
 import AIAnalysisModal from './AIAnalysisModal'
 import MemberTimeExtensionModal from './MemberTimeExtensionModal'
@@ -301,7 +303,8 @@ export default function RoundAccordionItem({
     const [inlineTransferCommissions, setInlineTransferCommissions] = useState({}) // { dealerId: { totalCommission, ... } }
     const [inlineIncomingCommissions, setInlineIncomingCommissions] = useState({}) // { dealerEmail: { totalCommission, ... } }
     const [inlineLoading, setInlineLoading] = useState(false)
-    const [inlineUserFilter, setInlineUserFilter] = useState('all')
+    const [inlineSelectedMembers, setInlineSelectedMembers] = useState([])
+    const [inlineMemberSelectMode, setInlineMemberSelectMode] = useState('include') // 'include' | 'exclude'
     const [inlineSelectedBetTypes, setInlineSelectedBetTypes] = useState([])
     const [inlineSearch, setInlineSearch] = useState('')
     const [inlineSearchNumbers, setInlineSearchNumbers] = useState([])
@@ -1391,8 +1394,9 @@ export default function RoundAccordionItem({
 
     // Open write bet modal for selected member
     const handleOpenWriteBet = () => {
-        // Find the member object from allowedMembers based on selected name
-        const memberName = inlineUserFilter
+        // Only allow when exactly 1 member is selected in 'include' mode
+        if (inlineMemberSelectMode !== 'include' || inlineSelectedMembers.length !== 1) return
+        const memberName = inlineSelectedMembers[0]
         const member = allowedMembers.find(m => 
             (m.full_name || m.email || 'ไม่ระบุ') === memberName
         )
@@ -1410,8 +1414,9 @@ export default function RoundAccordionItem({
 
     // Check if selected member can have bets written on their behalf
     const canWriteBetForSelectedMember = () => {
-        if (inlineUserFilter === 'all') return false
-        const memberName = inlineUserFilter
+        if (inlineMemberSelectMode !== 'include') return false
+        if (inlineSelectedMembers.length !== 1) return false
+        const memberName = inlineSelectedMembers[0]
         const member = allowedMembers.find(m => 
             (m.full_name || m.email || 'ไม่ระบุ') === memberName
         )
@@ -2454,8 +2459,10 @@ export default function RoundAccordionItem({
         
         // Determine sender name
         let senderName = 'ทั้งหมด'
-        if (inlineUserFilter !== 'all') {
-            senderName = inlineUserFilter
+        if (inlineSelectedMembers.length > 0) {
+            senderName = inlineMemberSelectMode === 'exclude'
+                ? `ยกเว้น (${inlineSelectedMembers.join(', ')})`
+                : inlineSelectedMembers.join(', ')
         }
         
         const grandTotal = itemsToCopy.reduce((sum, s) => sum + s.amount, 0)
@@ -3158,9 +3165,11 @@ export default function RoundAccordionItem({
     // Handle copy total submissions
     const handleCopyTotal = async () => {
         // Use filtered submissions based on current filter
-        const submissionsToCopy = inlineUserFilter === 'all' 
-            ? inlineSubmissions.filter(s => !s.is_deleted) 
-            : inlineSubmissions.filter(s => !s.is_deleted && (s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ') === inlineUserFilter)
+        const submissionsToCopy = inlineSubmissions.filter(s => {
+            if (s.is_deleted) return false
+            const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
+            return isMemberMatched(userName, inlineSelectedMembers, inlineMemberSelectMode)
+        })
         
         if (submissionsToCopy.length === 0) {
             toast.warning('ไม่มีรายการที่จะคัดลอก')
@@ -4226,104 +4235,44 @@ export default function RoundAccordionItem({
                                 <>
                                     {inlineTab === 'total' && (
                                         <div className="inline-tab-content">
-                                            {/* Member filter and view mode - responsive layout */}
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                                {/* Row 0: Member filter buttons */}
-                                                <div className="member-filter-row">
-                                                    <button
-                                                        className={`filter-btn ${memberFilterMode === 'all' ? 'active' : ''}`}
-                                                        onClick={() => { setMemberFilterMode('all'); setInlineUserFilter('all'); }}
-                                                        style={{
-                                                            padding: '0.35rem 0.65rem',
-                                                            borderRadius: '20px',
-                                                            border: memberFilterMode === 'all' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                            background: memberFilterMode === 'all' ? 'var(--color-primary)' : 'transparent',
-                                                            color: memberFilterMode === 'all' ? '#000' : 'var(--color-text)',
-                                                            fontSize: '0.8rem',
-                                                            cursor: 'pointer',
-                                                            transition: 'all 0.2s ease',
-                                                            whiteSpace: 'nowrap'
-                                                        }}
-                                                    >
-                                                        สมาชิกทั้งหมด ({allowedMembers.length})
-                                                    </button>
-                                                    <button
-                                                        className={`filter-btn ${memberFilterMode === 'submitted' ? 'active' : ''}`}
-                                                        onClick={() => { setMemberFilterMode('submitted'); setInlineUserFilter('all'); }}
-                                                        style={{
-                                                            padding: '0.35rem 0.65rem',
-                                                            borderRadius: '20px',
-                                                            border: memberFilterMode === 'submitted' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                                            background: memberFilterMode === 'submitted' ? 'var(--color-primary)' : 'transparent',
-                                                            color: memberFilterMode === 'submitted' ? '#000' : 'var(--color-text)',
-                                                            fontSize: '0.8rem',
-                                                            cursor: 'pointer',
-                                                            transition: 'all 0.2s ease',
-                                                            whiteSpace: 'nowrap'
-                                                        }}
-                                                    >
-                                                        สมาชิกส่งเลข ({[...new Set(inlineSubmissions.map(s => s.user_id))].length})
-                                                    </button>
-                                                </div>
-                                                
-                                                {/* Row 0.5: Dropdown (top on mobile) + Action buttons (bottom on mobile) */}
-                                                <div className="round-filter-member-bar">
-                                                    <div className="round-filter-dropdown-wrapper">
-                                                        <SearchableDropdown
-                                                            value={inlineUserFilter}
-                                                            onChange={(val) => setInlineUserFilter(val)}
-                                                            options={[
-                                                                { label: 'ทุกคน', value: 'all' },
-                                                                ...(memberFilterMode === 'all'
-                                                                    ? allowedMembers.map(member => {
-                                                                          const name = member.full_name || member.email || 'ไม่ระบุ'
-                                                                          return { label: name, value: name }
-                                                                      })
-                                                                    : [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => ({
-                                                                          label: name,
-                                                                          value: name
-                                                                      }))
-                                                                )
-                                                            ]}
-                                                        />
-                                                    </div>
-                                                    <div className="round-filter-actions-group">
-                                                        {canWriteBetForSelectedMember() && (
-                                                            <button
-                                                                className="btn btn-primary btn-sm round-filter-btn"
-                                                                onClick={handleOpenWriteBet}
-                                                                title="เขียนโพย"
-                                                            >
-                                                                <FiFileText /> เขียนโพย
-                                                            </button>
-                                                        )}
-                                                        <button
-                                                            className="btn btn-outline btn-sm round-filter-btn"
-                                                            onClick={handleCopyTotal}
-                                                            disabled={inlineSubmissions.length === 0}
-                                                            title="คัดลอกยอดรับรวม"
-                                                        >
-                                                            <FiCopy /> คัดลอก
-                                                        </button>
-                                                        {!isAnnounced && (
-                                                            <button
-                                                                className="btn btn-outline btn-sm round-filter-btn round-filter-btn-extend"
-                                                                onClick={() => {
-                                                                    const preselectedMember = inlineUserFilter !== 'all'
-                                                                        ? allowedMembers.find(m => (m.full_name || m.email) === inlineUserFilter)
-                                                                        : null
-                                                                    setTimeExtensionModal({
-                                                                        isOpen: true,
-                                                                        member: preselectedMember ? { id: preselectedMember.id, name: preselectedMember.full_name || preselectedMember.email, code: preselectedMember.member_code } : null
-                                                                    })
-                                                                }}
-                                                                title="ตั้งเวลาปิดรับ หรือยืดเวลาส่งเลขเฉพาะบุคคล"
-                                                            >
-                                                                <FiClock /> ขยายเวลา
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
+                                            {/* Member filter chips and actions */}
+                                            <MemberChipsFilter
+                                                memberFilterMode={memberFilterMode}
+                                                onMemberFilterModeChange={(mode) => setMemberFilterMode(mode)}
+                                                allMembersCount={allowedMembers.length}
+                                                submittedMembersCount={[...new Set(inlineSubmissions.map(s => s.user_id))].length}
+                                                selectedMembers={inlineSelectedMembers}
+                                                onSelectedMembersChange={(members) => setInlineSelectedMembers(members)}
+                                                mode={inlineMemberSelectMode}
+                                                onModeChange={(mode) => setInlineMemberSelectMode(mode)}
+                                                memberOptions={[
+                                                    { label: 'ทุกคน (ล้างการเลือก)', value: 'all' },
+                                                    ...(memberFilterMode === 'all'
+                                                        ? allowedMembers.map(member => {
+                                                              const name = member.full_name || member.email || 'ไม่ระบุ'
+                                                              return { label: name, value: name }
+                                                          })
+                                                        : [...new Set(inlineSubmissions.map(s => s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'))].map(name => ({
+                                                              label: name,
+                                                              value: name
+                                                          }))
+                                                    )
+                                                ]}
+                                                canWriteBet={canWriteBetForSelectedMember()}
+                                                onWriteBet={handleOpenWriteBet}
+                                                onCopy={handleCopyTotal}
+                                                onExtend={() => {
+                                                    const preselectedMember = (inlineSelectedMembers.length === 1 && inlineMemberSelectMode === 'include')
+                                                        ? allowedMembers.find(m => (m.full_name || m.email) === inlineSelectedMembers[0])
+                                                        : null
+                                                    setTimeExtensionModal({
+                                                        isOpen: true,
+                                                        member: preselectedMember ? { id: preselectedMember.id, name: preselectedMember.full_name || preselectedMember.email, code: preselectedMember.member_code } : null
+                                                    })
+                                                }}
+                                                isAnnounced={isAnnounced}
+                                                hasSubmissions={inlineSubmissions.length > 0}
+                                            />
                                                 
                                                 {/* Row 1: View mode toggle (รวม/ใบโพย) + Display mode toggle */}
                                                 <div style={{ 
@@ -4637,14 +4586,13 @@ export default function RoundAccordionItem({
                                                         </div>
                                                     )}
                                                 </div>
-                                            </div>
 
                                             {/* แสดงผลแบบตาราง 2 แถว: หัวข้อ + ค่า */}
                                             {(() => {
                                                 const filtered = inlineSubmissions.filter(s => {
                                                     if (s.is_deleted) return false
                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                    if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                    if (!isMemberMatched(userName, inlineSelectedMembers, inlineMemberSelectMode)) return false
                                                     if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
                                                     if (isSearchActive && !isSubmissionSearchMatched({
                                                         numbers: s.numbers,
@@ -4759,7 +4707,7 @@ export default function RoundAccordionItem({
                                                         // Pre-calculate filteredData for action row - must match table display logic
                                                         let preFilteredData = inlineSubmissions.filter(s => {
                                                             const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                            if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                            if (!isMemberMatched(userName, inlineSelectedMembers, inlineMemberSelectMode)) return false
                                                             if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
                                                             if (isSearchActive && !isSubmissionSearchMatched({
                                                         numbers: s.numbers,
@@ -4883,7 +4831,7 @@ export default function RoundAccordionItem({
                                                             {(() => {
                                                                 let filteredData = inlineSubmissions.filter(s => {
                                                                     const userName = s.profiles?.full_name || s.profiles?.email || 'ไม่ระบุ'
-                                                                    if (inlineUserFilter !== 'all' && userName !== inlineUserFilter) return false
+                                                                    if (!isMemberMatched(userName, inlineSelectedMembers, inlineMemberSelectMode)) return false
                                                                     if (!isBetTypeMatched(s.bet_type, inlineSelectedBetTypes)) return false
                                                                     if (isSearchActive && !isSubmissionSearchMatched({
                                                         numbers: s.numbers,
@@ -5056,7 +5004,7 @@ export default function RoundAccordionItem({
                                                         const bills = getSubmissionsByBills()
                                                         // Filter by user, bet types, and search text
                                                         const filteredBills = bills.filter(b => {
-                                                            if (inlineUserFilter !== 'all' && b.user_name !== inlineUserFilter) return false
+                                                            if (!isMemberMatched(b.user_name, inlineSelectedMembers, inlineMemberSelectMode)) return false
                                                             const isBillCancelled = b.items.length > 0 && b.items.every(item => item.is_deleted)
                                                             const hasMatchingNote = checkNoteMatch(b.bill_note)
                                                             
