@@ -182,7 +182,7 @@ export default function MemberChipsFilter({
                             fontWeight: 600,
                             color: mode === 'exclude' ? '#ef4444' : 'var(--color-warning)'
                         }}>
-                            {mode === 'exclude' ? `🚫 สมาชิกที่ไม่เลือก (${selectedMembers.length}):` : `สมาชิกที่เลือก (${selectedMembers.length}):`}
+                            {mode === 'exclude' ? `🚫 ไม่เลือก (${selectedMembers.length}):` : `เลือก (${selectedMembers.length}):`}
                         </span>
 
                         {selectedMembers.map(memberName => (

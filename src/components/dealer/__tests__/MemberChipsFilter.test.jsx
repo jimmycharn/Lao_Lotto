@@ -40,7 +40,7 @@ describe('MemberChipsFilter component', () => {
         const html = renderToString(
             <MemberChipsFilter {...defaultProps} selectedMembers={['คุณเบญ', 'สุพรรณี']} mode="include" />
         )
-        expect(html).toContain('สมาชิกที่เลือก (2):')
+        expect(html).toContain('เลือก (2):')
         expect(html).toContain('คุณเบญ')
         expect(html).toContain('สุพรรณี')
     })
@@ -49,7 +49,7 @@ describe('MemberChipsFilter component', () => {
         const html = renderToString(
             <MemberChipsFilter {...defaultProps} selectedMembers={['คุณเบญ']} mode="exclude" />
         )
-        expect(html).toContain('สมาชิกที่ไม่เลือก')
+        expect(html).toContain('🚫 ไม่เลือก')
         expect(html).toContain('1')
         expect(html).toContain('คุณเบญ')
     })

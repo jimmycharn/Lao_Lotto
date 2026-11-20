@@ -3933,9 +3933,9 @@ export default function RoundAccordionItem({
                                                 transition: 'all 0.15s ease',
                                                 whiteSpace: 'nowrap'
                                             }}
-                                            title="แสดงเฉพาะรายการที่ตรงกับเลขหรือโน๊ตที่ระบุ"
+                                            title="เลือกเฉพาะรายการที่ตรงกับเลขหรือโน๊ตที่ระบุ"
                                         >
-                                            แสดงเฉพาะ
+                                            เลือก
                                         </button>
                                         <button
                                             type="button"
@@ -3952,9 +3952,9 @@ export default function RoundAccordionItem({
                                                 transition: 'all 0.15s ease',
                                                 whiteSpace: 'nowrap'
                                             }}
-                                            title="ไม่รวม/ยกเว้นรายการที่ตรงกับเลขหรือโน๊ตที่ระบุ (ซ่อนออกไป)"
+                                            title="ไม่เลือก/ยกเว้นรายการที่ตรงกับเลขหรือโน๊ตที่ระบุ (ซ่อนออกไป)"
                                         >
-                                            🚫 ไม่เอา
+                                            🚫 ไม่เลือก
                                         </button>
                                     </div>
 
