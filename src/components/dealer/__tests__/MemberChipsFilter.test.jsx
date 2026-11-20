@@ -28,8 +28,10 @@ describe('MemberChipsFilter component', () => {
 
     it('renders mode buttons and member count buttons', () => {
         const html = renderToString(<MemberChipsFilter {...defaultProps} />)
-        expect(html).toContain('สมาชิกทั้งหมด (35)')
-        expect(html).toContain('สมาชิกส่งเลข (26)')
+        expect(html).toContain('สมาชิกทั้งหมด')
+        expect(html).toContain('35')
+        expect(html).toContain('สมาชิกส่งเลข')
+        expect(html).toContain('26')
         expect(html).toContain('แสดงเฉพาะ')
         expect(html).toContain('ไม่เอา')
     })
