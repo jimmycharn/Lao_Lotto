@@ -56,7 +56,7 @@ import {
     calculateRemainingItemTransfer,
     calculateExcessItemTransfer
 } from '../../utils/layoffTodConverter'
-import { sortRemainingItems, sortTransferModalItems } from '../../utils/remainingSortHelper'
+import { sortRemainingItems, sortTransferModalItems, sortExcessItems } from '../../utils/remainingSortHelper'
 import BetTypeChipsFilter from './BetTypeChipsFilter'
 import {
     isBetTypeMatched,
@@ -410,6 +410,8 @@ export default function RoundAccordionItem({
     const [excessMaxCapByType, setExcessMaxCapByType] = useState({}) // { [bet_type]: number | '' }
     const [remainingSortBy, setRemainingSortBy] = useState('number') // 'number' | 'remaining' | 'total'
     const [remainingSortOrder, setRemainingSortOrder] = useState('asc') // 'asc' | 'desc'
+    const [excessSortBy, setExcessSortBy] = useState('number') // 'number' | 'excess'
+    const [excessSortOrder, setExcessSortOrder] = useState('asc') // 'asc' | 'desc'
     const [modalTransferSortBy, setModalTransferSortBy] = useState('number') // 'number' | 'amount'
     const [modalTransferSortOrder, setModalTransferSortOrder] = useState('asc') // 'asc' | 'desc'
     
@@ -1847,6 +1849,15 @@ export default function RoundAccordionItem({
         }
     }
 
+    const handleToggleExcessSort = (colKey) => {
+        if (excessSortBy === colKey) {
+            setExcessSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+        } else {
+            setExcessSortBy(colKey)
+            setExcessSortOrder(colKey === 'number' ? 'asc' : 'desc')
+        }
+    }
+
     // Filtered items matching the current user filter, search chips, and sort order:
     const filteredRemainingItems = useMemo(() => {
         const raw = activeRemainingItems.filter(item => {
@@ -1861,7 +1872,7 @@ export default function RoundAccordionItem({
     }, [activeRemainingItems, inlineSelectedBetTypes, isSearchActive, activeSearchNumbers, inlineIsCompositeSearch, inlineSearchMode, remainingSortBy, remainingSortOrder])
 
     const filteredExcessItems = useMemo(() => {
-        return activeExcessItems.filter(item => {
+        const raw = activeExcessItems.filter(item => {
             if (!isBetTypeMatched(item.bet_type, inlineSelectedBetTypes)) return false
             if (isSearchActive) {
                 const numMatched = isSearchNumberMatched(item.numbers, activeSearchNumbers, inlineIsCompositeSearch)
@@ -1869,7 +1880,9 @@ export default function RoundAccordionItem({
             }
             return true
         })
-    }, [activeExcessItems, inlineSelectedBetTypes, isSearchActive, activeSearchNumbers, inlineIsCompositeSearch, inlineSearchMode])
+        const setPrice = round?.set_prices?.['4_top'] || 120
+        return sortExcessItems(raw, excessSortBy, excessSortOrder, setPrice)
+    }, [activeExcessItems, inlineSelectedBetTypes, isSearchActive, activeSearchNumbers, inlineIsCompositeSearch, inlineSearchMode, excessSortBy, excessSortOrder, round?.set_prices])
 
     // Calculate items for remaining transfer:
     // 1. Take user-selected items from filteredRemainingItems (strictly matching current view/filters)
@@ -6779,11 +6792,48 @@ export default function RoundAccordionItem({
                                                             borderRadius: '8px 8px 0 0'
                                                         }}>
                                                             <div style={{ width: '30px' }}></div>
-                                                            <div style={{ flex: 1, display: 'flex', gap: '1rem' }}>
-                                                                <span style={{ minWidth: '60px' }}>เลข</span>
+                                                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                                                <div
+                                                                    onClick={() => handleToggleExcessSort('number')}
+                                                                    style={{
+                                                                        minWidth: '60px',
+                                                                        cursor: 'pointer',
+                                                                        userSelect: 'none',
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '0.25rem',
+                                                                        color: excessSortBy === 'number' ? 'var(--color-warning)' : 'inherit',
+                                                                        transition: 'color 0.15s ease'
+                                                                    }}
+                                                                    title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"
+                                                                >
+                                                                    <span>เลข</span>
+                                                                    <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                                                                        {excessSortBy === 'number' ? (excessSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                    </span>
+                                                                </div>
                                                                 <span>ประเภท</span>
                                                             </div>
-                                                            <span style={{ textAlign: 'right' }}>จำนวน</span>
+                                                            <div
+                                                                onClick={() => handleToggleExcessSort('excess')}
+                                                                style={{
+                                                                    textAlign: 'right',
+                                                                    cursor: 'pointer',
+                                                                    userSelect: 'none',
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'flex-end',
+                                                                    gap: '0.25rem',
+                                                                    color: excessSortBy === 'excess' ? 'var(--color-warning)' : 'inherit',
+                                                                    transition: 'color 0.15s ease'
+                                                                }}
+                                                                title="คลิกเพื่อเรียงตามจำนวนเงินเกิน (มากไปน้อย / น้อยไปมาก)"
+                                                            >
+                                                                <span>จำนวน</span>
+                                                                <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>
+                                                                    {excessSortBy === 'excess' ? (excessSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                         <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
                                                             {filteredExcessItems.map((item, idx) => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sortRemainingItems, sortTransferModalItems } from '../remainingSortHelper'
+import { sortRemainingItems, sortTransferModalItems, sortExcessItems } from '../remainingSortHelper'
 
 describe('sortRemainingItems', () => {
     const mockItems = [
@@ -121,6 +121,74 @@ describe('sortTransferModalItems', () => {
         it('handles single item without changes', () => {
             const single = [{ numbers: '123', excess: 50 }]
             expect(sortTransferModalItems(single)).toEqual(single)
+        })
+    })
+})
+
+describe('sortExcessItems', () => {
+    const mockExcessItems = [
+        { numbers: '146', bet_type: '3_tod', excess: 10, total: 740 },
+        { numbers: '189', bet_type: '3_tod', excess: 200, total: 710 },
+        { numbers: '235', bet_type: '3_tod', excess: 10, total: 600 },
+        { numbers: '99', bet_type: '2_top', excess: 50, total: 550 },
+        { numbers: '01', bet_type: '2_top', excess: 500, total: 1000 }
+    ]
+
+    describe('Sort by number', () => {
+        it('sorts numbers ascending: shorter length first, then numeric value', () => {
+            const sorted = sortExcessItems(mockExcessItems, 'number', 'asc')
+            expect(sorted.map(i => i.numbers)).toEqual(['01', '99', '146', '189', '235'])
+        })
+
+        it('sorts numbers descending: longer length first, then numeric value descending', () => {
+            const sorted = sortExcessItems(mockExcessItems, 'number', 'desc')
+            expect(sorted.map(i => i.numbers)).toEqual(['235', '189', '146', '99', '01'])
+        })
+
+        it('uses displayNumbers when present', () => {
+            const items = [
+                { numbers: '123', displayNumbers: '789', excess: 10 },
+                { numbers: '456', displayNumbers: '111', excess: 10 }
+            ]
+            const sorted = sortExcessItems(items, 'number', 'asc')
+            expect(sorted.map(i => i.displayNumbers)).toEqual(['111', '789'])
+        })
+    })
+
+    describe('Sort by excess amount', () => {
+        it('sorts by excess amount descending with number tie-breaker', () => {
+            const sorted = sortExcessItems(mockExcessItems, 'excess', 'desc')
+            // amounts: 500 (01), 200 (189), 50 (99), 10 (146, 235 -> 146 before 235)
+            expect(sorted.map(i => i.numbers)).toEqual(['01', '189', '99', '146', '235'])
+        })
+
+        it('sorts by excess amount ascending with number tie-breaker', () => {
+            const sorted = sortExcessItems(mockExcessItems, 'excess', 'asc')
+            // amounts: 10 (146, 235 -> 146 before 235), 50 (99), 200 (189), 500 (01)
+            expect(sorted.map(i => i.numbers)).toEqual(['146', '235', '99', '189', '01'])
+        })
+
+        it('handles set-based items with setPrice correctly', () => {
+            const setLotteryItems = [
+                { numbers: '1234', bet_type: '4_top', isSetBased: true, excess: 2 }, // 2 * 120 = 240
+                { numbers: '56', bet_type: '2_top', isSetBased: false, excess: 300 }, // 300
+                { numbers: '78', bet_type: '2_top', isSetBased: false, excess: 100 }  // 100
+            ]
+            const sorted = sortExcessItems(setLotteryItems, 'excess', 'desc', 120)
+            expect(sorted.map(i => i.numbers)).toEqual(['56', '1234', '78'])
+        })
+    })
+
+    describe('Edge cases', () => {
+        it('handles null, undefined or empty array', () => {
+            expect(sortExcessItems(null)).toEqual([])
+            expect(sortExcessItems(undefined)).toEqual([])
+            expect(sortExcessItems([])).toEqual([])
+        })
+
+        it('handles single item without error', () => {
+            const single = [{ numbers: '123', excess: 10 }]
+            expect(sortExcessItems(single)).toEqual(single)
         })
     })
 })
