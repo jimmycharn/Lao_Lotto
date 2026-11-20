@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { FiChevronDown, FiSearch, FiX, FiCheck } from 'react-icons/fi'
 
-export default function SearchableDropdown({ 
-    value, 
-    onChange, 
-    options = [], 
-    placeholder = "ค้นหาชื่อ...", 
+export default function SearchableDropdown({
+    value,
+    onChange,
+    options = [],
+    placeholder = "ค้นหาชื่อ...",
     emptyMessage = "ไม่พบข้อมูล",
     displayLabel = null
 }) {
@@ -107,16 +107,16 @@ export default function SearchableDropdown({
                 className="searchable-dropdown-trigger"
                 onClick={() => setIsOpen(!isOpen)}
             >
-                <span style={{ 
-                    overflow: 'hidden', 
-                    textOverflow: 'ellipsis', 
+                <span style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                     color: (value === 'all' || !value) && !displayLabel ? 'var(--color-text-muted)' : 'var(--color-text)'
                 }}>
                     {displayLabel || selectedOption.label}
                 </span>
-                <FiChevronDown style={{ 
-                    marginLeft: '0.5rem', 
+                <FiChevronDown style={{
+                    marginLeft: '0.5rem',
                     flexShrink: 0,
                     transition: 'transform 0.2s ease',
                     transform: isOpen ? 'rotate(180deg)' : 'rotate(0)'

@@ -90,9 +90,9 @@ export default function MemberChipsFilter({
                 </button>
             </div>
 
-            {/* Row 0.5: Mode Switch + Dropdown Selector + Action Buttons */}
+            {/* Row 0.5: Mode Switch + Dropdown Selector + Chips + Action Buttons */}
             <div className="round-filter-member-bar">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+                <div className="round-filter-controls-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
                     {/* Include / Exclude Mode Toggle */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}>
                         <button
@@ -149,6 +149,84 @@ export default function MemberChipsFilter({
                     </div>
                 </div>
 
+                {/* Selected Member Chips (Positioned inside member-bar: on mobile it sits between dropdown and action buttons) */}
+                {selectedMembers.length > 0 && (
+                    <div className="round-filter-chips-container" style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: '0.4rem',
+                        padding: '0.45rem 0.65rem',
+                        background: mode === 'exclude' ? 'rgba(239, 68, 68, 0.06)' : 'rgba(245, 158, 11, 0.06)',
+                        border: `1px solid ${mode === 'exclude' ? 'rgba(239, 68, 68, 0.28)' : 'rgba(245, 158, 11, 0.28)'}`,
+                        borderRadius: '8px',
+                        boxSizing: 'border-box'
+                    }}>
+                        <span style={{
+                            fontSize: '0.78rem',
+                            fontWeight: 600,
+                            color: mode === 'exclude' ? '#ef4444' : 'var(--color-warning)'
+                        }}>
+                            {mode === 'exclude' ? `🚫 ยกเว้นสมาชิก (${selectedMembers.length}):` : `สมาชิกที่เลือก (${selectedMembers.length}):`}
+                        </span>
+
+                        {selectedMembers.map(memberName => (
+                            <span
+                                key={memberName}
+                                style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '0.3rem',
+                                    padding: '0.2rem 0.55rem',
+                                    borderRadius: '20px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 500,
+                                    background: mode === 'exclude' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                    border: `1px solid ${mode === 'exclude' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`,
+                                    color: mode === 'exclude' ? '#ef4444' : '#fbbf24'
+                                }}
+                            >
+                                <span>{memberName}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveMember(memberName)}
+                                    style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        padding: 0,
+                                        marginLeft: '0.15rem',
+                                        cursor: 'pointer',
+                                        color: 'inherit',
+                                        display: 'inline-flex',
+                                        alignItems: 'center'
+                                    }}
+                                    title={`ลบ ${memberName}`}
+                                >
+                                    <FiX size={12} />
+                                </button>
+                            </span>
+                        ))}
+
+                        <button
+                            type="button"
+                            onClick={handleClearMembers}
+                            style={{
+                                background: 'transparent',
+                                border: 'none',
+                                padding: '0.15rem 0.4rem',
+                                fontSize: '0.72rem',
+                                color: 'var(--color-text-muted)',
+                                cursor: 'pointer',
+                                textDecoration: 'underline',
+                                marginLeft: 'auto'
+                            }}
+                            title="ล้างรายชื่อสมาชิกที่เลือกทั้งหมด"
+                        >
+                            ล้างสมาชิก
+                        </button>
+                    </div>
+                )}
+
                 {/* Actions Group */}
                 <div className="round-filter-actions-group">
                     {canWriteBet && (
@@ -182,83 +260,6 @@ export default function MemberChipsFilter({
                     )}
                 </div>
             </div>
-
-            {/* Row 0.6: Selected Member Chips */}
-            {selectedMembers.length > 0 && (
-                <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: '0.4rem',
-                    padding: '0.45rem 0.65rem',
-                    background: mode === 'exclude' ? 'rgba(239, 68, 68, 0.06)' : 'rgba(245, 158, 11, 0.06)',
-                    border: `1px solid ${mode === 'exclude' ? 'rgba(239, 68, 68, 0.28)' : 'rgba(245, 158, 11, 0.28)'}`,
-                    borderRadius: '8px'
-                }}>
-                    <span style={{
-                        fontSize: '0.78rem',
-                        fontWeight: 600,
-                        color: mode === 'exclude' ? '#ef4444' : 'var(--color-warning)'
-                    }}>
-                        {mode === 'exclude' ? `🚫 ยกเว้นสมาชิก (${selectedMembers.length}):` : `สมาชิกที่เลือก (${selectedMembers.length}):`}
-                    </span>
-
-                    {selectedMembers.map(memberName => (
-                        <span
-                            key={memberName}
-                            style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '0.3rem',
-                                padding: '0.2rem 0.55rem',
-                                borderRadius: '20px',
-                                fontSize: '0.75rem',
-                                fontWeight: 500,
-                                background: mode === 'exclude' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                                border: `1px solid ${mode === 'exclude' ? 'rgba(239, 68, 68, 0.4)' : 'rgba(245, 158, 11, 0.4)'}`,
-                                color: mode === 'exclude' ? '#ef4444' : '#fbbf24'
-                            }}
-                        >
-                            <span>{memberName}</span>
-                            <button
-                                type="button"
-                                onClick={() => handleRemoveMember(memberName)}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    padding: 0,
-                                    marginLeft: '0.15rem',
-                                    cursor: 'pointer',
-                                    color: 'inherit',
-                                    display: 'inline-flex',
-                                    alignItems: 'center'
-                                }}
-                                title={`ลบ ${memberName}`}
-                            >
-                                <FiX size={12} />
-                            </button>
-                        </span>
-                    ))}
-
-                    <button
-                        type="button"
-                        onClick={handleClearMembers}
-                        style={{
-                            background: 'transparent',
-                            border: 'none',
-                            padding: '0.15rem 0.4rem',
-                            fontSize: '0.72rem',
-                            color: 'var(--color-text-muted)',
-                            cursor: 'pointer',
-                            textDecoration: 'underline',
-                            marginLeft: 'auto'
-                        }}
-                        title="ล้างรายชื่อสมาชิกที่เลือกทั้งหมด"
-                    >
-                        ล้างสมาชิก
-                    </button>
-                </div>
-            )}
         </div>
     )
 }
