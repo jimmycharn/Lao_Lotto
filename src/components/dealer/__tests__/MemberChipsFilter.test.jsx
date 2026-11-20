@@ -32,8 +32,8 @@ describe('MemberChipsFilter component', () => {
         expect(html).toContain('35')
         expect(html).toContain('สมาชิกส่งเลข')
         expect(html).toContain('26')
-        expect(html).toContain('แสดงเฉพาะ')
-        expect(html).toContain('ไม่เอา')
+        expect(html).toContain('เลือก')
+        expect(html).toContain('ไม่เลือก')
     })
 
     it('renders chips for selected members in include mode', () => {
@@ -49,7 +49,8 @@ describe('MemberChipsFilter component', () => {
         const html = renderToString(
             <MemberChipsFilter {...defaultProps} selectedMembers={['คุณเบญ']} mode="exclude" />
         )
-        expect(html).toContain('🚫 ยกเว้นสมาชิก (1):')
+        expect(html).toContain('สมาชิกที่ไม่เลือก')
+        expect(html).toContain('1')
         expect(html).toContain('คุณเบญ')
     })
 

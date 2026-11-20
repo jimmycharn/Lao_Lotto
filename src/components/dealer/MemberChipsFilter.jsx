@@ -93,47 +93,62 @@ export default function MemberChipsFilter({
             {/* Row 0.5: Mode Switch + Dropdown Selector + Chips + Action Buttons */}
             <div className="round-filter-member-bar">
                 <div className="round-filter-controls-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
-                    {/* Include / Exclude Mode Toggle */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', flexShrink: 0 }}>
+                    {/* Include / Exclude Mode Toggle - Segmented Switch Container */}
+                    <div style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        borderRadius: '6px',
+                        border: '1px solid var(--color-border)',
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        padding: '2px',
+                        height: '38px',
+                        boxSizing: 'border-box',
+                        flexShrink: 0
+                    }}>
                         <button
                             type="button"
-                            className={`filter-btn ${mode === 'include' ? 'active' : ''}`}
                             onClick={() => onModeChange('include')}
                             style={{
-                                padding: '0.3rem 0.6rem',
-                                borderRadius: '16px',
-                                border: mode === 'include' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
-                                background: mode === 'include' ? 'var(--color-primary)' : 'transparent',
-                                color: mode === 'include' ? '#000' : 'var(--color-text)',
-                                fontSize: '0.78rem',
+                                height: '100%',
+                                padding: '2px 10px',
+                                fontSize: '0.8rem',
                                 fontWeight: mode === 'include' ? 600 : 400,
+                                color: mode === 'include' ? '#f59e0b' : 'var(--color-text-muted, #94a3b8)',
+                                background: mode === 'include' ? 'rgba(245, 158, 11, 0.2)' : 'transparent',
+                                border: mode === 'include' ? '1px solid rgba(245, 158, 11, 0.5)' : '1px solid transparent',
+                                borderRadius: '4px',
                                 cursor: 'pointer',
                                 transition: 'all 0.15s ease',
-                                whiteSpace: 'nowrap'
+                                whiteSpace: 'nowrap',
+                                display: 'inline-flex',
+                                alignItems: 'center'
                             }}
-                            title="แสดงเฉพาะสมาชิกที่เลือก"
+                            title="เลือกเฉพาะสมาชิกที่ระบุ"
                         >
-                            แสดงเฉพาะ
+                            เลือก
                         </button>
                         <button
                             type="button"
-                            className={`filter-btn ${mode === 'exclude' ? 'active' : ''}`}
                             onClick={() => onModeChange('exclude')}
                             style={{
-                                padding: '0.3rem 0.6rem',
-                                borderRadius: '16px',
-                                border: mode === 'exclude' ? '1px solid #ef4444' : '1px solid var(--color-border)',
-                                background: mode === 'exclude' ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
-                                color: mode === 'exclude' ? '#ef4444' : 'var(--color-text)',
-                                fontSize: '0.78rem',
+                                height: '100%',
+                                padding: '2px 10px',
+                                fontSize: '0.8rem',
                                 fontWeight: mode === 'exclude' ? 600 : 400,
+                                color: mode === 'exclude' ? '#ef4444' : 'var(--color-text-muted, #94a3b8)',
+                                background: mode === 'exclude' ? 'rgba(239, 68, 68, 0.2)' : 'transparent',
+                                border: mode === 'exclude' ? '1px solid rgba(239, 68, 68, 0.5)' : '1px solid transparent',
+                                borderRadius: '4px',
                                 cursor: 'pointer',
                                 transition: 'all 0.15s ease',
-                                whiteSpace: 'nowrap'
+                                whiteSpace: 'nowrap',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
                             }}
-                            title="ไม่แสดง / ยกเว้นสมาชิกที่เลือก"
+                            title="ไม่เลือก/ยกเว้นสมาชิกที่ระบุ"
                         >
-                            ไม่เอา
+                            🚫 ไม่เลือก
                         </button>
                     </div>
 
@@ -167,7 +182,7 @@ export default function MemberChipsFilter({
                             fontWeight: 600,
                             color: mode === 'exclude' ? '#ef4444' : 'var(--color-warning)'
                         }}>
-                            {mode === 'exclude' ? `🚫 ยกเว้นสมาชิก (${selectedMembers.length}):` : `สมาชิกที่เลือก (${selectedMembers.length}):`}
+                            {mode === 'exclude' ? `🚫 สมาชิกที่ไม่เลือก (${selectedMembers.length}):` : `สมาชิกที่เลือก (${selectedMembers.length}):`}
                         </span>
 
                         {selectedMembers.map(memberName => (
