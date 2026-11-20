@@ -6065,35 +6065,35 @@ export default function RoundAccordionItem({
 
                                                         {/* Remaining items table */}
                                                         <div className="inline-table-wrap">
-                                                            <table className="inline-table">
+                                                            <table className="inline-table remaining-table">
                                                                 <thead>
                                                                     <tr>
                                                                         <th style={{ width: '36px', textAlign: 'center' }}></th>
                                                                         <th 
                                                                             onClick={() => handleToggleRemainingSort('number')}
-                                                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                                            style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                                                             title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"
                                                                         >
-                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: remainingSortBy === 'number' ? 'var(--color-warning)' : 'inherit' }}>
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: remainingSortBy === 'number' ? 'var(--color-warning)' : 'inherit', fontWeight: remainingSortBy === 'number' ? 700 : 600 }}>
                                                                                 เลข {remainingSortBy === 'number' ? (remainingSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
                                                                             </span>
                                                                         </th>
-                                                                        <th>ประเภท</th>
+                                                                        <th style={{ whiteSpace: 'nowrap' }}>ประเภท</th>
                                                                         <th 
                                                                             onClick={() => handleToggleRemainingSort('total')}
-                                                                            style={{ cursor: 'pointer', userSelect: 'none' }}
+                                                                            style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                                                             title="คลิกเพื่อเรียงตามยอดรวม (มากไปน้อย / น้อยไปมาก)"
                                                                         >
-                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: remainingSortBy === 'total' ? 'var(--color-warning)' : 'inherit' }}>
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem', color: remainingSortBy === 'total' ? 'var(--color-warning)' : 'inherit', fontWeight: remainingSortBy === 'total' ? 700 : 600 }}>
                                                                                 ยอดรวม {remainingSortBy === 'total' ? (remainingSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
                                                                             </span>
                                                                         </th>
                                                                         <th 
                                                                             onClick={() => handleToggleRemainingSort('remaining')}
-                                                                            style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }}
+                                                                            style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
                                                                             title="คลิกเพื่อเรียงตามยอดเหลือ (มากไปน้อย / น้อยไปมาก)"
                                                                         >
-                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem', color: remainingSortBy === 'remaining' ? 'var(--color-warning)' : 'inherit' }}>
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem', color: remainingSortBy === 'remaining' ? 'var(--color-warning)' : 'inherit', fontWeight: remainingSortBy === 'remaining' ? 700 : 600 }}>
                                                                                 เหลือ {remainingSortBy === 'remaining' ? (remainingSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
                                                                             </span>
                                                                         </th>
@@ -6108,6 +6108,7 @@ export default function RoundAccordionItem({
                                                                         return (
                                                                             <tr
                                                                                 key={`${item.numbers}-${item.bet_type}-${idx}`}
+                                                                                className={`remaining-table-row ${isSelected ? 'selected' : ''}`}
                                                                                 onClick={() => toggleRemainingItem(item)}
                                                                                 style={{
                                                                                     cursor: 'pointer',
@@ -6123,18 +6124,20 @@ export default function RoundAccordionItem({
                                                                                         style={{ width: '16px', height: '16px', accentColor: 'var(--color-warning)', cursor: 'pointer' }}
                                                                                     />
                                                                                 </td>
-                                                                                <td className="number-cell">
-                                                                                    <div className="number-value" style={{ fontFamily: "'Monaco', 'Menlo', monospace", color: 'var(--color-primary)', fontWeight: 600 }}>
+                                                                                <td className="number-cell" style={{ whiteSpace: 'nowrap' }}>
+                                                                                    <div className="number-value" style={{ fontFamily: "'Monaco', 'Menlo', monospace", color: 'var(--color-primary)', fontWeight: 600, letterSpacing: '0.05em' }}>
                                                                                         {item.numbers}
                                                                                     </div>
                                                                                 </td>
-                                                                                <td style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-                                                                                    <div>{item.display_bet_type || getRemainingBetTypeDisplay(item.bet_type, round?.lottery_type)}</div>
+                                                                                <td>
+                                                                                    <div style={{ fontSize: '0.85rem', color: 'var(--color-text)', fontWeight: 500 }}>
+                                                                                        {item.display_bet_type || getRemainingBetTypeDisplay(item.bet_type, round?.lottery_type)}
+                                                                                    </div>
                                                                                 </td>
-                                                                                <td style={{ color: 'var(--color-text-muted)' }}>
+                                                                                <td style={{ color: 'var(--color-text-muted)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                                                                                     {(round?.currency_symbol || '฿')}{(Number(item.totalAmount) || 0).toLocaleString()}
                                                                                 </td>
-                                                                                <td style={{ fontWeight: 600, color: 'var(--color-warning)', textAlign: 'right' }}>
+                                                                                <td style={{ fontWeight: 600, color: 'var(--color-warning)', textAlign: 'right', whiteSpace: 'nowrap' }}>
                                                                                     <div>{(round?.currency_symbol || '฿')}{(Number(item.remainingAmount) || 0).toLocaleString()}</div>
                                                                                     {(hasRetain || hasCap) && (
                                                                                         <div style={{ fontSize: '0.7rem', fontWeight: 400, color: transferAmount > 0 ? '#38bdf8' : 'var(--color-text-muted)', marginTop: '0.1rem' }}>
@@ -6618,131 +6621,106 @@ export default function RoundAccordionItem({
                                                             </div>
                                                         </div>
 
-                                                        {/* Table Header */}
-                                                        <div style={{ 
-                                                            display: 'flex', 
-                                                            alignItems: 'center',
-                                                            padding: '0.5rem 1rem',
-                                                            background: 'var(--color-surface-light)',
-                                                            borderBottom: '1px solid var(--color-border)',
-                                                            fontSize: '0.75rem',
-                                                            color: 'var(--color-text-muted)',
-                                                            fontWeight: '600',
-                                                            borderRadius: '8px 8px 0 0'
-                                                        }}>
-                                                            <div style={{ width: '30px' }}></div>
-                                                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => handleToggleExcessSort('number')}
-                                                                    style={{
-                                                                        background: excessSortBy === 'number' ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
-                                                                        border: `1px solid ${excessSortBy === 'number' ? 'rgba(245, 158, 11, 0.4)' : 'transparent'}`,
-                                                                        borderRadius: '4px',
-                                                                        padding: '0.15rem 0.45rem',
-                                                                        cursor: 'pointer',
-                                                                        font: 'inherit',
-                                                                        display: 'inline-flex',
-                                                                        alignItems: 'center',
-                                                                        gap: '0.25rem',
-                                                                        color: excessSortBy === 'number' ? 'var(--color-warning)' : 'var(--color-text-muted)',
-                                                                        transition: 'all 0.15s ease'
-                                                                    }}
-                                                                    title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"
-                                                                >
-                                                                    <span>เลข</span>
-                                                                    <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>
-                                                                        {excessSortBy === 'number' ? (excessSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
-                                                                    </span>
-                                                                </button>
-                                                                <span>ประเภท</span>
-                                                            </div>
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => handleToggleExcessSort('excess')}
-                                                                style={{
-                                                                    background: excessSortBy === 'excess' ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
-                                                                    border: `1px solid ${excessSortBy === 'excess' ? 'rgba(245, 158, 11, 0.4)' : 'transparent'}`,
-                                                                    borderRadius: '4px',
-                                                                    padding: '0.15rem 0.45rem',
-                                                                    cursor: 'pointer',
-                                                                    font: 'inherit',
-                                                                    display: 'inline-flex',
-                                                                    alignItems: 'center',
-                                                                    justifyContent: 'flex-end',
-                                                                    gap: '0.25rem',
-                                                                    color: excessSortBy === 'excess' ? 'var(--color-warning)' : 'var(--color-text-muted)',
-                                                                    transition: 'all 0.15s ease'
-                                                                }}
-                                                                title="คลิกเพื่อเรียงตามจำนวนเงินเกิน (มากไปน้อย / น้อยไปมาก)"
-                                                            >
-                                                                <span>จำนวน</span>
-                                                                <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>
-                                                                    {excessSortBy === 'excess' ? (excessSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
-                                                                </span>
-                                                            </button>
-                                                        </div>
-                                                        <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-                                                            {filteredExcessItems.map((item, idx) => {
-                                                                const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
-                                                                const setPrice = round?.set_prices?.['4_top'] || 120
-                                                                const capVal = excessMaxCapByType[item.bet_type]
-                                                                const { transferAmount, hasCap } = calculateExcessItemTransfer(item, capVal)
-                                                                const transferTotal = item.isSetBased ? transferAmount * setPrice : transferAmount
-                                                                const excessTotal = item.isSetBased ? item.excess * setPrice : item.excess
-                                                                return (
-                                                                    <div
-                                                                        key={idx}
-                                                                        className={`excess-card ${isSelected ? 'selected' : ''}`}
-                                                                        onClick={() => toggleExcessItem(item)}
-                                                                        style={{
-                                                                            display: 'flex', alignItems: 'center', padding: '0.75rem 1rem',
-                                                                            background: isSelected ? 'rgba(255, 193, 7, 0.15)' : 'var(--color-surface)',
-                                                                            borderBottom: '1px solid var(--color-border)',
-                                                                            cursor: 'pointer', transition: 'all 0.2s ease'
-                                                                        }}
-                                                                    >
-                                                                        <input type="checkbox" checked={isSelected || false} onChange={() => { }} style={{ width: '18px', height: '18px', accentColor: 'var(--color-warning)', marginRight: '0.75rem' }} />
-                                                                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                                            <span style={{ fontWeight: 600, minWidth: '60px', fontFamily: "'Monaco', 'Menlo', monospace", color: 'var(--color-primary)', letterSpacing: '0.05em' }}>{item.displayNumbers || item.numbers}</span>
-                                                                            <div>
-                                                                                <span style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>{BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}</span>
-                                                                                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                                                                                    {item.isConvertedFromTod && !item.isMergedWithTod ? (
-                                                                                        <>ยอดโต๊ดเดิม: {round.currency_symbol}{(item.originalTodExcess || 0).toLocaleString()} • แตก {item.convertedPermutationsCount || 6} ชุด</>
-                                                                                    ) : item.isAIRecommended && item.limitType === 'ai' ? (
-                                                                                        <>ยอดปัจจุบัน: {round.currency_symbol}{(item.total || 0).toLocaleString()} → เก็บไว้: {round.currency_symbol}{(item.limit || 0).toLocaleString()}</>
-                                                                                    ) : (
-                                                                                        <>ยอด: {round.currency_symbol}{(item.total || 0).toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • {item.limitType === 'blocked' ? '🔴 ปิด' : 'อั้น'}: {item.isSetBased ? `${item.limit || 0} ชุด` : `${round.currency_symbol}${(item.limit || 0).toLocaleString()}`}{item.isNumberLimit && item.payoutPercent < 100 ? ` • จ่าย ${item.payoutPercent}%` : ''}</>
+                                                        {/* Excess items table */}
+                                                        <div className="inline-table-wrap">
+                                                            <table className="inline-table excess-table">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th style={{ width: '36px', textAlign: 'center' }}></th>
+                                                                        <th 
+                                                                            onClick={() => handleToggleExcessSort('number')}
+                                                                            style={{ cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                                                                            title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"
+                                                                        >
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: excessSortBy === 'number' ? 'var(--color-warning)' : 'inherit', fontWeight: excessSortBy === 'number' ? 700 : 600 }}>
+                                                                                เลข {excessSortBy === 'number' ? (excessSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                            </span>
+                                                                        </th>
+                                                                        <th style={{ whiteSpace: 'nowrap' }}>ประเภท</th>
+                                                                        <th 
+                                                                            onClick={() => handleToggleExcessSort('excess')}
+                                                                            style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}
+                                                                            title="คลิกเพื่อเรียงตามจำนวนเงินเกิน (มากไปน้อย / น้อยไปมาก)"
+                                                                        >
+                                                                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.25rem', color: excessSortBy === 'excess' ? 'var(--color-warning)' : 'inherit', fontWeight: excessSortBy === 'excess' ? 700 : 600 }}>
+                                                                                จำนวน {excessSortBy === 'excess' ? (excessSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
+                                                                            </span>
+                                                                        </th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {filteredExcessItems.map((item, idx) => {
+                                                                        const isSelected = selectedExcessItems[`${item.bet_type}|${item.numbers}`]
+                                                                        const setPrice = round?.set_prices?.['4_top'] || 120
+                                                                        const capVal = excessMaxCapByType[item.bet_type]
+                                                                        const { transferAmount, hasCap } = calculateExcessItemTransfer(item, capVal)
+                                                                        const transferTotal = item.isSetBased ? transferAmount * setPrice : transferAmount
+                                                                        const excessTotal = item.isSetBased ? item.excess * setPrice : item.excess
+                                                                        return (
+                                                                            <tr
+                                                                                key={`${item.numbers}-${item.bet_type}-${idx}`}
+                                                                                className={`excess-table-row ${isSelected ? 'selected' : ''}`}
+                                                                                onClick={() => toggleExcessItem(item)}
+                                                                                style={{
+                                                                                    cursor: 'pointer',
+                                                                                    background: isSelected ? 'rgba(255, 193, 7, 0.15)' : undefined,
+                                                                                    transition: 'background 0.15s ease'
+                                                                                }}
+                                                                            >
+                                                                                <td style={{ textAlign: 'center', width: '36px' }} onClick={(e) => e.stopPropagation()}>
+                                                                                    <input
+                                                                                        type="checkbox"
+                                                                                        checked={isSelected || false}
+                                                                                        onChange={() => toggleExcessItem(item)}
+                                                                                        style={{ width: '16px', height: '16px', accentColor: 'var(--color-warning)', cursor: 'pointer' }}
+                                                                                    />
+                                                                                </td>
+                                                                                <td className="number-cell" style={{ whiteSpace: 'nowrap' }}>
+                                                                                    <div className="number-value" style={{ fontFamily: "'Monaco', 'Menlo', monospace", color: 'var(--color-primary)', fontWeight: 600, letterSpacing: '0.05em' }}>
+                                                                                        {item.displayNumbers || item.numbers}
+                                                                                    </div>
+                                                                                </td>
+                                                                                <td>
+                                                                                    <div style={{ fontWeight: 500, fontSize: '0.85rem', color: 'var(--color-text)' }}>
+                                                                                        {BET_TYPES_BY_LOTTERY[round.lottery_type]?.[item.bet_type]?.label || BET_TYPES[item.bet_type] || item.bet_type}
+                                                                                    </div>
+                                                                                    <div style={{ fontSize: '0.74rem', color: 'var(--color-text-muted)', marginTop: '0.1rem', lineHeight: '1.25' }}>
+                                                                                        {item.isConvertedFromTod && !item.isMergedWithTod ? (
+                                                                                            <>ยอดโต๊ดเดิม: {round.currency_symbol}{(item.originalTodExcess || 0).toLocaleString()} • แตก {item.convertedPermutationsCount || 6} ชุด</>
+                                                                                        ) : item.isAIRecommended && item.limitType === 'ai' ? (
+                                                                                            <>ยอดปัจจุบัน: {round.currency_symbol}{(item.total || 0).toLocaleString()} → เก็บไว้: {round.currency_symbol}{(item.limit || 0).toLocaleString()}</>
+                                                                                        ) : (
+                                                                                            <>ยอด: {round.currency_symbol}{(item.total || 0).toLocaleString()}{item.isSetBased && ` (${item.setCount} ชุด)`} • {item.limitType === 'blocked' ? '🔴 ปิด' : 'อั้น'}: {item.isSetBased ? `${item.limit || 0} ชุด` : `${round.currency_symbol}${(item.limit || 0).toLocaleString()}`}{item.isNumberLimit && item.payoutPercent < 100 ? ` • จ่าย ${item.payoutPercent}%` : ''}</>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    {item.isMergedWithTod && (
+                                                                                        <div style={{ fontSize: '0.72rem', color: '#fbbf24', marginTop: '0.15rem', fontWeight: 500 }}>
+                                                                                            (ตรงเดิม {round.currency_symbol}{(item.originalTopExcess || 0).toLocaleString()} + แปลงจากโต๊ด {round.currency_symbol}{(item.convertedTodExcess || 0).toLocaleString()})
+                                                                                        </div>
                                                                                     )}
-                                                                                </div>
-                                                                                {item.isMergedWithTod && (
-                                                                                    <div style={{ fontSize: '0.74rem', color: '#fbbf24', marginTop: '0.15rem', fontWeight: 500 }}>
-                                                                                        (ตรงเดิม {round.currency_symbol}{(item.originalTopExcess || 0).toLocaleString()} + แปลงจากโต๊ด {round.currency_symbol}{(item.convertedTodExcess || 0).toLocaleString()})
+                                                                                    {item.isConvertedFromTod && !item.isMergedWithTod && (
+                                                                                        <div style={{ fontSize: '0.72rem', color: '#38bdf8', marginTop: '0.15rem', fontWeight: 500 }}>
+                                                                                            💫 แตกจากโต๊ด {item.originalTodNumbers}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </td>
+                                                                                <td style={{ textAlign: 'right', fontWeight: 600, color: 'var(--color-warning)', whiteSpace: 'nowrap' }}>
+                                                                                    {item.isAIRecommended && <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginBottom: '0.1rem' }}>ตีออก</div>}
+                                                                                    <div style={{ color: hasCap && transferAmount < item.excess ? '#38bdf8' : 'var(--color-warning)' }}>
+                                                                                        {round.currency_symbol}{(transferTotal || 0).toLocaleString()}
                                                                                     </div>
-                                                                                )}
-                                                                                {item.isConvertedFromTod && !item.isMergedWithTod && (
-                                                                                    <div style={{ fontSize: '0.74rem', color: '#38bdf8', marginTop: '0.15rem', fontWeight: 500 }}>
-                                                                                        💫 แตกจากโต๊ด {item.originalTodNumbers}
-                                                                                    </div>
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div style={{ textAlign: 'right', color: 'var(--color-warning)', fontWeight: 600 }}>
-                                                                            {item.isAIRecommended && <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)', marginBottom: '0.1rem' }}>ตีออก</div>}
-                                                                            <div style={{ color: hasCap && transferAmount < item.excess ? '#38bdf8' : 'var(--color-warning)' }}>
-                                                                                {round.currency_symbol}{(transferTotal || 0).toLocaleString()}
-                                                                            </div>
-                                                                            {hasCap && transferAmount < item.excess && (
-                                                                                <div style={{ fontSize: '0.68rem', fontWeight: 400, color: 'var(--color-text-muted)' }}>
-                                                                                    (เกินจริง {round.currency_symbol}{excessTotal.toLocaleString()})
-                                                                                </div>
-                                                                            )}
-                                                                            {item.isSetBased && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({transferAmount} ชุด)</div>}
-                                                                        </div>
-                                                                    </div>
-                                                                )
-                                                            })}
+                                                                                    {hasCap && transferAmount < item.excess && (
+                                                                                        <div style={{ fontSize: '0.68rem', fontWeight: 400, color: 'var(--color-text-muted)' }}>
+                                                                                            (เกินจริง {round.currency_symbol}{excessTotal.toLocaleString()})
+                                                                                        </div>
+                                                                                    )}
+                                                                                    {item.isSetBased && <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>({transferAmount} ชุด)</div>}
+                                                                                </td>
+                                                                            </tr>
+                                                                        )
+                                                                    })}
+                                                                </tbody>
+                                                            </table>
                                                         </div>
                                                     </>
                                                 )}
