@@ -6793,17 +6793,21 @@ export default function RoundAccordionItem({
                                                         }}>
                                                             <div style={{ width: '30px' }}></div>
                                                             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                                                <div
+                                                                <button
+                                                                    type="button"
                                                                     onClick={() => handleToggleExcessSort('number')}
                                                                     style={{
-                                                                        minWidth: '60px',
+                                                                        background: excessSortBy === 'number' ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
+                                                                        border: `1px solid ${excessSortBy === 'number' ? 'rgba(245, 158, 11, 0.4)' : 'transparent'}`,
+                                                                        borderRadius: '4px',
+                                                                        padding: '0.15rem 0.45rem',
                                                                         cursor: 'pointer',
-                                                                        userSelect: 'none',
+                                                                        font: 'inherit',
                                                                         display: 'inline-flex',
                                                                         alignItems: 'center',
                                                                         gap: '0.25rem',
-                                                                        color: excessSortBy === 'number' ? 'var(--color-warning)' : 'inherit',
-                                                                        transition: 'color 0.15s ease'
+                                                                        color: excessSortBy === 'number' ? 'var(--color-warning)' : 'var(--color-text-muted)',
+                                                                        transition: 'all 0.15s ease'
                                                                     }}
                                                                     title="คลิกเพื่อเรียงตามเลข (น้อยไปมาก / มากไปน้อย)"
                                                                 >
@@ -6811,21 +6815,25 @@ export default function RoundAccordionItem({
                                                                     <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>
                                                                         {excessSortBy === 'number' ? (excessSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
                                                                     </span>
-                                                                </div>
+                                                                </button>
                                                                 <span>ประเภท</span>
                                                             </div>
-                                                            <div
+                                                            <button
+                                                                type="button"
                                                                 onClick={() => handleToggleExcessSort('excess')}
                                                                 style={{
-                                                                    textAlign: 'right',
+                                                                    background: excessSortBy === 'excess' ? 'rgba(245, 158, 11, 0.16)' : 'transparent',
+                                                                    border: `1px solid ${excessSortBy === 'excess' ? 'rgba(245, 158, 11, 0.4)' : 'transparent'}`,
+                                                                    borderRadius: '4px',
+                                                                    padding: '0.15rem 0.45rem',
                                                                     cursor: 'pointer',
-                                                                    userSelect: 'none',
+                                                                    font: 'inherit',
                                                                     display: 'inline-flex',
                                                                     alignItems: 'center',
                                                                     justifyContent: 'flex-end',
                                                                     gap: '0.25rem',
-                                                                    color: excessSortBy === 'excess' ? 'var(--color-warning)' : 'inherit',
-                                                                    transition: 'color 0.15s ease'
+                                                                    color: excessSortBy === 'excess' ? 'var(--color-warning)' : 'var(--color-text-muted)',
+                                                                    transition: 'all 0.15s ease'
                                                                 }}
                                                                 title="คลิกเพื่อเรียงตามจำนวนเงินเกิน (มากไปน้อย / น้อยไปมาก)"
                                                             >
@@ -6833,7 +6841,7 @@ export default function RoundAccordionItem({
                                                                 <span style={{ fontSize: '0.78rem', fontWeight: 700 }}>
                                                                     {excessSortBy === 'excess' ? (excessSortOrder === 'asc' ? '↑' : '↓') : <span style={{ opacity: 0.35 }}>↕</span>}
                                                                 </span>
-                                                            </div>
+                                                            </button>
                                                         </div>
                                                         <div className="excess-list" style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
                                                             {filteredExcessItems.map((item, idx) => {
