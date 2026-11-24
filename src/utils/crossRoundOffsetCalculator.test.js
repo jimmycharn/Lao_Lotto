@@ -18,7 +18,8 @@ import {
     getSenderBankShortName,
     getSlipTransferTime,
     isPromptPayReceiver,
-    getSlipDestinationAccountNote
+    getSlipDestinationAccountNote,
+    isPaymentMatchingRound
 } from './crossRoundOffsetCalculator'
 
 describe('crossRoundOffsetCalculator', () => {
@@ -1712,6 +1713,49 @@ describe('crossRoundOffsetCalculator', () => {
 
             console.log('TEST RESULT Case 4 (empty roundHistory + payment round_date 27 vs close 28):', JSON.stringify(result))
             expect(result).toEqual([])
+        })
+
+        it('case 5: payment paid_at on 2026-10-16 for debt of 2026-10-01 round does NOT attach to 2026-10-16 round', () => {
+            const round1Oct = {
+                id: 'rh-1-oct',
+                round_id: 'lr-1-oct',
+                round_date: '2026-10-01',
+                close_time: '2026-10-01T15:30:00Z',
+                lottery_type: 'thai'
+            }
+            const round16Oct = {
+                id: 'rh-16-oct',
+                round_id: 'lr-16-oct',
+                round_date: '2026-10-16',
+                close_time: '2026-10-16T15:30:00Z',
+                lottery_type: 'thai'
+            }
+
+            // Payment made on 16 Oct to settle debt from 1 Oct
+            const paymentFor1Oct = {
+                id: 'pay-1-oct',
+                round_id: 'lr-1-oct',
+                user_id: 'user-1',
+                amount: 10000,
+                direction: 'member_to_dealer',
+                payment_type: 'net_settlement',
+                round_date: '2026-10-01',
+                paid_at: '2026-10-16',
+                lottery_type: 'thai'
+            }
+
+            const roundCloseDateMap = {
+                'lr-1-oct': '2026-10-01',
+                'rh-1-oct': '2026-10-01',
+                'lr-16-oct': '2026-10-16',
+                'rh-16-oct': '2026-10-16'
+            }
+
+            // Must match round 1 Oct
+            expect(isPaymentMatchingRound(paymentFor1Oct, round1Oct, { roundCloseDateMap })).toBe(true)
+
+            // Must NOT match round 16 Oct despite paid_at being 2026-10-16
+            expect(isPaymentMatchingRound(paymentFor1Oct, round16Oct, { roundCloseDateMap })).toBe(false)
         })
     })
 })

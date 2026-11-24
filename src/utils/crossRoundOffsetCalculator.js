@@ -396,11 +396,7 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
         try { targetRound._matchedDates = roundDates } catch {}
     }
 
-    // Check payment dates against roundDates
-    if (p.paid_at) {
-        const d = String(p.paid_at).slice(0, 10)
-        if (d && roundDates.has(d)) return true
-    }
+    // Check payment round_date against roundDates
     if (p.round_date) {
         const d = String(p.round_date).slice(0, 10)
         if (d && roundDates.has(d)) return true
@@ -409,6 +405,43 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
     }
     if (pRoundId && roundCloseDateMap[String(pRoundId)]) {
         if (roundDates.has(roundCloseDateMap[String(pRoundId)])) return true
+    }
+
+    // Check payment paid_at against roundDates:
+    // Only if p has no conflicting round_date (null or matches target within open-close window),
+    // and pRoundId does not belong to a known different round date in roundCloseDateMap
+    if (p.paid_at) {
+        const d = String(p.paid_at).slice(0, 10)
+        if (d && roundDates.has(d)) {
+            // Guard: If p has an explicit round_date that points to a DIFFERENT round
+            // (more than 2 days away from any date in roundDates), it belongs to that other round!
+            if (p.round_date) {
+                const pDateStr = String(p.round_date).slice(0, 10)
+                if (pDateStr && !roundDates.has(pDateStr)) {
+                    let isCloseWindow = false
+                    for (const rd of roundDates) {
+                        const diff = Math.abs((new Date(pDateStr) - new Date(rd)) / (1000 * 60 * 60 * 24))
+                        if (diff <= 2) {
+                            isCloseWindow = true
+                            break
+                        }
+                    }
+                    if (!isCloseWindow) {
+                        return false // Definitely a different round!
+                    }
+                }
+            }
+
+            // Guard: If pRoundId belongs to a known round in roundCloseDateMap that does NOT match roundDates
+            if (pRoundId && roundCloseDateMap[String(pRoundId)]) {
+                const knownDate = roundCloseDateMap[String(pRoundId)]
+                if (knownDate && !roundDates.has(knownDate)) {
+                    return false // Known to belong to another round!
+                }
+            }
+
+            return true
+        }
     }
 
     return false
