@@ -352,67 +352,125 @@ export function findMemberPastUnpaidRounds({
 
     const roundCloseDateMap = {}
     const roundLotteryTypeMap = {}
+    const idToAliasesMap = new Map()
+    const idToCanonicalMap = new Map()
+
     if (Array.isArray(roundHistory)) {
         for (const r of roundHistory) {
-            const cDate = getRoundCloseDate(r)
+            const cDate = getRoundCloseDate(r) || (r.round_date ? String(r.round_date).split('T')[0] : '')
             const lType = r.lottery_type || r.lotteryType
-            if (r.round_id) {
-                if (cDate) roundCloseDateMap[String(r.round_id)] = cDate
-                if (lType) roundLotteryTypeMap[String(r.round_id)] = lType
-            }
-            if (r.id) {
-                if (cDate) roundCloseDateMap[String(r.id)] = cDate
-                if (lType) roundLotteryTypeMap[String(r.id)] = lType
+
+            const aliases = new Set()
+            if (r.id) aliases.add(String(r.id))
+            if (r.round_id) aliases.add(String(r.round_id))
+
+            const canonicalId = String(r.round_id || r.id)
+
+            for (const alias of aliases) {
+                idToCanonicalMap.set(alias, canonicalId)
+                idToAliasesMap.set(alias, aliases)
+                if (cDate) roundCloseDateMap[alias] = cDate
+                if (lType) roundLotteryTypeMap[alias] = lType
             }
         }
     }
 
-    // Group userHistories by roundId to avoid duplicate calculations
+    const currentRoundAliases = new Set()
+    if (currentRoundId) {
+        currentRoundAliases.add(String(currentRoundId))
+        const curAliases = idToAliasesMap.get(String(currentRoundId))
+        if (curAliases) {
+            for (const a of curAliases) currentRoundAliases.add(a)
+        }
+        const curCanonical = idToCanonicalMap.get(String(currentRoundId))
+        if (curCanonical) currentRoundAliases.add(curCanonical)
+    }
+
+    // Group userHistories by canonical roundId to avoid duplicate calculations
     const roundMap = {}
     for (const h of userHistories) {
         if (h.user_id !== userId) continue
-        const roundId = h.round_id || h.id
-        if (!roundId) continue
-        if (currentRoundId && String(roundId) === String(currentRoundId)) continue
+        const rawRoundId = h.round_id || h.id
+        if (!rawRoundId) continue
 
-        const roundDate = roundCloseDateMap[String(roundId)] || getRoundCloseDate(h) || h.round_date || ''
+        const canonicalRoundId = idToCanonicalMap.get(String(rawRoundId)) || String(rawRoundId)
+
+        if (currentRoundId && (currentRoundAliases.has(String(rawRoundId)) || currentRoundAliases.has(canonicalRoundId))) {
+            continue
+        }
+
+        const roundDate = roundCloseDateMap[canonicalRoundId] || roundCloseDateMap[String(rawRoundId)] || getRoundCloseDate(h) || (h.round_date ? String(h.round_date).split('T')[0] : '')
         if (currentRoundDate && roundDate && roundDate > currentRoundDate) continue
 
-        const itemLotteryType = roundLotteryTypeMap[String(roundId)] || h.lottery_type || h.lotteryType || ''
+        const itemLotteryType = roundLotteryTypeMap[canonicalRoundId] || roundLotteryTypeMap[String(rawRoundId)] || h.lottery_type || h.lotteryType || ''
         if (normalizedLotteryFilter) {
             if (String(itemLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
                 continue
             }
         }
 
-        if (!roundMap[roundId]) {
-            roundMap[roundId] = {
-                roundId,
+        if (!roundMap[canonicalRoundId]) {
+            const aliases = new Set(idToAliasesMap.get(canonicalRoundId) || [canonicalRoundId])
+            aliases.add(String(rawRoundId))
+
+            roundMap[canonicalRoundId] = {
+                roundId: canonicalRoundId,
+                aliases,
                 roundDate,
                 lotteryType: itemLotteryType,
                 total_amount: 0,
                 total_commission: 0,
                 total_winnings: 0
             }
+        } else {
+            roundMap[canonicalRoundId].aliases.add(String(rawRoundId))
         }
-        roundMap[roundId].total_amount += Number(h.total_amount || 0)
+        roundMap[canonicalRoundId].total_amount += Number(h.total_amount || 0)
         const itemComm = (h.total_commission !== undefined && h.total_commission !== null && Number(h.total_commission) > 0)
             ? Number(h.total_commission)
             : (Number(h.total_amount || 0) > 0 ? Math.round(Number(h.total_amount) * 0.20) : 0)
-        roundMap[roundId].total_commission += itemComm
-        roundMap[roundId].total_winnings += Number(h.total_winnings || 0)
-        if (!roundMap[roundId].roundDate && roundDate) {
-            roundMap[roundId].roundDate = roundDate
+        roundMap[canonicalRoundId].total_commission += itemComm
+        roundMap[canonicalRoundId].total_winnings += Number(h.total_winnings || 0)
+        if (!roundMap[canonicalRoundId].roundDate && roundDate) {
+            roundMap[canonicalRoundId].roundDate = roundDate
         }
-        if (!roundMap[roundId].lotteryType && itemLotteryType) {
-            roundMap[roundId].lotteryType = itemLotteryType
+        if (!roundMap[canonicalRoundId].lotteryType && itemLotteryType) {
+            roundMap[canonicalRoundId].lotteryType = itemLotteryType
         }
     }
 
     for (const roundId of Object.keys(roundMap)) {
         const aggregated = roundMap[roundId]
         const initial = calculateMemberInitialBalance(aggregated)
-        const roundPayments = memberPayments.filter(p => (String(p.round_id || p.roundId) === String(roundId)) && p.user_id === userId)
+        const roundPayments = memberPayments.filter(p => {
+            if (p.user_id !== userId) return false
+            const pRoundId = p.round_id || p.roundId
+
+            // 1. Direct ID or alias match
+            if (pRoundId) {
+                const pStr = String(pRoundId)
+                if (pStr === String(roundId) || aggregated.aliases.has(pStr)) {
+                    return true
+                }
+                const pCanonical = idToCanonicalMap.get(pStr)
+                if (pCanonical && (pCanonical === String(roundId) || aggregated.aliases.has(pCanonical))) {
+                    return true
+                }
+            }
+
+            // 2. Fallback match by round_date + lottery_type (matching Dealer.jsx lines 1140-1144)
+            if (aggregated.roundDate && aggregated.lotteryType) {
+                const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : null
+                const pType = p.lottery_type || p.lotteryType
+                if (pDate && pType) {
+                    if (pDate === aggregated.roundDate && String(pType).trim().toLowerCase() === String(aggregated.lotteryType).trim().toLowerCase()) {
+                        return true
+                    }
+                }
+            }
+
+            return false
+        })
         const currentBalance = calculateMemberCurrentBalance(initial, roundPayments)
 
         if (Math.round(currentBalance) !== 0) {
@@ -587,42 +645,68 @@ export function findUpstreamPastUnpaidRounds({
 
     const roundCloseDateMap = {}
     const roundLotteryTypeMap = {}
+    const idToAliasesMap = new Map()
+    const idToCanonicalMap = new Map()
+
     if (Array.isArray(roundHistory)) {
         for (const r of roundHistory) {
             const cDate = getRoundCloseDate(r) || (r.round_date ? String(r.round_date).split('T')[0] : '')
             const lType = r.lottery_type || r.lotteryType
-            if (r.round_id) {
-                if (cDate) roundCloseDateMap[String(r.round_id)] = cDate
-                if (lType) roundLotteryTypeMap[String(r.round_id)] = lType
-            }
-            if (r.id) {
-                if (cDate) roundCloseDateMap[String(r.id)] = cDate
-                if (lType) roundLotteryTypeMap[String(r.id)] = lType
+
+            const aliases = new Set()
+            if (r.id) aliases.add(String(r.id))
+            if (r.round_id) aliases.add(String(r.round_id))
+
+            const canonicalId = String(r.round_id || r.id)
+
+            for (const alias of aliases) {
+                idToCanonicalMap.set(alias, canonicalId)
+                idToAliasesMap.set(alias, aliases)
+                if (cDate) roundCloseDateMap[alias] = cDate
+                if (lType) roundLotteryTypeMap[alias] = lType
             }
         }
     }
 
-    // Group transfers by round_id
+    const currentRoundAliases = new Set()
+    if (currentRoundId) {
+        currentRoundAliases.add(String(currentRoundId))
+        const curAliases = idToAliasesMap.get(String(currentRoundId))
+        if (curAliases) {
+            for (const a of curAliases) currentRoundAliases.add(a)
+        }
+        const curCanonical = idToCanonicalMap.get(String(currentRoundId))
+        if (curCanonical) currentRoundAliases.add(curCanonical)
+    }
+
+    // Group transfers by canonical round_id
     const roundMap = {}
     for (const t of transfers) {
         if (!isMatchingUpstreamDealer(t, dealerName, targetTransfer)) continue
 
-        const roundId = t.round_id || t.id
-        if (currentRoundId && String(roundId) === String(currentRoundId)) continue
+        const rawRoundId = t.round_id || t.id
+        if (!rawRoundId) continue
 
-        const resolvedDate = roundCloseDateMap[String(roundId)] || getRoundCloseDate(t) || t.round_date || ''
+        const canonicalRoundId = idToCanonicalMap.get(String(rawRoundId)) || String(rawRoundId)
+        if (currentRoundId && (currentRoundAliases.has(String(rawRoundId)) || currentRoundAliases.has(canonicalRoundId))) continue
+
+        const resolvedDate = roundCloseDateMap[canonicalRoundId] || roundCloseDateMap[String(rawRoundId)] || getRoundCloseDate(t) || (t.round_date ? String(t.round_date).split('T')[0] : '')
         if (currentRoundDate && resolvedDate && resolvedDate > currentRoundDate) continue
 
-        const roundLotteryType = roundLotteryTypeMap[String(roundId)] || t.lottery_type || t.lotteryType || ''
+        const roundLotteryType = roundLotteryTypeMap[canonicalRoundId] || roundLotteryTypeMap[String(rawRoundId)] || t.lottery_type || t.lotteryType || ''
         if (normalizedLotteryFilter && roundLotteryType) {
             if (String(roundLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
                 continue
             }
         }
 
-        if (!roundMap[roundId]) {
-            roundMap[roundId] = {
-                roundId,
+        if (!roundMap[canonicalRoundId]) {
+            const aliases = new Set(idToAliasesMap.get(canonicalRoundId) || [canonicalRoundId])
+            aliases.add(String(rawRoundId))
+
+            roundMap[canonicalRoundId] = {
+                roundId: canonicalRoundId,
+                aliases,
                 roundDate: resolvedDate,
                 lotteryType: roundLotteryType,
                 upstreamDealerName: t.target_dealer_name || t.upstream_dealer_name || t.upstream_dealer?.full_name || dealerName,
@@ -631,16 +715,18 @@ export function findUpstreamPastUnpaidRounds({
                 commission_earned: 0,
                 winnings: 0
             }
+        } else {
+            roundMap[canonicalRoundId].aliases.add(String(rawRoundId))
         }
 
-        roundMap[roundId].amount += Number(t.amount || 0)
-        roundMap[roundId].commission_earned += Number(t.commission_earned || 0)
-        roundMap[roundId].winnings += Number(t.winnings || 0)
-        if (!roundMap[roundId].roundDate && resolvedDate) {
-            roundMap[roundId].roundDate = resolvedDate
+        roundMap[canonicalRoundId].amount += Number(t.amount || 0)
+        roundMap[canonicalRoundId].commission_earned += Number(t.commission_earned || 0)
+        roundMap[canonicalRoundId].winnings += Number(t.winnings || 0)
+        if (!roundMap[canonicalRoundId].roundDate && resolvedDate) {
+            roundMap[canonicalRoundId].roundDate = resolvedDate
         }
-        if (!roundMap[roundId].lotteryType && roundLotteryType) {
-            roundMap[roundId].lotteryType = roundLotteryType
+        if (!roundMap[canonicalRoundId].lotteryType && roundLotteryType) {
+            roundMap[canonicalRoundId].lotteryType = roundLotteryType
         }
     }
 
@@ -650,14 +736,18 @@ export function findUpstreamPastUnpaidRounds({
         for (const rh of roundHistory) {
             const rhRoundId = rh.round_id || rh.id
             if (!rhRoundId) continue
-            if (currentRoundId && String(rhRoundId) === String(currentRoundId)) continue
+
+            const canonicalRoundId = idToCanonicalMap.get(String(rhRoundId)) || String(rhRoundId)
+            if (currentRoundId && (currentRoundAliases.has(String(rhRoundId)) || currentRoundAliases.has(canonicalRoundId))) continue
+
             // Look up whether this round is already in roundMap
-            const targetMapKey = roundMap[rhRoundId] 
-                ? rhRoundId 
-                : (rh.round_id && roundMap[rh.round_id] ? rh.round_id : (rh.id && roundMap[rh.id] ? rh.id : null))
+            const targetMapKey = roundMap[canonicalRoundId] ? canonicalRoundId : null
 
             if (targetMapKey) {
                 const existing = roundMap[targetMapKey]
+                if (rh.id) existing.aliases?.add(String(rh.id))
+                if (rh.round_id) existing.aliases?.add(String(rh.round_id))
+
                 const isRhThai = String(rh.lottery_type || rh.lotteryType || '').toLowerCase().includes('thai')
                 const histAmt = Number(rh.transferred_amount || 0)
                 const histComm = Number(rh.upstream_commission || 0) > 0 
@@ -669,9 +759,9 @@ export function findUpstreamPastUnpaidRounds({
                 if (histComm > 0) {
                     const roundTransfers = transfers.filter(tr => {
                         const trId = tr.round_id || tr.id
-                        return String(trId) === String(rhRoundId) || 
-                            (rh.round_id && String(trId) === String(rh.round_id)) || 
-                            (rh.id && String(trId) === String(rh.id))
+                        if (!trId) return false
+                        const trStr = String(trId)
+                        return trStr === canonicalRoundId || existing.aliases?.has(trStr) || (idToCanonicalMap.get(trStr) === canonicalRoundId)
                     })
                     const totalRoundAmt = roundTransfers.reduce((s, tr) => s + Number(tr.amount || 0), 0)
                     if (totalRoundAmt > 0 && Math.abs(totalRoundAmt - existing.amount) > 1 && histAmt > 0) {
@@ -685,9 +775,9 @@ export function findUpstreamPastUnpaidRounds({
                 if (histWin > 0 && (!existing.winnings || Number(existing.winnings) === 0)) {
                     const roundTransfers = transfers.filter(tr => {
                         const trId = tr.round_id || tr.id
-                        return String(trId) === String(rhRoundId) || 
-                            (rh.round_id && String(trId) === String(rh.round_id)) || 
-                            (rh.id && String(trId) === String(rh.id))
+                        if (!trId) return false
+                        const trStr = String(trId)
+                        return trStr === canonicalRoundId || existing.aliases?.has(trStr) || (idToCanonicalMap.get(trStr) === canonicalRoundId)
                     })
                     const totalRoundAmt = roundTransfers.reduce((s, tr) => s + Number(tr.amount || 0), 0)
                     if (totalRoundAmt > 0 && Math.abs(totalRoundAmt - existing.amount) > 1 && histAmt > 0) {
@@ -710,7 +800,7 @@ export function findUpstreamPastUnpaidRounds({
             const resolvedDate = getRoundCloseDate(rh) || (rh.round_date ? String(rh.round_date).split('T')[0] : '')
             if (currentRoundDate && resolvedDate && resolvedDate > currentRoundDate) continue
 
-            const roundLotteryType = rh.lottery_type || rh.lotteryType || roundLotteryTypeMap[String(rhRoundId)] || ''
+            const roundLotteryType = rh.lottery_type || rh.lotteryType || roundLotteryTypeMap[canonicalRoundId] || roundLotteryTypeMap[String(rhRoundId)] || ''
             if (normalizedLotteryFilter && roundLotteryType) {
                 if (String(roundLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
                     continue
@@ -720,12 +810,23 @@ export function findUpstreamPastUnpaidRounds({
             // Check if this archived round had payments to this upstream dealer
             const hasMatchingPayment = upstreamPayments.some(p => {
                 const pRound = p.round_id || p.roundId
-                return String(pRound) === String(rhRoundId) && isMatchingUpstreamDealer(p, dealerName, targetTransfer)
+                const isIdMatch = pRound && (
+                    String(pRound) === canonicalRoundId || 
+                    (idToAliasesMap.get(canonicalRoundId) && idToAliasesMap.get(canonicalRoundId).has(String(pRound))) ||
+                    idToCanonicalMap.get(String(pRound)) === canonicalRoundId
+                )
+                const isDateMatch = resolvedDate && roundLotteryType && (getRoundCloseDate(p) || (p.round_date ? String(p.round_date).split('T')[0] : '')) === resolvedDate && (p.lottery_type || p.lotteryType) === roundLotteryType
+                return (isIdMatch || isDateMatch) && isMatchingUpstreamDealer(p, dealerName, targetTransfer)
             })
 
             const hasOtherDealerInRound = upstreamPayments.some(p => {
                 const pRound = p.round_id || p.roundId
-                return String(pRound) === String(rhRoundId) && p.upstream_dealer_name && !isMatchingUpstreamDealer(p, dealerName, targetTransfer)
+                const isIdMatch = pRound && (
+                    String(pRound) === canonicalRoundId || 
+                    (idToAliasesMap.get(canonicalRoundId) && idToAliasesMap.get(canonicalRoundId).has(String(pRound))) ||
+                    idToCanonicalMap.get(String(pRound)) === canonicalRoundId
+                )
+                return isIdMatch && p.upstream_dealer_name && !isMatchingUpstreamDealer(p, dealerName, targetTransfer)
             })
 
             if (hasMatchingPayment || !hasOtherDealerInRound) {
@@ -735,8 +836,9 @@ export function findUpstreamPastUnpaidRounds({
                     : Math.round(outAmt * (isRhThai ? 0.30 : (25 / 120)))
                 const outWin = Number(rh.upstream_winnings || 0)
 
-                roundMap[rhRoundId] = {
-                    roundId: rhRoundId,
+                roundMap[canonicalRoundId] = {
+                    roundId: canonicalRoundId,
+                    aliases: new Set(idToAliasesMap.get(canonicalRoundId) || [canonicalRoundId]),
                     roundDate: resolvedDate,
                     lotteryType: roundLotteryType,
                     upstreamDealerName: dealerName,
@@ -754,7 +856,31 @@ export function findUpstreamPastUnpaidRounds({
         const initial = calculateUpstreamInitialBalance(aggregatedTransfer)
         const roundPayments = upstreamPayments.filter(p => {
             const pRound = p.round_id || p.roundId
-            if (String(pRound) !== String(roundId)) return false
+            let isRoundMatch = false
+            if (pRound) {
+                const pStr = String(pRound)
+                if (pStr === String(roundId) || aggregatedTransfer.aliases?.has(pStr)) {
+                    isRoundMatch = true
+                } else {
+                    const pCanonical = idToCanonicalMap.get(pStr)
+                    if (pCanonical && (pCanonical === String(roundId) || aggregatedTransfer.aliases?.has(pCanonical))) {
+                        isRoundMatch = true
+                    }
+                }
+            }
+
+            // Fallback match by round_date + lottery_type (matching Dealer.jsx lines 1159-1163)
+            if (!isRoundMatch && aggregatedTransfer.roundDate && aggregatedTransfer.lotteryType) {
+                const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : null
+                const pType = p.lottery_type || p.lotteryType
+                if (pDate && pType) {
+                    if (pDate === aggregatedTransfer.roundDate && String(pType).trim().toLowerCase() === String(aggregatedTransfer.lotteryType).trim().toLowerCase()) {
+                        isRoundMatch = true
+                    }
+                }
+            }
+
+            if (!isRoundMatch) return false
             if (!p.upstream_dealer_name) return true
             return isMatchingUpstreamDealer(p, dealerName, aggregatedTransfer)
         })

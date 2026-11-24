@@ -1256,6 +1256,149 @@ describe('crossRoundOffsetCalculator', () => {
             expect(destNote).toBe('โอนไป พร้อมเพย์ 099-xxx-9307 (นาย ธีระเดช บรรจงแก้ว)')
         })
     })
+
+    describe('findMemberPastUnpaidRounds & findUpstreamPastUnpaidRounds alias & fallback matching', () => {
+        it('matches member payment when payment uses round_history.id and user history uses lottery_rounds.id', () => {
+            const roundHistory = [
+                {
+                    id: 'rh-uuid-2807',
+                    round_id: 'lr-uuid-2807',
+                    round_date: '2026-07-28',
+                    close_time: '2026-07-28T13:30:00Z',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const userHistories = [
+                {
+                    id: 'urh-1',
+                    round_id: 'lr-uuid-2807',
+                    user_id: 'user-10040',
+                    total_amount: 3745,
+                    total_commission: 557,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-28'
+                }
+            ]
+
+            const memberPayments = [
+                {
+                    id: 'pay-1',
+                    round_id: 'rh-uuid-2807',
+                    user_id: 'user-10040',
+                    amount: 3188,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: '2026-07-28',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const result = findMemberPastUnpaidRounds({
+                userId: 'user-10040',
+                currentRoundId: 'current-round-id',
+                currentRoundDate: '2026-11-24',
+                userHistories,
+                memberPayments,
+                roundHistory,
+                lotteryType: 'lao'
+            })
+
+            // Because 3188 was paid, remaining debt is 0, so result should be empty!
+            expect(result).toEqual([])
+        })
+
+        it('matches member payment via fallback date and lottery_type if IDs differ', () => {
+            const userHistories = [
+                {
+                    id: 'urh-1',
+                    round_id: 'round-a',
+                    user_id: 'user-1',
+                    total_amount: 1000,
+                    total_commission: 200,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-28'
+                }
+            ]
+
+            const memberPayments = [
+                {
+                    id: 'pay-1',
+                    round_id: 'round-b-different',
+                    user_id: 'user-1',
+                    amount: 800,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: '2026-07-28',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const result = findMemberPastUnpaidRounds({
+                userId: 'user-1',
+                currentRoundId: 'current-round-id',
+                currentRoundDate: '2026-11-24',
+                userHistories,
+                memberPayments,
+                roundHistory: [],
+                lotteryType: 'lao'
+            })
+
+            expect(result).toEqual([])
+        })
+
+        it('matches upstream payment when payment uses round_history.id and transfer uses lottery_rounds.id', () => {
+            const roundHistory = [
+                {
+                    id: 'rh-uuid-up-1',
+                    round_id: 'lr-uuid-up-1',
+                    round_date: '2026-07-28',
+                    close_time: '2026-07-28T13:30:00Z',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const transfers = [
+                {
+                    id: 'tr-1',
+                    round_id: 'lr-uuid-up-1',
+                    target_dealer_name: 'เฮียไก่',
+                    amount: 5000,
+                    commission_earned: 500,
+                    winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-28'
+                }
+            ]
+
+            const upstreamPayments = [
+                {
+                    id: 'up-pay-1',
+                    round_id: 'rh-uuid-up-1',
+                    upstream_dealer_name: 'เฮียไก่',
+                    amount: 4500,
+                    direction: 'dealer_to_upstream',
+                    payment_type: 'net_settlement',
+                    round_date: '2026-07-28',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const result = findUpstreamPastUnpaidRounds({
+                dealerName: 'เฮียไก่',
+                currentRoundId: 'current-round-id',
+                currentRoundDate: '2026-11-24',
+                transfers,
+                upstreamPayments,
+                roundHistory,
+                lotteryType: 'lao'
+            })
+
+            expect(result).toEqual([])
+        })
+    })
 })
 
 
