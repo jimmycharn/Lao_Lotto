@@ -360,6 +360,17 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
         if (pCanonical) {
             if (targetRoundId && pCanonical === String(targetRoundId)) return true
             if (aliases && aliases.has(pCanonical)) return true
+            // Guard: pRoundId belongs to a known canonical round different from targetRound
+            return false
+        }
+
+        if (roundCloseDateMap[pStr]) {
+            const pClose = roundCloseDateMap[pStr]
+            const targetClose = getRoundCloseDate(targetRound) || (targetRoundId ? roundCloseDateMap[String(targetRoundId)] : null)
+            if (targetClose && pClose !== targetClose) {
+                // Guard: pRoundId is known to close on a different date than targetRound
+                return false
+            }
         }
     }
 
@@ -404,7 +415,10 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
         if (cd && roundDates.has(cd)) return true
     }
     if (pRoundId && roundCloseDateMap[String(pRoundId)]) {
-        if (roundDates.has(roundCloseDateMap[String(pRoundId)])) return true
+        const pClose = roundCloseDateMap[String(pRoundId)]
+        const targetClose = getRoundCloseDate(targetRound) || (targetRoundId ? roundCloseDateMap[String(targetRoundId)] : null)
+        if (targetClose && pClose === targetClose) return true
+        if (!targetClose && roundDates.has(pClose)) return true
     }
 
     // Check payment paid_at against roundDates:
