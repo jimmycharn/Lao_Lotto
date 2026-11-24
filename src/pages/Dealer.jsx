@@ -82,7 +82,7 @@ import UpstreamSettlementInline from '../components/dealer/UpstreamSettlementInl
 import UpstreamDealersTab from '../components/dealer/UpstreamDealersTab'
 import DealerBottomNav from '../components/dealer/DealerBottomNav'
 import DealerSubTabsNav from '../components/dealer/DealerSubTabsNav'
-import { getRoundCloseDate, normalizeLotteryType } from '../utils/crossRoundOffsetCalculator'
+import { getRoundCloseDate, normalizeLotteryType, isPaymentMatchingRound } from '../utils/crossRoundOffsetCalculator'
 import {
     getNextKeyboardFocusTarget,
     getPrevKeyboardFocusTarget
@@ -1162,16 +1162,8 @@ export default function Dealer() {
 
         if (mPay.length === 0) {
             mPay = (settlementOverview?.memberPayments || []).filter(p =>
-                String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
+                isPaymentMatchingRound(p, history, { roundCloseDateMap: { [history.id]: histDate } })
             )
-            if (mPay.length === 0 && histDate) {
-                mPay = (settlementOverview?.memberPayments || []).filter(p => {
-                    const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : (p.paid_at ? String(p.paid_at).split('T')[0] : null)
-                    const pType = normalizeLotteryType(p.lottery_type)
-                    const hType = normalizeLotteryType(history.lottery_type)
-                    return pDate === histDate && (!pType || !hType || pType === hType)
-                })
-            }
         }
 
         if (trf.length === 0) {
@@ -1184,16 +1176,8 @@ export default function Dealer() {
 
         if (upPay.length === 0) {
             upPay = (settlementOverview?.upstreamPayments || []).filter(p =>
-                String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
+                isPaymentMatchingRound(p, history, { roundCloseDateMap: { [history.id]: histDate } })
             )
-            if (upPay.length === 0 && histDate) {
-                upPay = (settlementOverview?.upstreamPayments || []).filter(p => {
-                    const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : (p.paid_at ? String(p.paid_at).split('T')[0] : null)
-                    const pType = normalizeLotteryType(p.lottery_type)
-                    const hType = normalizeLotteryType(history.lottery_type)
-                    return pDate === histDate && (!pType || !hType || pType === hType)
-                })
-            }
         }
 
         return calculateRoundOutstandingDetails({
@@ -1239,18 +1223,8 @@ export default function Dealer() {
 
         let extraPayments = (settlementOverview?.memberPayments || []).filter(p => {
             if (!p.id || detailsPaymentIds.has(p.id)) return false
-            return (
-                String(p.round_id) === String(targetRoundId) ||
-                String(p.round_id) === String(history.id) ||
-                (history.round_id && String(p.round_id) === String(history.round_id))
-            )
+            return isPaymentMatchingRound(p, history, { roundCloseDateMap: { [history.id]: histDate } })
         })
-        if (extraPayments.length === 0 && detailsPayments.length === 0 && histDate) {
-            extraPayments = (settlementOverview?.memberPayments || []).filter(p =>
-                p.lottery_type === history.lottery_type && 
-                (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-            )
-        }
 
         const allRoundPayments = [...detailsPayments, ...extraPayments]
         return { userHistories: uHist, payments: allRoundPayments }
@@ -1401,18 +1375,8 @@ export default function Dealer() {
 
         let extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p => {
             if (!p.id || detailsUpstreamIds.has(p.id)) return false
-            return (
-                String(p.round_id) === String(targetRoundId) ||
-                String(p.round_id) === String(history.id) ||
-                (history.round_id && String(p.round_id) === String(history.round_id))
-            )
+            return isPaymentMatchingRound(p, history, { roundCloseDateMap: { [history.id]: histDate } })
         })
-        if (extraUpstreamPayments.length === 0 && detailsUpstreamPayments.length === 0 && histDate) {
-            extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p =>
-                p.lottery_type === history.lottery_type && 
-                (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-            )
-        }
 
         const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
         return { effectiveTransfers, allUpstreamPayments }
@@ -5607,20 +5571,7 @@ export default function Dealer() {
 
                                                                                                                 const extraPayments = (combinedSettlementOverview.memberPayments || []).filter(p => {
                                                                                                                     if (!p.id || detailsPaymentIds.has(p.id)) return false
-                                                                                                                    const isIdMatch = (
-                                                                                                                        String(p.round_id) === String(targetRoundId) ||
-                                                                                                                        String(p.round_id) === String(history.id) ||
-                                                                                                                        (history.round_id && String(p.round_id) === String(history.round_id))
-                                                                                                                    )
-                                                                                                                    if (isIdMatch) return true
-                                                                                                                    const histDate = getRoundCloseDate(history) || (history.round_date ? String(history.round_date).split('T')[0] : null)
-                                                                                                                    if (histDate) {
-                                                                                                                        const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : (p.paid_at ? String(p.paid_at).split('T')[0] : null)
-                                                                                                                        const pType = normalizeLotteryType(p.lottery_type)
-                                                                                                                        const hType = normalizeLotteryType(history.lottery_type)
-                                                                                                                        return pDate === histDate && (!pType || !hType || pType === hType)
-                                                                                                                    }
-                                                                                                                    return false
+                                                                                                                    return isPaymentMatchingRound(p, history)
                                                                                                                 })
 
                                                                                                                 const allRoundPayments = [...detailsPayments, ...extraPayments]
@@ -5878,20 +5829,10 @@ export default function Dealer() {
 
                                                                                                                     const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
                                                                                                                                      (history.close_time ? String(history.close_time).split('T')[0] : null)
-                                                                                                                    let extraUpstreamPayments = (settlementOverview.upstreamPayments || []).filter(p => {
+                                                                                                                    let extraUpstreamPayments = (combinedSettlementOverview.upstreamPayments || []).filter(p => {
                                                                                                                         if (!p.id || detailsUpstreamIds.has(p.id)) return false
-                                                                                                                        return (
-                                                                                                                            String(p.round_id) === String(targetRoundId) ||
-                                                                                                                            String(p.round_id) === String(history.id) ||
-                                                                                                                            (history.round_id && String(p.round_id) === String(history.round_id))
-                                                                                                                        )
+                                                                                                                        return isPaymentMatchingRound(p, history)
                                                                                                                     })
-                                                                                                                    if (extraUpstreamPayments.length === 0 && detailsUpstreamPayments.length === 0 && histDate) {
-                                                                                                                        extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p =>
-                                                                                                                            p.lottery_type === history.lottery_type && 
-                                                                                                                            (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-                                                                                                                        )
-                                                                                                                    }
 
                                                                                                                     const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
                                                                                                                     const upstreamPayments = filterUpstreamPaymentsForTransfer(allUpstreamPayments, upstreamName, effectiveTransfers.length)

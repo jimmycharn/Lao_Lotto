@@ -1502,6 +1502,217 @@ describe('crossRoundOffsetCalculator', () => {
             console.log('TEST RESULT with unknown-payment-round-id:', JSON.stringify(result))
             expect(result).toEqual([])
         })
+
+        it('case 1: payment round_date is 2026-07-27 (open date) while round close_time is 2026-07-28 (close date)', () => {
+            const roundHistory = [
+                {
+                    id: 'rh-uuid-2807',
+                    round_id: 'lr-uuid-2807',
+                    round_date: '2026-07-27',
+                    close_time: '2026-07-28T13:30:00Z',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const userHistories = [
+                {
+                    id: 'urh-1',
+                    round_id: 'lr-uuid-2807',
+                    user_id: 'user-10040',
+                    total_amount: 3745,
+                    total_commission: 557,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-27',
+                    close_time: '2026-07-28T13:30:00Z'
+                }
+            ]
+
+            const memberPayments = [
+                {
+                    id: 'pay-1',
+                    round_id: 'some-other-or-unknown-id',
+                    user_id: 'user-10040',
+                    amount: 3188,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: '2026-07-27', // saved as open date!
+                    paid_at: '2026-07-28',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const result = findMemberPastUnpaidRounds({
+                userId: 'user-10040',
+                currentRoundId: 'current-round-id',
+                currentRoundDate: '2026-11-24',
+                userHistories,
+                memberPayments,
+                roundHistory,
+                lotteryType: null
+            })
+
+            console.log('TEST RESULT Case 1 (round_date 27 vs close 28):', JSON.stringify(result))
+            expect(result).toEqual([])
+        })
+
+        it('case 2: payment paid_at is next day (2026-07-29) and round_date is null', () => {
+            const roundHistory = [
+                {
+                    id: 'rh-uuid-2807',
+                    round_id: 'lr-uuid-2807',
+                    round_date: '2026-07-28',
+                    close_time: '2026-07-28T13:30:00Z',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const userHistories = [
+                {
+                    id: 'urh-1',
+                    round_id: 'lr-uuid-2807',
+                    user_id: 'user-10040',
+                    total_amount: 3745,
+                    total_commission: 557,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-28'
+                }
+            ]
+
+            // Member paid on the next day (2026-07-29) and round_date in payment is null
+            const memberPayments = [
+                {
+                    id: 'pay-1',
+                    round_id: 'lr-uuid-2807',
+                    user_id: 'user-10040',
+                    amount: 3188,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: null,
+                    paid_at: '2026-07-29',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const result = findMemberPastUnpaidRounds({
+                userId: 'user-10040',
+                currentRoundId: 'current-round-id',
+                currentRoundDate: '2026-11-24',
+                userHistories,
+                memberPayments,
+                roundHistory,
+                lotteryType: null
+            })
+
+            console.log('TEST RESULT Case 2 (paid next day with matching round_id):', JSON.stringify(result))
+            expect(result).toEqual([])
+        })
+
+        it('case 3: userHistories has TWO entries for user on same round (duplicate / orphan split)', () => {
+            const roundHistory = [
+                {
+                    id: 'rh-uuid-2807',
+                    round_id: 'lr-uuid-2807',
+                    round_date: '2026-07-28',
+                    close_time: '2026-07-28T13:30:00Z',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const userHistories = [
+                {
+                    id: 'urh-1',
+                    round_id: 'lr-uuid-2807',
+                    user_id: 'user-10040',
+                    total_amount: 3745,
+                    total_commission: 557,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-28'
+                },
+                {
+                    id: 'urh-orphan',
+                    round_id: 'orphan-uuid-2807',
+                    user_id: 'user-10040',
+                    total_amount: 3745,
+                    total_commission: 557,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-28'
+                }
+            ]
+
+            const memberPayments = [
+                {
+                    id: 'pay-1',
+                    round_id: 'lr-uuid-2807',
+                    user_id: 'user-10040',
+                    amount: 3188,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: '2026-07-28',
+                    paid_at: '2026-07-28',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const result = findMemberPastUnpaidRounds({
+                userId: 'user-10040',
+                currentRoundId: 'current-round-id',
+                currentRoundDate: '2026-11-24',
+                userHistories,
+                memberPayments,
+                roundHistory,
+                lotteryType: null
+            })
+
+            console.log('TEST RESULT Case 3 (duplicate round entries on same date):', JSON.stringify(result))
+            expect(result).toEqual([])
+        })
+
+        it('case 4: roundHistory is empty and userHistories has round_id not matching payment round_id', () => {
+            const userHistories = [
+                {
+                    id: 'urh-1',
+                    round_id: 'user-history-round-id-1',
+                    user_id: 'user-10040',
+                    total_amount: 3745,
+                    total_commission: 557,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-28',
+                    close_time: '2026-07-28T13:30:00Z'
+                }
+            ]
+
+            const memberPayments = [
+                {
+                    id: 'pay-1',
+                    round_id: 'payment-round-id-2',
+                    user_id: 'user-10040',
+                    amount: 3188,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: '2026-07-27', // open date
+                    paid_at: '2026-07-28',
+                    lottery_type: null
+                }
+            ]
+
+            const result = findMemberPastUnpaidRounds({
+                userId: 'user-10040',
+                currentRoundId: 'current-round-id',
+                currentRoundDate: '2026-11-24',
+                userHistories,
+                memberPayments,
+                roundHistory: [], // empty!
+                lotteryType: null
+            })
+
+            console.log('TEST RESULT Case 4 (empty roundHistory + payment round_date 27 vs close 28):', JSON.stringify(result))
+            expect(result).toEqual([])
+        })
     })
 })
 
