@@ -354,17 +354,30 @@ export function findMemberPastUnpaidRounds({
     const roundLotteryTypeMap = {}
     const idToAliasesMap = new Map()
     const idToCanonicalMap = new Map()
+    const dateTypeToCanonicalMap = new Map()
+    const dateTypeToAliasesMap = new Map()
 
     if (Array.isArray(roundHistory)) {
         for (const r of roundHistory) {
             const cDate = getRoundCloseDate(r) || (r.round_date ? String(r.round_date).split('T')[0] : '')
             const lType = r.lottery_type || r.lotteryType
 
-            const aliases = new Set()
+            const canonicalId = String(r.round_id || r.id)
+            let aliases = new Set()
             if (r.id) aliases.add(String(r.id))
             if (r.round_id) aliases.add(String(r.round_id))
 
-            const canonicalId = String(r.round_id || r.id)
+            const dtKey = (cDate && lType) ? `${String(lType).trim().toLowerCase()}|${cDate}` : null
+            if (dtKey) {
+                if (dateTypeToAliasesMap.has(dtKey)) {
+                    const existingAliases = dateTypeToAliasesMap.get(dtKey)
+                    for (const a of aliases) existingAliases.add(a)
+                    aliases = existingAliases
+                } else {
+                    dateTypeToAliasesMap.set(dtKey, aliases)
+                    dateTypeToCanonicalMap.set(dtKey, canonicalId)
+                }
+            }
 
             for (const alias of aliases) {
                 idToCanonicalMap.set(alias, canonicalId)
@@ -393,16 +406,26 @@ export function findMemberPastUnpaidRounds({
         const rawRoundId = h.round_id || h.id
         if (!rawRoundId) continue
 
-        const canonicalRoundId = idToCanonicalMap.get(String(rawRoundId)) || String(rawRoundId)
+        const hDate = getRoundCloseDate(h) || (h.round_date ? String(h.round_date).split('T')[0] : '')
+        const hType = h.lottery_type || h.lotteryType || ''
+        const dtKey = (hDate && hType) ? `${String(hType).trim().toLowerCase()}|${hDate}` : null
+
+        let canonicalRoundId = idToCanonicalMap.get(String(rawRoundId))
+        if (!canonicalRoundId && dtKey && dateTypeToCanonicalMap.has(dtKey)) {
+            canonicalRoundId = dateTypeToCanonicalMap.get(dtKey)
+        }
+        if (!canonicalRoundId) {
+            canonicalRoundId = String(rawRoundId)
+        }
 
         if (currentRoundId && (currentRoundAliases.has(String(rawRoundId)) || currentRoundAliases.has(canonicalRoundId))) {
             continue
         }
 
-        const roundDate = roundCloseDateMap[canonicalRoundId] || roundCloseDateMap[String(rawRoundId)] || getRoundCloseDate(h) || (h.round_date ? String(h.round_date).split('T')[0] : '')
+        const roundDate = roundCloseDateMap[canonicalRoundId] || roundCloseDateMap[String(rawRoundId)] || hDate || ''
         if (currentRoundDate && roundDate && roundDate > currentRoundDate) continue
 
-        const itemLotteryType = roundLotteryTypeMap[canonicalRoundId] || roundLotteryTypeMap[String(rawRoundId)] || h.lottery_type || h.lotteryType || ''
+        const itemLotteryType = roundLotteryTypeMap[canonicalRoundId] || roundLotteryTypeMap[String(rawRoundId)] || hType || ''
         if (normalizedLotteryFilter) {
             if (String(itemLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
                 continue
@@ -412,6 +435,9 @@ export function findMemberPastUnpaidRounds({
         if (!roundMap[canonicalRoundId]) {
             const aliases = new Set(idToAliasesMap.get(canonicalRoundId) || [canonicalRoundId])
             aliases.add(String(rawRoundId))
+            if (dtKey && dateTypeToAliasesMap.has(dtKey)) {
+                for (const a of dateTypeToAliasesMap.get(dtKey)) aliases.add(a)
+            }
 
             roundMap[canonicalRoundId] = {
                 roundId: canonicalRoundId,
@@ -425,6 +451,13 @@ export function findMemberPastUnpaidRounds({
         } else {
             roundMap[canonicalRoundId].aliases.add(String(rawRoundId))
         }
+
+        idToCanonicalMap.set(String(rawRoundId), canonicalRoundId)
+        idToAliasesMap.set(String(rawRoundId), roundMap[canonicalRoundId].aliases)
+        if (dtKey) {
+            dateTypeToAliasesMap.set(dtKey, roundMap[canonicalRoundId].aliases)
+        }
+
         roundMap[canonicalRoundId].total_amount += Number(h.total_amount || 0)
         const itemComm = (h.total_commission !== undefined && h.total_commission !== null && Number(h.total_commission) > 0)
             ? Number(h.total_commission)
@@ -458,10 +491,12 @@ export function findMemberPastUnpaidRounds({
                 }
             }
 
-            // 2. Fallback match by round_date + lottery_type (matching Dealer.jsx lines 1140-1144)
+            // 2. Fallback match by round_date / paid_at + lottery_type (matching Dealer.jsx lines 1140-1144)
             if (aggregated.roundDate && aggregated.lotteryType) {
-                const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : null
-                const pType = p.lottery_type || p.lotteryType
+                const pDate = p.round_date 
+                    ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) 
+                    : (p.paid_at ? String(p.paid_at).split('T')[0] : (pRoundId ? roundCloseDateMap[String(pRoundId)] : null))
+                const pType = p.lottery_type || p.lotteryType || (pRoundId ? roundLotteryTypeMap[String(pRoundId)] : null)
                 if (pDate && pType) {
                     if (pDate === aggregated.roundDate && String(pType).trim().toLowerCase() === String(aggregated.lotteryType).trim().toLowerCase()) {
                         return true
@@ -647,17 +682,30 @@ export function findUpstreamPastUnpaidRounds({
     const roundLotteryTypeMap = {}
     const idToAliasesMap = new Map()
     const idToCanonicalMap = new Map()
+    const dateTypeToCanonicalMap = new Map()
+    const dateTypeToAliasesMap = new Map()
 
     if (Array.isArray(roundHistory)) {
         for (const r of roundHistory) {
             const cDate = getRoundCloseDate(r) || (r.round_date ? String(r.round_date).split('T')[0] : '')
             const lType = r.lottery_type || r.lotteryType
 
-            const aliases = new Set()
+            const canonicalId = String(r.round_id || r.id)
+            let aliases = new Set()
             if (r.id) aliases.add(String(r.id))
             if (r.round_id) aliases.add(String(r.round_id))
 
-            const canonicalId = String(r.round_id || r.id)
+            const dtKey = (cDate && lType) ? `${String(lType).trim().toLowerCase()}|${cDate}` : null
+            if (dtKey) {
+                if (dateTypeToAliasesMap.has(dtKey)) {
+                    const existingAliases = dateTypeToAliasesMap.get(dtKey)
+                    for (const a of aliases) existingAliases.add(a)
+                    aliases = existingAliases
+                } else {
+                    dateTypeToAliasesMap.set(dtKey, aliases)
+                    dateTypeToCanonicalMap.set(dtKey, canonicalId)
+                }
+            }
 
             for (const alias of aliases) {
                 idToCanonicalMap.set(alias, canonicalId)
@@ -687,13 +735,24 @@ export function findUpstreamPastUnpaidRounds({
         const rawRoundId = t.round_id || t.id
         if (!rawRoundId) continue
 
-        const canonicalRoundId = idToCanonicalMap.get(String(rawRoundId)) || String(rawRoundId)
+        const tDate = getRoundCloseDate(t) || (t.round_date ? String(t.round_date).split('T')[0] : '')
+        const tType = t.lottery_type || t.lotteryType || ''
+        const dtKey = (tDate && tType) ? `${String(tType).trim().toLowerCase()}|${tDate}` : null
+
+        let canonicalRoundId = idToCanonicalMap.get(String(rawRoundId))
+        if (!canonicalRoundId && dtKey && dateTypeToCanonicalMap.has(dtKey)) {
+            canonicalRoundId = dateTypeToCanonicalMap.get(dtKey)
+        }
+        if (!canonicalRoundId) {
+            canonicalRoundId = String(rawRoundId)
+        }
+
         if (currentRoundId && (currentRoundAliases.has(String(rawRoundId)) || currentRoundAliases.has(canonicalRoundId))) continue
 
-        const resolvedDate = roundCloseDateMap[canonicalRoundId] || roundCloseDateMap[String(rawRoundId)] || getRoundCloseDate(t) || (t.round_date ? String(t.round_date).split('T')[0] : '')
+        const resolvedDate = roundCloseDateMap[canonicalRoundId] || roundCloseDateMap[String(rawRoundId)] || tDate || ''
         if (currentRoundDate && resolvedDate && resolvedDate > currentRoundDate) continue
 
-        const roundLotteryType = roundLotteryTypeMap[canonicalRoundId] || roundLotteryTypeMap[String(rawRoundId)] || t.lottery_type || t.lotteryType || ''
+        const roundLotteryType = roundLotteryTypeMap[canonicalRoundId] || roundLotteryTypeMap[String(rawRoundId)] || tType || ''
         if (normalizedLotteryFilter && roundLotteryType) {
             if (String(roundLotteryType).trim().toLowerCase() !== normalizedLotteryFilter) {
                 continue
@@ -703,6 +762,9 @@ export function findUpstreamPastUnpaidRounds({
         if (!roundMap[canonicalRoundId]) {
             const aliases = new Set(idToAliasesMap.get(canonicalRoundId) || [canonicalRoundId])
             aliases.add(String(rawRoundId))
+            if (dtKey && dateTypeToAliasesMap.has(dtKey)) {
+                for (const a of dateTypeToAliasesMap.get(dtKey)) aliases.add(a)
+            }
 
             roundMap[canonicalRoundId] = {
                 roundId: canonicalRoundId,
@@ -717,6 +779,12 @@ export function findUpstreamPastUnpaidRounds({
             }
         } else {
             roundMap[canonicalRoundId].aliases.add(String(rawRoundId))
+        }
+
+        idToCanonicalMap.set(String(rawRoundId), canonicalRoundId)
+        idToAliasesMap.set(String(rawRoundId), roundMap[canonicalRoundId].aliases)
+        if (dtKey) {
+            dateTypeToAliasesMap.set(dtKey, roundMap[canonicalRoundId].aliases)
         }
 
         roundMap[canonicalRoundId].amount += Number(t.amount || 0)
@@ -869,10 +937,12 @@ export function findUpstreamPastUnpaidRounds({
                 }
             }
 
-            // Fallback match by round_date + lottery_type (matching Dealer.jsx lines 1159-1163)
+            // Fallback match by round_date / paid_at + lottery_type (matching Dealer.jsx lines 1159-1163)
             if (!isRoundMatch && aggregatedTransfer.roundDate && aggregatedTransfer.lotteryType) {
-                const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : null
-                const pType = p.lottery_type || p.lotteryType
+                const pDate = p.round_date 
+                    ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) 
+                    : (p.paid_at ? String(p.paid_at).split('T')[0] : (pRound ? roundCloseDateMap[String(pRound)] : null))
+                const pType = p.lottery_type || p.lotteryType || (pRound ? roundLotteryTypeMap[String(pRound)] : null)
                 if (pDate && pType) {
                     if (pDate === aggregatedTransfer.roundDate && String(pType).trim().toLowerCase() === String(aggregatedTransfer.lotteryType).trim().toLowerCase()) {
                         isRoundMatch = true

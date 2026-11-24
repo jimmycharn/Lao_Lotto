@@ -135,17 +135,27 @@ export default function UpstreamSettlementInline({
 
     const pastUnpaidRounds = useMemo(() => {
         const dealerName = transfer?.target_dealer_name || transfer?.upstream_dealer_name || transfer?.dealerName || transfer?.upstream_dealer?.full_name
+        const mergedUpstreamPayments = [...(settlementOverview?.upstreamPayments || [])]
+        if (Array.isArray(payments) && payments.length > 0) {
+            const seenIds = new Set(mergedUpstreamPayments.map(p => p.id).filter(Boolean))
+            for (const p of payments) {
+                if (!p.id || !seenIds.has(p.id)) {
+                    mergedUpstreamPayments.push(p)
+                }
+            }
+        }
+
         return findUpstreamPastUnpaidRounds({
             dealerName,
             targetTransfer: transfer,
             currentRoundId: round?.round_id || round?.id,
             currentRoundDate: roundDateIso,
             transfers: settlementOverview?.transfers || [],
-            upstreamPayments: settlementOverview?.upstreamPayments || [],
+            upstreamPayments: mergedUpstreamPayments,
             roundHistory: roundHistory || [],
             lotteryType: (lotteryTypeFilter && lotteryTypeFilter !== 'all') ? lotteryTypeFilter : null
         })
-    }, [transfer, round, roundDateIso, settlementOverview, roundHistory, lotteryTypeFilter])
+    }, [transfer, round, roundDateIso, settlementOverview, roundHistory, lotteryTypeFilter, payments])
 
     const pastDebtsTotal = useMemo(() => {
         return pastUnpaidRounds

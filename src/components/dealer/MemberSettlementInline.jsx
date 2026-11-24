@@ -195,16 +195,26 @@ export default function MemberSettlementInline({
     const [showPaymentNoticeModal, setShowPaymentNoticeModal] = useState(false)
 
     const pastUnpaidRounds = useMemo(() => {
+        const mergedPayments = [...(settlementOverview?.memberPayments || [])]
+        if (Array.isArray(payments) && payments.length > 0) {
+            const seenIds = new Set(mergedPayments.map(p => p.id).filter(Boolean))
+            for (const p of payments) {
+                if (!p.id || !seenIds.has(p.id)) {
+                    mergedPayments.push(p)
+                }
+            }
+        }
+
         return findMemberPastUnpaidRounds({
-            userId: member?.user_id,
+            userId: member?.user_id || member?.id,
             currentRoundId: round?.round_id || round?.id,
             currentRoundDate: roundDateIso,
             userHistories: settlementOverview?.userHistories || [],
-            memberPayments: settlementOverview?.memberPayments || [],
+            memberPayments: mergedPayments,
             roundHistory: roundHistory || [],
             lotteryType: (lotteryTypeFilter && lotteryTypeFilter !== 'all') ? lotteryTypeFilter : null
         })
-    }, [member?.user_id, round, roundDateIso, settlementOverview, roundHistory, lotteryTypeFilter])
+    }, [member?.user_id, member?.id, round, roundDateIso, settlementOverview, roundHistory, lotteryTypeFilter, payments])
 
     const pastDebtsTotal = useMemo(() => {
         return pastUnpaidRounds
