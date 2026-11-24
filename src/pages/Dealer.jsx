@@ -1118,6 +1118,19 @@ export default function Dealer() {
         return Array.from(typeSet)
     }, [roundHistory])
 
+    const roundCloseDateMap = useMemo(() => {
+        const map = {}
+        const all = [...(rounds || []), ...(roundHistory || [])]
+        for (const r of all) {
+            const cDate = getRoundCloseDate(r) || (r.close_time ? String(r.close_time).split('T')[0] : null) || (r.round_date ? String(r.round_date).split('T')[0] : null)
+            if (cDate) {
+                if (r.id) map[String(r.id)] = cDate
+                if (r.round_id) map[String(r.round_id)] = cDate
+            }
+        }
+        return map
+    }, [rounds, roundHistory])
+
     const getRoundSettlementDetails = useCallback((history) => {
         if (!history) return {
             isSettled: false,
@@ -1129,8 +1142,9 @@ export default function Dealer() {
             hasActivity: false
         }
         const targetRoundId = history.round_id || history.id
-        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
-                         (history.close_time ? String(history.close_time).split('T')[0] : null)
+        const histDate = getRoundCloseDate(history) || 
+                         (history.close_time ? String(history.close_time).split('T')[0] : null) ||
+                         (history.round_date ? String(history.round_date).split('T')[0] : null)
         const details = historyDetails[history.id]
 
         let uHist = []
@@ -1157,15 +1171,22 @@ export default function Dealer() {
             if (uHist.length === 0 && histDate) {
                 uHist = (settlementOverview?.userHistories || []).filter(uh =>
                     uh.lottery_type === history.lottery_type && 
-                    (uh.round_date ? String(uh.round_date).split('T')[0] : null) === histDate
+                    (getRoundCloseDate(uh) || (uh.round_date ? String(uh.round_date).split('T')[0] : null)) === histDate
                 )
             }
         }
 
         if (mPay.length === 0) {
             mPay = (settlementOverview?.memberPayments || []).filter(p =>
-                isPaymentMatchingRound(p, history, { roundCloseDateMap: { [history.id]: histDate } })
+                (targetRoundId && String(p.round_id) === String(targetRoundId)) ||
+                (history.round_id && String(p.round_id) === String(history.round_id)) ||
+                (history.id && String(p.round_id) === String(history.id))
             )
+            if (mPay.length === 0) {
+                mPay = (settlementOverview?.memberPayments || []).filter(p =>
+                    isPaymentMatchingRound(p, history, { roundCloseDateMap })
+                )
+            }
         }
 
         if (trf.length === 0) {
@@ -1178,8 +1199,15 @@ export default function Dealer() {
 
         if (upPay.length === 0) {
             upPay = (settlementOverview?.upstreamPayments || []).filter(p =>
-                isPaymentMatchingRound(p, history, { roundCloseDateMap: { [history.id]: histDate } })
+                (targetRoundId && String(p.round_id) === String(targetRoundId)) ||
+                (history.round_id && String(p.round_id) === String(history.round_id)) ||
+                (history.id && String(p.round_id) === String(history.id))
             )
+            if (upPay.length === 0) {
+                upPay = (settlementOverview?.upstreamPayments || []).filter(p =>
+                    isPaymentMatchingRound(p, history, { roundCloseDateMap })
+                )
+            }
         }
 
         return calculateRoundOutstandingDetails({
@@ -1190,15 +1218,16 @@ export default function Dealer() {
             upstreamPayments: upPay,
             upstreamSettings: upstreamSettingsMap
         })
-    }, [historyDetails, settlementOverview, upstreamSettingsMap])
+    }, [historyDetails, settlementOverview, upstreamSettingsMap, roundCloseDateMap])
 
     const getRoundSettlementStatus = useCallback((history) => getRoundSettlementDetails(history).isSettled, [getRoundSettlementDetails])
 
     const getRoundUserHistoriesAndPayments = useCallback((history) => {
         if (!history) return { userHistories: [], payments: [] }
         const targetRoundId = history.round_id || history.id
-        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
-                         (history.close_time ? String(history.close_time).split('T')[0] : null)
+        const histDate = getRoundCloseDate(history) || 
+                         (history.close_time ? String(history.close_time).split('T')[0] : null) ||
+                         (history.round_date ? String(history.round_date).split('T')[0] : null)
         const details = historyDetails[history.id]
 
         let uHist = []
@@ -1215,7 +1244,7 @@ export default function Dealer() {
             if (uHist.length === 0 && histDate) {
                 uHist = (settlementOverview?.userHistories || []).filter(uh =>
                     uh.lottery_type === history.lottery_type && 
-                    (uh.round_date ? String(uh.round_date).split('T')[0] : null) === histDate
+                    (getRoundCloseDate(uh) || (uh.round_date ? String(uh.round_date).split('T')[0] : null)) === histDate
                 )
             }
         }
@@ -1225,12 +1254,23 @@ export default function Dealer() {
 
         let extraPayments = (settlementOverview?.memberPayments || []).filter(p => {
             if (!p.id || detailsPaymentIds.has(p.id)) return false
-            return isPaymentMatchingRound(p, history, { roundCloseDateMap: { [history.id]: histDate } })
+            return (
+                (targetRoundId && String(p.round_id) === String(targetRoundId)) ||
+                (history.round_id && String(p.round_id) === String(history.round_id)) ||
+                (history.id && String(p.round_id) === String(history.id))
+            )
         })
+
+        if (extraPayments.length === 0 && detailsPayments.length === 0 && histDate) {
+            extraPayments = (settlementOverview?.memberPayments || []).filter(p => {
+                if (!p.id || detailsPaymentIds.has(p.id)) return false
+                return isPaymentMatchingRound(p, history, { roundCloseDateMap })
+            })
+        }
 
         const allRoundPayments = [...detailsPayments, ...extraPayments]
         return { userHistories: uHist, payments: allRoundPayments }
-    }, [historyDetails, settlementOverview])
+    }, [historyDetails, settlementOverview, roundCloseDateMap])
 
     const isUpstreamMatch = useCallback((t, query) => {
         if (!query) return true
@@ -1370,19 +1410,31 @@ export default function Dealer() {
             }] : [])
 
         const targetRoundId = history.round_id || history.id
-        const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
-                         (history.close_time ? String(history.close_time).split('T')[0] : null)
+        const histDate = getRoundCloseDate(history) || 
+                         (history.close_time ? String(history.close_time).split('T')[0] : null) ||
+                         (history.round_date ? String(history.round_date).split('T')[0] : null)
         const detailsUpstreamPayments = details?.upstreamPayments || []
         const detailsUpstreamIds = new Set(detailsUpstreamPayments.map(p => p.id).filter(Boolean))
 
         let extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p => {
             if (!p.id || detailsUpstreamIds.has(p.id)) return false
-            return isPaymentMatchingRound(p, history, { roundCloseDateMap: { [history.id]: histDate } })
+            return (
+                (targetRoundId && String(p.round_id) === String(targetRoundId)) ||
+                (history.round_id && String(p.round_id) === String(history.round_id)) ||
+                (history.id && String(p.round_id) === String(history.id))
+            )
         })
+
+        if (extraUpstreamPayments.length === 0 && detailsUpstreamPayments.length === 0 && histDate) {
+            extraUpstreamPayments = (settlementOverview?.upstreamPayments || []).filter(p => {
+                if (!p.id || detailsUpstreamIds.has(p.id)) return false
+                return isPaymentMatchingRound(p, history, { roundCloseDateMap })
+            })
+        }
 
         const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
         return { effectiveTransfers, allUpstreamPayments }
-    }, [historyDetails, settlementOverview, upstreamSettingsMap])
+    }, [historyDetails, settlementOverview, upstreamSettingsMap, roundCloseDateMap])
 
     const isUhSettled = useCallback((uh, allPayments) => {
         const mPayments = (allPayments || []).filter(p => p.user_id === uh.user_id)

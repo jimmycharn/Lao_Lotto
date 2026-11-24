@@ -393,7 +393,7 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
         if (targetRoundId && roundCloseDateMap[String(targetRoundId)]) {
             roundDates.add(roundCloseDateMap[String(targetRoundId)])
         }
-        try { targetRound._matchedDates = roundDates } catch {}
+        try { targetRound._matchedDates = roundDates } catch { }
     }
 
     // Check payment round_date against roundDates
