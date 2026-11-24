@@ -1449,6 +1449,59 @@ describe('crossRoundOffsetCalculator', () => {
 
             expect(result).toEqual([])
         })
+
+        it('reproduces failure when payment has unknown round_id and null lottery_type', () => {
+            const roundHistory = [
+                {
+                    id: 'rh-uuid-2807',
+                    round_id: 'lr-uuid-2807',
+                    round_date: '2026-07-28',
+                    close_time: '2026-07-28T13:30:00Z',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const userHistories = [
+                {
+                    id: 'urh-1',
+                    round_id: 'lr-uuid-2807',
+                    user_id: 'user-10040',
+                    total_amount: 3745,
+                    total_commission: 557,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-07-28'
+                }
+            ]
+
+            // Payment has an unknown round_id (e.g. from an old orphaned ID or different round_id) and null lottery_type
+            const memberPayments = [
+                {
+                    id: 'pay-1',
+                    round_id: 'unknown-payment-round-id',
+                    user_id: 'user-10040',
+                    amount: 3188,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: null,
+                    paid_at: '2026-07-28',
+                    lottery_type: null
+                }
+            ]
+
+            const result = findMemberPastUnpaidRounds({
+                userId: 'user-10040',
+                currentRoundId: 'current-round-id',
+                currentRoundDate: '2026-11-24',
+                userHistories,
+                memberPayments,
+                roundHistory,
+                lotteryType: 'lao'
+            })
+
+            console.log('TEST RESULT with unknown-payment-round-id:', JSON.stringify(result))
+            expect(result).toEqual([])
+        })
     })
 })
 

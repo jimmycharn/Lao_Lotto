@@ -82,7 +82,7 @@ import UpstreamSettlementInline from '../components/dealer/UpstreamSettlementInl
 import UpstreamDealersTab from '../components/dealer/UpstreamDealersTab'
 import DealerBottomNav from '../components/dealer/DealerBottomNav'
 import DealerSubTabsNav from '../components/dealer/DealerSubTabsNav'
-import { getRoundCloseDate } from '../utils/crossRoundOffsetCalculator'
+import { getRoundCloseDate, normalizeLotteryType } from '../utils/crossRoundOffsetCalculator'
 import {
     getNextKeyboardFocusTarget,
     getPrevKeyboardFocusTarget
@@ -353,6 +353,34 @@ export default function Dealer() {
         upstreamPayments: [],
         transfers: []
     })
+
+    const combinedSettlementOverview = useMemo(() => {
+        const memberPayments = [...(settlementOverview.memberPayments || [])]
+        const upstreamPayments = [...(settlementOverview.upstreamPayments || [])]
+        const seenMemberIds = new Set(memberPayments.map(p => p.id).filter(Boolean))
+        const seenUpstreamIds = new Set(upstreamPayments.map(p => p.id).filter(Boolean))
+
+        Object.values(historyDetails || {}).forEach(d => {
+            (d?.payments || []).forEach(p => {
+                if (p?.id && !seenMemberIds.has(p.id)) {
+                    seenMemberIds.add(p.id)
+                    memberPayments.push(p)
+                }
+            })
+            (d?.upstreamPayments || []).forEach(p => {
+                if (p?.id && !seenUpstreamIds.has(p.id)) {
+                    seenUpstreamIds.add(p.id)
+                    upstreamPayments.push(p)
+                }
+            })
+        })
+
+        return {
+            ...settlementOverview,
+            memberPayments,
+            upstreamPayments
+        }
+    }, [settlementOverview, historyDetails])
     const [upstreamDealers, setUpstreamDealers] = useState([])
     const [loadingUpstream, setLoadingUpstream] = useState(false)
 
@@ -1137,10 +1165,12 @@ export default function Dealer() {
                 String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
             )
             if (mPay.length === 0 && histDate) {
-                mPay = (settlementOverview?.memberPayments || []).filter(p =>
-                    p.lottery_type === history.lottery_type && 
-                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-                )
+                mPay = (settlementOverview?.memberPayments || []).filter(p => {
+                    const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : (p.paid_at ? String(p.paid_at).split('T')[0] : null)
+                    const pType = normalizeLotteryType(p.lottery_type)
+                    const hType = normalizeLotteryType(history.lottery_type)
+                    return pDate === histDate && (!pType || !hType || pType === hType)
+                })
             }
         }
 
@@ -1157,10 +1187,12 @@ export default function Dealer() {
                 String(p.round_id) === String(targetRoundId) || String(p.round_id) === String(history.id) || (history.round_id && String(p.round_id) === String(history.round_id))
             )
             if (upPay.length === 0 && histDate) {
-                upPay = (settlementOverview?.upstreamPayments || []).filter(p =>
-                    p.lottery_type === history.lottery_type && 
-                    (p.round_date ? String(p.round_date).split('T')[0] : null) === histDate
-                )
+                upPay = (settlementOverview?.upstreamPayments || []).filter(p => {
+                    const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : (p.paid_at ? String(p.paid_at).split('T')[0] : null)
+                    const pType = normalizeLotteryType(p.lottery_type)
+                    const hType = normalizeLotteryType(history.lottery_type)
+                    return pDate === histDate && (!pType || !hType || pType === hType)
+                })
             }
         }
 
@@ -5573,13 +5605,22 @@ export default function Dealer() {
                                                                                                                 const detailsPayments = details?.payments || []
                                                                                                                 const detailsPaymentIds = new Set(detailsPayments.map(p => p.id).filter(Boolean))
 
-                                                                                                                const extraPayments = (settlementOverview.memberPayments || []).filter(p => {
+                                                                                                                const extraPayments = (combinedSettlementOverview.memberPayments || []).filter(p => {
                                                                                                                     if (!p.id || detailsPaymentIds.has(p.id)) return false
-                                                                                                                    return (
+                                                                                                                    const isIdMatch = (
                                                                                                                         String(p.round_id) === String(targetRoundId) ||
                                                                                                                         String(p.round_id) === String(history.id) ||
                                                                                                                         (history.round_id && String(p.round_id) === String(history.round_id))
                                                                                                                     )
+                                                                                                                    if (isIdMatch) return true
+                                                                                                                    const histDate = getRoundCloseDate(history) || (history.round_date ? String(history.round_date).split('T')[0] : null)
+                                                                                                                    if (histDate) {
+                                                                                                                        const pDate = p.round_date ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) : (p.paid_at ? String(p.paid_at).split('T')[0] : null)
+                                                                                                                        const pType = normalizeLotteryType(p.lottery_type)
+                                                                                                                        const hType = normalizeLotteryType(history.lottery_type)
+                                                                                                                        return pDate === histDate && (!pType || !hType || pType === hType)
+                                                                                                                    }
+                                                                                                                    return false
                                                                                                                 })
 
                                                                                                                 const allRoundPayments = [...detailsPayments, ...extraPayments]
@@ -5738,7 +5779,7 @@ export default function Dealer() {
                                                                                                                                                 member={enrichedMember}
                                                                                                                                                 round={history}
                                                                                                                                                 payments={memberPayments}
-                                                                                                                                                settlementOverview={settlementOverview}
+                                                                                                                                                settlementOverview={combinedSettlementOverview}
                                                                                                                                                 roundHistory={roundHistory}
                                                                                                                                                 dealerId={user?.id}
                                                                                                                                                 dealerBankAccounts={dealerBankAccounts}
@@ -5994,7 +6035,7 @@ export default function Dealer() {
                                                                                                                                             transfer={t}
                                                                                                                                             round={history}
                                                                                                                                             payments={upstreamPayments}
-                                                                                                                                            settlementOverview={settlementOverview}
+                                                                                                                                            settlementOverview={combinedSettlementOverview}
                                                                                                                                             roundHistory={roundHistory}
                                                                                                                                             dealerId={user?.id}
                                                                                                                                             lotteryTypeFilter={historyTypeFilter}
