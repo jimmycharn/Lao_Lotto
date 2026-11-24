@@ -361,18 +361,20 @@ export default function Dealer() {
         const seenUpstreamIds = new Set(upstreamPayments.map(p => p.id).filter(Boolean))
 
         Object.values(historyDetails || {}).forEach(d => {
-            (d?.payments || []).forEach(p => {
+            const dPayments = d?.payments || []
+            for (const p of dPayments) {
                 if (p?.id && !seenMemberIds.has(p.id)) {
                     seenMemberIds.add(p.id)
                     memberPayments.push(p)
                 }
-            })
-            (d?.upstreamPayments || []).forEach(p => {
+            }
+            const dUpstreamPayments = d?.upstreamPayments || []
+            for (const p of dUpstreamPayments) {
                 if (p?.id && !seenUpstreamIds.has(p.id)) {
                     seenUpstreamIds.add(p.id)
                     upstreamPayments.push(p)
                 }
-            })
+            }
         })
 
         return {
