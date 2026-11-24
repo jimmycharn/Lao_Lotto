@@ -2653,7 +2653,7 @@ export default function Dealer() {
                 for (const round of activeClosedRounds) {
                     // Critical domain rule: unannounced rounds cannot be displayed in history tab
                     if (!round.is_result_announced && round.status !== 'announced') continue
-                    if (existingRoundIds.has(round.id) && existingUrhRoundIds.has(round.id)) continue
+                    if (existingRoundIds.has(round.id) || existingUrhRoundIds.has(round.id)) continue
 
                     // Fetch submissions for this active closed round
                     const { data: submissions } = await fetchAllRows(
@@ -2662,6 +2662,7 @@ export default function Dealer() {
                             .select('amount, commission_amount, prize_amount, is_winner, bet_type, numbers, is_deleted, user_id')
                             .eq('round_id', round.id)
                             .eq('is_deleted', false)
+                            .order('created_at', { ascending: false })
                             .range(from, to)
                     )
 
@@ -5565,17 +5566,7 @@ export default function Dealer() {
                                                                                                                 filteredUserHistories.map((uh, memberIdx) => {
                                                                                                                 const memberName = uh.profiles?.full_name || uh.profiles?.line_display_name || uh.profiles?.email || "ไม่ระบุ"
                                                                                                                 const dealerProfit = Math.round(uh.total_amount || 0) - Math.round(uh.total_commission || 0) - Math.round(uh.total_winnings || 0)
-                                                                                                                const targetRoundId = history.round_id || history.id
-                                                                                                                const detailsPayments = details?.payments || []
-                                                                                                                const detailsPaymentIds = new Set(detailsPayments.map(p => p.id).filter(Boolean))
-
-                                                                                                                const extraPayments = (combinedSettlementOverview.memberPayments || []).filter(p => {
-                                                                                                                    if (!p.id || detailsPaymentIds.has(p.id)) return false
-                                                                                                                    return isPaymentMatchingRound(p, history)
-                                                                                                                })
-
-                                                                                                                const allRoundPayments = [...detailsPayments, ...extraPayments]
-                                                                                                                const memberPayments = allRoundPayments.filter(p => p.user_id === uh.user_id)
+                                                                                                                const memberPayments = (allPayments || []).filter(p => p.user_id === uh.user_id)
                                                                                                                 const memberWinnings = Math.round(uh.total_winnings || 0)
                                                                                                                 const prizePaid = calculateMemberPrizePaid(memberPayments)
                                                                                                                 const initBal = calculateMemberInitialBalance(uh)
@@ -5823,19 +5814,7 @@ export default function Dealer() {
                                                                                                                     const upstreamName = t.dealerName || "เจ้ามือ"
                                                                                                                     const entriesCount = t.entriesCount !== undefined ? t.entriesCount : "-"
                                                                                                                     const tProfit = -(t.amount || 0) + (t.commission_earned || 0) + (t.winnings || 0)
-                                                                                                                    const targetRoundId = history.round_id || history.id
-                                                                                                                    const detailsUpstreamPayments = details?.upstreamPayments || []
-                                                                                                                    const detailsUpstreamIds = new Set(detailsUpstreamPayments.map(p => p.id).filter(Boolean))
-
-                                                                                                                    const histDate = (history.round_date ? String(history.round_date).split('T')[0] : null) || 
-                                                                                                                                     (history.close_time ? String(history.close_time).split('T')[0] : null)
-                                                                                                                    let extraUpstreamPayments = (combinedSettlementOverview.upstreamPayments || []).filter(p => {
-                                                                                                                        if (!p.id || detailsUpstreamIds.has(p.id)) return false
-                                                                                                                        return isPaymentMatchingRound(p, history)
-                                                                                                                    })
-
-                                                                                                                    const allUpstreamPayments = [...detailsUpstreamPayments, ...extraUpstreamPayments]
-                                                                                                                    const upstreamPayments = filterUpstreamPaymentsForTransfer(allUpstreamPayments, upstreamName, effectiveTransfers.length)
+                                                                                                                    const upstreamPayments = filterUpstreamPaymentsForTransfer(allUpstreamPayments || [], upstreamName, effectiveTransfers.length)
                                                                                                                     const initBal = calculateUpstreamInitialBalance(t)
                                                                                                                     const currBal = calculateUpstreamCurrentBalance(initBal, upstreamPayments)
                                                                                                                     const settlementStatus = getUpstreamSettlementStatus(currBal)

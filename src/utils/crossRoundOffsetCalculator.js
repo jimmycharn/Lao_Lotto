@@ -37,8 +37,8 @@ export function getRoundCloseDate(roundOrVal) {
     if (!raw) return ''
     if (typeof raw === 'string') {
         const trimmed = raw.trim()
-        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-            return trimmed
+        if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+            return trimmed.slice(0, 10)
         }
     }
 
@@ -344,21 +344,22 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
 
     const pRoundId = p.round_id || p.roundId
     const targetRoundId = targetRound.round_id || targetRound.id || targetRound.roundId
-    const aliases = targetRound.aliases instanceof Set ? new Set(targetRound.aliases) : new Set()
-    if (targetRoundId) aliases.add(String(targetRoundId))
-    if (targetRound.id) aliases.add(String(targetRound.id))
-    if (targetRound.round_id) aliases.add(String(targetRound.round_id))
-    if (targetRound.roundId) aliases.add(String(targetRound.roundId))
 
     // 1. Direct ID or alias match
     if (pRoundId) {
         const pStr = String(pRoundId)
-        if (aliases.has(pStr)) {
-            return true
-        }
+        if (targetRoundId && pStr === String(targetRoundId)) return true
+        if (targetRound.id && pStr === String(targetRound.id)) return true
+        if (targetRound.round_id && pStr === String(targetRound.round_id)) return true
+        if (targetRound.roundId && pStr === String(targetRound.roundId)) return true
+
+        const aliases = targetRound.aliases instanceof Set ? targetRound.aliases : null
+        if (aliases && aliases.has(pStr)) return true
+
         const pCanonical = idToCanonicalMap?.get?.(pStr)
-        if (pCanonical && aliases.has(pCanonical)) {
-            return true
+        if (pCanonical) {
+            if (targetRoundId && pCanonical === String(targetRoundId)) return true
+            if (aliases && aliases.has(pCanonical)) return true
         }
     }
 
@@ -373,36 +374,41 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
         return false
     }
 
-    // Collect all possible dates for the payment
-    const pDates = new Set()
-    if (p.paid_at) pDates.add(String(p.paid_at).split('T')[0])
+    // Fast cached round dates collection (attached to targetRound so it only builds once per round)
+    let roundDates = targetRound._matchedDates
+    if (!roundDates) {
+        roundDates = new Set()
+        const rClose = getRoundCloseDate(targetRound)
+        if (rClose) roundDates.add(rClose)
+        if (targetRound.roundDate) roundDates.add(String(targetRound.roundDate).slice(0, 10))
+        if (targetRound.round_date) roundDates.add(String(targetRound.round_date).slice(0, 10))
+        if (targetRound.open_time) roundDates.add(String(targetRound.open_time).slice(0, 10))
+        if (targetRound.close_time) roundDates.add(String(targetRound.close_time).slice(0, 10))
+        if (targetRound.openDate) roundDates.add(String(targetRound.openDate).slice(0, 10))
+        if (targetRound.aliases instanceof Set) {
+            for (const a of targetRound.aliases) {
+                if (roundCloseDateMap[a]) roundDates.add(roundCloseDateMap[a])
+            }
+        }
+        if (targetRoundId && roundCloseDateMap[String(targetRoundId)]) {
+            roundDates.add(roundCloseDateMap[String(targetRoundId)])
+        }
+        try { targetRound._matchedDates = roundDates } catch {}
+    }
+
+    // Check payment dates against roundDates
+    if (p.paid_at) {
+        const d = String(p.paid_at).slice(0, 10)
+        if (d && roundDates.has(d)) return true
+    }
     if (p.round_date) {
-        pDates.add(String(p.round_date).split('T')[0])
+        const d = String(p.round_date).slice(0, 10)
+        if (d && roundDates.has(d)) return true
         const cd = getRoundCloseDate(p.round_date)
-        if (cd) pDates.add(cd)
+        if (cd && roundDates.has(cd)) return true
     }
     if (pRoundId && roundCloseDateMap[String(pRoundId)]) {
-        pDates.add(roundCloseDateMap[String(pRoundId)])
-    }
-
-    // Collect all possible dates for the round
-    const roundDates = new Set()
-    const rClose = getRoundCloseDate(targetRound)
-    if (rClose) roundDates.add(rClose)
-    if (targetRound.roundDate) roundDates.add(String(targetRound.roundDate).split('T')[0])
-    if (targetRound.round_date) roundDates.add(String(targetRound.round_date).split('T')[0])
-    if (targetRound.open_time) roundDates.add(String(targetRound.open_time).split('T')[0])
-    if (targetRound.close_time) roundDates.add(String(targetRound.close_time).split('T')[0])
-    if (targetRound.openDate) roundDates.add(String(targetRound.openDate).split('T')[0])
-    for (const a of aliases) {
-        if (roundCloseDateMap[a]) roundDates.add(roundCloseDateMap[a])
-    }
-
-    // Check if any payment date matches any round date
-    for (const pd of pDates) {
-        if (pd && roundDates.has(pd)) {
-            return true
-        }
+        if (roundDates.has(roundCloseDateMap[String(pRoundId)])) return true
     }
 
     return false
