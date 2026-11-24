@@ -493,8 +493,8 @@ export function findMemberPastUnpaidRounds({
 
             // 2. Fallback match by round_date / paid_at + lottery_type (matching Dealer.jsx lines 1140-1144)
             if (aggregated.roundDate && aggregated.lotteryType) {
-                const pDate = p.round_date 
-                    ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) 
+                const pDate = p.round_date
+                    ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0])
                     : (p.paid_at ? String(p.paid_at).split('T')[0] : (pRoundId ? roundCloseDateMap[String(pRoundId)] : null))
                 const pType = p.lottery_type || p.lotteryType || (pRoundId ? roundLotteryTypeMap[String(pRoundId)] : null)
                 if (pDate && pType) {
@@ -818,8 +818,8 @@ export function findUpstreamPastUnpaidRounds({
 
                 const isRhThai = String(rh.lottery_type || rh.lotteryType || '').toLowerCase().includes('thai')
                 const histAmt = Number(rh.transferred_amount || 0)
-                const histComm = Number(rh.upstream_commission || 0) > 0 
-                    ? Number(rh.upstream_commission) 
+                const histComm = Number(rh.upstream_commission || 0) > 0
+                    ? Number(rh.upstream_commission)
                     : (histAmt > 0 ? Math.round(histAmt * (isRhThai ? 0.30 : (25 / 120))) : 0)
                 const histWin = Number(rh.upstream_winnings || 0)
 
@@ -879,7 +879,7 @@ export function findUpstreamPastUnpaidRounds({
             const hasMatchingPayment = upstreamPayments.some(p => {
                 const pRound = p.round_id || p.roundId
                 const isIdMatch = pRound && (
-                    String(pRound) === canonicalRoundId || 
+                    String(pRound) === canonicalRoundId ||
                     (idToAliasesMap.get(canonicalRoundId) && idToAliasesMap.get(canonicalRoundId).has(String(pRound))) ||
                     idToCanonicalMap.get(String(pRound)) === canonicalRoundId
                 )
@@ -890,7 +890,7 @@ export function findUpstreamPastUnpaidRounds({
             const hasOtherDealerInRound = upstreamPayments.some(p => {
                 const pRound = p.round_id || p.roundId
                 const isIdMatch = pRound && (
-                    String(pRound) === canonicalRoundId || 
+                    String(pRound) === canonicalRoundId ||
                     (idToAliasesMap.get(canonicalRoundId) && idToAliasesMap.get(canonicalRoundId).has(String(pRound))) ||
                     idToCanonicalMap.get(String(pRound)) === canonicalRoundId
                 )
@@ -899,8 +899,8 @@ export function findUpstreamPastUnpaidRounds({
 
             if (hasMatchingPayment || !hasOtherDealerInRound) {
                 const isRhThai = String(rh.lottery_type || rh.lotteryType || roundLotteryType || '').toLowerCase().includes('thai')
-                const outComm = Number(rh.upstream_commission || 0) > 0 
-                    ? Number(rh.upstream_commission) 
+                const outComm = Number(rh.upstream_commission || 0) > 0
+                    ? Number(rh.upstream_commission)
                     : Math.round(outAmt * (isRhThai ? 0.30 : (25 / 120)))
                 const outWin = Number(rh.upstream_winnings || 0)
 
@@ -939,8 +939,8 @@ export function findUpstreamPastUnpaidRounds({
 
             // Fallback match by round_date / paid_at + lottery_type (matching Dealer.jsx lines 1159-1163)
             if (!isRoundMatch && aggregatedTransfer.roundDate && aggregatedTransfer.lotteryType) {
-                const pDate = p.round_date 
-                    ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0]) 
+                const pDate = p.round_date
+                    ? (getRoundCloseDate(p) || String(p.round_date).split('T')[0])
                     : (p.paid_at ? String(p.paid_at).split('T')[0] : (pRound ? roundCloseDateMap[String(pRound)] : null))
                 const pType = p.lottery_type || p.lotteryType || (pRound ? roundLotteryTypeMap[String(pRound)] : null)
                 if (pDate && pType) {
@@ -1124,7 +1124,7 @@ export function allocateSettlementPaymentsByMode({
     const slip = Math.max(0, Number(actualSlipAmount) || 0)
     const curRoundId = currentRound.round_id || currentRound.id
     const curRoundDateIso = getRoundCloseDate(currentRound) || (/^\d{4}-\d{2}-\d{2}$/.test(String(currentRound.round_date)) ? currentRound.round_date : null)
-    
+
     const cleanSender = senderBank ? String(senderBank).replace(/^ธนาคาร\s*/, '').trim() : ''
     let fullCustomNote = customNotes && customNotes.trim() ? customNotes.trim() : ''
     if (cleanSender) {
