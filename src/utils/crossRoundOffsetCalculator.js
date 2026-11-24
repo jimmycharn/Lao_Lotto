@@ -348,6 +348,16 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
     // 1. Direct ID or alias match
     if (pRoundId) {
         const pStr = String(pRoundId)
+        const pCanonical = idToCanonicalMap?.get?.(pStr)
+        const pClose = roundCloseDateMap[pStr] || (pCanonical ? roundCloseDateMap[pCanonical] : null)
+        const targetClose = getRoundCloseDate(targetRound) || (targetRoundId ? roundCloseDateMap[String(targetRoundId)] : null)
+
+        // Critical Domain Rule #1: If both the payment round's closing date and the target round's closing date are known
+        // and they do NOT match, this payment belongs to a completely different round and cannot match this target round!
+        if (pClose && targetClose && pClose !== targetClose) {
+            return false
+        }
+
         if (targetRoundId && pStr === String(targetRoundId)) return true
         if (targetRound.id && pStr === String(targetRound.id)) return true
         if (targetRound.round_id && pStr === String(targetRound.round_id)) return true
@@ -356,21 +366,11 @@ export function isPaymentMatchingRound(p, targetRound, { idToCanonicalMap = new 
         const aliases = targetRound.aliases instanceof Set ? targetRound.aliases : null
         if (aliases && aliases.has(pStr)) return true
 
-        const pCanonical = idToCanonicalMap?.get?.(pStr)
         if (pCanonical) {
             if (targetRoundId && pCanonical === String(targetRoundId)) return true
             if (aliases && aliases.has(pCanonical)) return true
             // Guard: pRoundId belongs to a known canonical round different from targetRound
             return false
-        }
-
-        if (roundCloseDateMap[pStr]) {
-            const pClose = roundCloseDateMap[pStr]
-            const targetClose = getRoundCloseDate(targetRound) || (targetRoundId ? roundCloseDateMap[String(targetRoundId)] : null)
-            if (targetClose && pClose !== targetClose) {
-                // Guard: pRoundId is known to close on a different date than targetRound
-                return false
-            }
         }
     }
 
@@ -489,6 +489,10 @@ export function findMemberPastUnpaidRounds({
     if (!userId) return []
     const results = []
 
+    const historiesList = Array.isArray(userHistories) ? userHistories : (Array.isArray(userHistories?.data) ? userHistories.data : [])
+    const paymentsList = Array.isArray(memberPayments) ? memberPayments : (Array.isArray(memberPayments?.data) ? memberPayments.data : [])
+    const roundList = Array.isArray(roundHistory) ? roundHistory : (Array.isArray(roundHistory?.data) ? roundHistory.data : [])
+
     const normalizedLotteryFilter = (lotteryType && lotteryType !== 'all')
         ? normalizeLotteryType(lotteryType)
         : null
@@ -528,12 +532,18 @@ export function findMemberPastUnpaidRounds({
         idToCanonicalMap.set(strId, canonicalId)
 
         if (dtKey) {
-            if (dateTypeToAliasesMap.has(dtKey)) {
-                const existing = dateTypeToAliasesMap.get(dtKey)
-                for (const a of aliases) existing.add(a)
-                aliases = existing
-            } else {
+            const existingCanonical = dateTypeToCanonicalMap.get(dtKey)
+            if (!existingCanonical) {
+                dateTypeToCanonicalMap.set(dtKey, canonicalId)
                 dateTypeToAliasesMap.set(dtKey, aliases)
+            } else if (existingCanonical === canonicalId) {
+                if (dateTypeToAliasesMap.has(dtKey)) {
+                    const existing = dateTypeToAliasesMap.get(dtKey)
+                    for (const a of aliases) existing.add(a)
+                    aliases = existing
+                } else {
+                    dateTypeToAliasesMap.set(dtKey, aliases)
+                }
             }
         }
 
@@ -543,24 +553,20 @@ export function findMemberPastUnpaidRounds({
         if (normType && !roundLotteryTypeMap[canonicalId]) roundLotteryTypeMap[canonicalId] = normType
     }
 
-    if (Array.isArray(roundHistory)) {
-        for (const r of roundHistory) {
-            const cDate = getRoundCloseDate(r) || (r.round_date ? String(r.round_date).split('T')[0] : '')
-            const lType = r.lottery_type || r.lotteryType
-            const canonicalId = String(r.round_id || r.id)
+    for (const r of roundList) {
+        const cDate = getRoundCloseDate(r) || (r.round_date ? String(r.round_date).split('T')[0] : '')
+        const lType = r.lottery_type || r.lotteryType
+        const canonicalId = String(r.round_id || r.id)
 
-            if (r.id) registerRoundInfo(r.id, cDate, lType, canonicalId)
-            if (r.round_id) registerRoundInfo(r.round_id, cDate, lType, canonicalId)
-        }
+        if (r.id) registerRoundInfo(r.id, cDate, lType, canonicalId)
+        if (r.round_id) registerRoundInfo(r.round_id, cDate, lType, canonicalId)
     }
 
-    if (Array.isArray(userHistories)) {
-        for (const h of userHistories) {
-            const hDate = getRoundCloseDate(h) || (h.round_date ? String(h.round_date).split('T')[0] : '')
-            const hType = h.lottery_type || h.lotteryType
-            const rawId = h.round_id || h.id
-            if (rawId) registerRoundInfo(rawId, hDate, hType)
-        }
+    for (const h of historiesList) {
+        const rawId = h.round_id || h.id
+        const hDate = (rawId && roundCloseDateMap[String(rawId)]) || getRoundCloseDate(h) || (h.round_date ? String(h.round_date).split('T')[0] : '')
+        const hType = h.lottery_type || h.lotteryType
+        if (rawId) registerRoundInfo(rawId, hDate, hType)
     }
 
     const currentRoundAliases = new Set()
@@ -576,13 +582,13 @@ export function findMemberPastUnpaidRounds({
 
     // Group userHistories by canonical roundId to avoid duplicate calculations
     const roundMap = {}
-    for (const h of userHistories) {
+    for (const h of historiesList) {
         const hUid = h.user_id || h.userId
         if (!hUid || (userId && String(hUid) !== String(userId))) continue
         const rawRoundId = h.round_id || h.id
         if (!rawRoundId) continue
 
-        const hDate = getRoundCloseDate(h) || (h.round_date ? String(h.round_date).split('T')[0] : '')
+        const hDate = (rawRoundId && roundCloseDateMap[String(rawRoundId)]) || getRoundCloseDate(h) || (h.round_date ? String(h.round_date).split('T')[0] : '')
         const hType = normalizeLotteryType(h.lottery_type || h.lotteryType || '')
         const dtKey = (hDate && hType) ? `${hType}|${hDate}` : null
 
@@ -611,7 +617,7 @@ export function findMemberPastUnpaidRounds({
         if (!roundMap[canonicalRoundId]) {
             const aliases = new Set(idToAliasesMap.get(canonicalRoundId) || [canonicalRoundId])
             aliases.add(String(rawRoundId))
-            if (dtKey && dateTypeToAliasesMap.has(dtKey)) {
+            if (dtKey && dateTypeToAliasesMap.has(dtKey) && dateTypeToCanonicalMap.get(dtKey) === canonicalRoundId) {
                 for (const a of dateTypeToAliasesMap.get(dtKey)) aliases.add(a)
             }
 
@@ -655,7 +661,7 @@ export function findMemberPastUnpaidRounds({
 
         idToCanonicalMap.set(String(rawRoundId), canonicalRoundId)
         idToAliasesMap.set(String(rawRoundId), roundMap[canonicalRoundId].aliases)
-        if (dtKey) {
+        if (dtKey && dateTypeToCanonicalMap.get(dtKey) === canonicalRoundId) {
             dateTypeToAliasesMap.set(dtKey, roundMap[canonicalRoundId].aliases)
         }
 
@@ -670,7 +676,7 @@ export function findMemberPastUnpaidRounds({
     for (const roundId of Object.keys(roundMap)) {
         const aggregated = roundMap[roundId]
         const initial = calculateMemberInitialBalance(aggregated)
-        const roundPayments = memberPayments.filter(p => {
+        const roundPayments = paymentsList.filter(p => {
             const pUid = p.user_id || p.userId
             if (!pUid || (userId && String(pUid) !== String(userId))) return false
             return isPaymentMatchingRound(p, aggregated, {
@@ -847,6 +853,11 @@ export function findUpstreamPastUnpaidRounds({
 }) {
     if (!dealerName) return []
     const results = []
+
+    const transfersList = Array.isArray(transfers) ? transfers : (Array.isArray(transfers?.data) ? transfers.data : [])
+    const paymentsList = Array.isArray(upstreamPayments) ? upstreamPayments : (Array.isArray(upstreamPayments?.data) ? upstreamPayments.data : [])
+    const roundList = Array.isArray(roundHistory) ? roundHistory : (Array.isArray(roundHistory?.data) ? roundHistory.data : [])
+
     const normalizedLotteryFilter = (lotteryType && lotteryType !== 'all')
         ? String(lotteryType).trim().toLowerCase()
         : null
@@ -858,8 +869,7 @@ export function findUpstreamPastUnpaidRounds({
     const dateTypeToCanonicalMap = new Map()
     const dateTypeToAliasesMap = new Map()
 
-    if (Array.isArray(roundHistory)) {
-        for (const r of roundHistory) {
+    for (const r of roundList) {
             const cDate = getRoundCloseDate(r) || (r.round_date ? String(r.round_date).split('T')[0] : '')
             const lType = r.lottery_type || r.lotteryType
 
@@ -870,13 +880,18 @@ export function findUpstreamPastUnpaidRounds({
 
             const dtKey = (cDate && lType) ? `${String(lType).trim().toLowerCase()}|${cDate}` : null
             if (dtKey) {
-                if (dateTypeToAliasesMap.has(dtKey)) {
-                    const existingAliases = dateTypeToAliasesMap.get(dtKey)
-                    for (const a of aliases) existingAliases.add(a)
-                    aliases = existingAliases
-                } else {
-                    dateTypeToAliasesMap.set(dtKey, aliases)
+                const existingCanonical = dateTypeToCanonicalMap.get(dtKey)
+                if (!existingCanonical) {
                     dateTypeToCanonicalMap.set(dtKey, canonicalId)
+                    dateTypeToAliasesMap.set(dtKey, aliases)
+                } else if (existingCanonical === canonicalId) {
+                    if (dateTypeToAliasesMap.has(dtKey)) {
+                        const existingAliases = dateTypeToAliasesMap.get(dtKey)
+                        for (const a of aliases) existingAliases.add(a)
+                        aliases = existingAliases
+                    } else {
+                        dateTypeToAliasesMap.set(dtKey, aliases)
+                    }
                 }
             }
 
@@ -887,7 +902,6 @@ export function findUpstreamPastUnpaidRounds({
                 if (lType) roundLotteryTypeMap[alias] = lType
             }
         }
-    }
 
     const currentRoundAliases = new Set()
     if (currentRoundId) {
@@ -902,13 +916,13 @@ export function findUpstreamPastUnpaidRounds({
 
     // Group transfers by canonical round_id
     const roundMap = {}
-    for (const t of transfers) {
+    for (const t of transfersList) {
         if (!isMatchingUpstreamDealer(t, dealerName, targetTransfer)) continue
 
         const rawRoundId = t.round_id || t.id
         if (!rawRoundId) continue
 
-        const tDate = getRoundCloseDate(t) || (t.round_date ? String(t.round_date).split('T')[0] : '')
+        const tDate = (rawRoundId && roundCloseDateMap[String(rawRoundId)]) || getRoundCloseDate(t) || (t.round_date ? String(t.round_date).split('T')[0] : '')
         const tType = t.lottery_type || t.lotteryType || ''
         const dtKey = (tDate && tType) ? `${String(tType).trim().toLowerCase()}|${tDate}` : null
 
@@ -935,7 +949,7 @@ export function findUpstreamPastUnpaidRounds({
         if (!roundMap[canonicalRoundId]) {
             const aliases = new Set(idToAliasesMap.get(canonicalRoundId) || [canonicalRoundId])
             aliases.add(String(rawRoundId))
-            if (dtKey && dateTypeToAliasesMap.has(dtKey)) {
+            if (dtKey && dateTypeToAliasesMap.has(dtKey) && dateTypeToCanonicalMap.get(dtKey) === canonicalRoundId) {
                 for (const a of dateTypeToAliasesMap.get(dtKey)) aliases.add(a)
             }
 
@@ -956,7 +970,7 @@ export function findUpstreamPastUnpaidRounds({
 
         idToCanonicalMap.set(String(rawRoundId), canonicalRoundId)
         idToAliasesMap.set(String(rawRoundId), roundMap[canonicalRoundId].aliases)
-        if (dtKey) {
+        if (dtKey && dateTypeToCanonicalMap.get(dtKey) === canonicalRoundId) {
             dateTypeToAliasesMap.set(dtKey, roundMap[canonicalRoundId].aliases)
         }
 
@@ -971,10 +985,9 @@ export function findUpstreamPastUnpaidRounds({
         }
     }
 
-    // Also inspect past rounds from roundHistory that had transfers (transferred_amount > 0)
+    // Also inspect past rounds from roundList that had transfers (transferred_amount > 0)
     // but might not be in transfers array (e.g. archived rounds where bet_transfers was deleted)
-    if (Array.isArray(roundHistory)) {
-        for (const rh of roundHistory) {
+    for (const rh of roundList) {
             const rhRoundId = rh.round_id || rh.id
             if (!rhRoundId) continue
 
@@ -998,7 +1011,7 @@ export function findUpstreamPastUnpaidRounds({
 
                 // If roundHistory has authoritative or calculated upstream_commission > 0, align commission_earned
                 if (histComm > 0) {
-                    const roundTransfers = transfers.filter(tr => {
+                    const roundTransfers = transfersList.filter(tr => {
                         const trId = tr.round_id || tr.id
                         if (!trId) return false
                         const trStr = String(trId)
@@ -1014,7 +1027,7 @@ export function findUpstreamPastUnpaidRounds({
 
                 // If roundHistory has authoritative upstream_winnings > 0 and transfers had 0 winnings
                 if (histWin > 0 && (!existing.winnings || Number(existing.winnings) === 0)) {
-                    const roundTransfers = transfers.filter(tr => {
+                    const roundTransfers = transfersList.filter(tr => {
                         const trId = tr.round_id || tr.id
                         if (!trId) return false
                         const trStr = String(trId)
@@ -1049,7 +1062,7 @@ export function findUpstreamPastUnpaidRounds({
             }
 
             // Check if this archived round had payments to this upstream dealer
-            const hasMatchingPayment = upstreamPayments.some(p => {
+            const hasMatchingPayment = paymentsList.some(p => {
                 const pRound = p.round_id || p.roundId
                 const isIdMatch = pRound && (
                     String(pRound) === canonicalRoundId ||
@@ -1060,7 +1073,7 @@ export function findUpstreamPastUnpaidRounds({
                 return (isIdMatch || isDateMatch) && isMatchingUpstreamDealer(p, dealerName, targetTransfer)
             })
 
-            const hasOtherDealerInRound = upstreamPayments.some(p => {
+            const hasOtherDealerInRound = paymentsList.some(p => {
                 const pRound = p.round_id || p.roundId
                 const isIdMatch = pRound && (
                     String(pRound) === canonicalRoundId ||
@@ -1090,12 +1103,11 @@ export function findUpstreamPastUnpaidRounds({
                 }
             }
         }
-    }
 
     for (const roundId of Object.keys(roundMap)) {
         const aggregatedTransfer = roundMap[roundId]
         const initial = calculateUpstreamInitialBalance(aggregatedTransfer)
-        const roundPayments = upstreamPayments.filter(p => {
+        const roundPayments = paymentsList.filter(p => {
             const isRoundMatch = isPaymentMatchingRound(p, aggregatedTransfer, {
                 idToCanonicalMap,
                 roundCloseDateMap,

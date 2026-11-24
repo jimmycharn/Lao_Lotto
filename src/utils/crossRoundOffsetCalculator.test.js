@@ -1757,6 +1757,88 @@ describe('crossRoundOffsetCalculator', () => {
             // Must NOT match round 16 Oct despite paid_at being 2026-10-16
             expect(isPaymentMatchingRound(paymentFor1Oct, round16Oct, { roundCloseDateMap })).toBe(false)
         })
+
+        it('case 6: February scenario with consecutive rounds (11 Feb and 13 Feb) where round 13 Feb has open_date 11 Feb in user_round_history', () => {
+            const roundHistory = [
+                {
+                    id: 'rh-11-feb',
+                    round_id: 'lr-11-feb',
+                    round_date: '2026-02-11',
+                    close_time: '2026-02-11T14:00:00Z',
+                    lottery_type: 'lao'
+                },
+                {
+                    id: 'rh-13-feb',
+                    round_id: 'lr-13-feb',
+                    round_date: '2026-02-11',
+                    close_time: '2026-02-13T13:30:00Z',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const userHistories = [
+                {
+                    id: 'urh-11-feb',
+                    round_id: 'lr-11-feb',
+                    user_id: 'user-ice',
+                    total_amount: 970,
+                    total_commission: 194,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-02-11',
+                    close_time: '2026-02-11T14:00:00Z'
+                },
+                {
+                    id: 'urh-13-feb',
+                    round_id: 'lr-13-feb',
+                    user_id: 'user-ice',
+                    total_amount: 110,
+                    total_commission: 22,
+                    total_winnings: 0,
+                    lottery_type: 'lao',
+                    round_date: '2026-02-11', // open date stored in legacy user_round_history!
+                    close_time: null // null close_time in legacy user_round_history!
+                }
+            ]
+
+            const memberPayments = [
+                {
+                    id: 'pay-11-feb',
+                    round_id: 'lr-11-feb',
+                    user_id: 'user-ice',
+                    amount: 776,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: '2026-02-11',
+                    paid_at: '2026-02-11',
+                    lottery_type: 'lao'
+                },
+                {
+                    id: 'pay-13-feb',
+                    round_id: 'lr-13-feb',
+                    user_id: 'user-ice',
+                    amount: 88,
+                    direction: 'member_to_dealer',
+                    payment_type: 'net_settlement',
+                    round_date: '2026-02-11',
+                    paid_at: '2026-02-13',
+                    lottery_type: 'lao'
+                }
+            ]
+
+            const result = findMemberPastUnpaidRounds({
+                userId: 'user-ice',
+                currentRoundId: 'current-round-23-nov',
+                currentRoundDate: '2026-11-23',
+                userHistories,
+                memberPayments,
+                roundHistory,
+                lotteryType: 'lao'
+            })
+
+            console.log('TEST RESULT Case 6 (Feb consecutive rounds):', JSON.stringify(result))
+            expect(result).toEqual([])
+        })
     })
 })
 
